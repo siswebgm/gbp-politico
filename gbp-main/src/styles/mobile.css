@@ -1,0 +1,35 @@
+/* Estilos específicos para dispositivos móveis */
+@media (max-width: 768px) {
+  /* Previne o comportamento de scroll bounce em iOS */
+  html, body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Ajusta o comportamento de rolagem para ser mais suave */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Remove o highlight de toque em elementos interativos */
+  a, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ajusta o tamanho da fonte base para melhor legibilidade */
+  html {
+    font-size: 16px;
+  }
+}
+
+/* Esconde a barra de rolagem mantendo a funcionalidade */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}

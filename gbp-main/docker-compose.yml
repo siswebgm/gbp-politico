@@ -1,0 +1,51 @@
+version: "3.7"
+
+services:
+  gbppolitico:
+    image: siswebgm/gbp-politico:latest
+    networks:
+      - network_public
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.gbppolitico.rule=Host(`app.gbppolitico.com`)"
+        - "traefik.http.routers.gbppolitico.entrypoints=websecure"
+        - "traefik.http.routers.gbppolitico.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.gbppolitico.loadbalancer.server.port=80"
+        - "traefik.http.middlewares.gbppolitico-security.headers.sslRedirect=true"
+        - "traefik.http.middlewares.gbppolitico-security.headers.stsSeconds=31536000"
+        - "traefik.http.middlewares.gbppolitico-security.headers.forceSTSHeader=true"
+        - "traefik.http.routers.gbppolitico.middlewares=gbppolitico-security"
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+networks:
+  network_public:
+    external: true
+    name: network_public

@@ -1,0 +1,59 @@
+/* Garante que a página ocupe toda a altura da tela */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Estilo para o container principal */
+.page-wrapper {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Cabeçalho fixo */
+.header {
+  flex-shrink: 0;
+}
+
+/* Conteúdo principal com rolagem */
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0;
+  padding-bottom: 2rem;
+}
+
+/* Ajustes para telas maiores */
+@media (min-width: 768px) {
+  .content-wrapper {
+    padding: 2rem;
+    padding-bottom: 4rem;
+  }
+  
+  .content-wrapper form {
+    max-width: 48rem; /* Reduzido de 64rem para 48rem */
+    margin: 0 auto;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* Estilo para os cabeçalhos de grupo no select de tipos de demanda */
+optgroup {
+  font-weight: 600;
+  color: #2563eb; /* Cor azul-600 do Tailwind */
+  background-color: #f8fafc; /* Fundo mais claro para melhor contraste */
+  padding: 0.25rem 0.5rem;
+}
+
+/* Estilo para as opções normais */
+option {
+  color: #1f2937; /* Cor de texto padrão */
+  padding: 0.25rem 0.5rem;
+}

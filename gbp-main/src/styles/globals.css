@@ -1,0 +1,450 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 215 20.2% 65.1%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 85.7% 97.3%;
+
+    --ring: 217.2 32.6% 17.5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Estilo moderno para scrollbar */
+  .scrollbar-modern {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E1 transparent;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar-thumb {
+    background-color: #CBD5E1;
+    border-radius: 20px;
+    border: 2px solid transparent;
+  }
+
+  .scrollbar-modern:hover::-webkit-scrollbar-thumb {
+    background-color: #94A3B8;
+  }
+
+  /* Versão dark mode */
+  .dark .scrollbar-modern {
+    scrollbar-color: #475569 transparent;
+  }
+
+  .dark .scrollbar-modern::-webkit-scrollbar-thumb {
+    background-color: #475569;
+  }
+
+  .dark .scrollbar-modern:hover::-webkit-scrollbar-thumb {
+    background-color: #64748B;
+  }
+
+  /* Esconde scrollbar mas mantém funcionalidade */
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Estilos do Leaflet */
+  .leaflet-container {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  .leaflet-popup-content-wrapper {
+    @apply bg-white dark:bg-gray-800 shadow-lg rounded-lg;
+  }
+
+  .leaflet-popup-content {
+    @apply m-0;
+  }
+
+  .leaflet-popup-tip {
+    @apply bg-white dark:bg-gray-800;
+  }
+
+  .leaflet-container a.leaflet-popup-close-button {
+    @apply text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200;
+  }
+
+  .leaflet-touch .leaflet-bar a {
+    @apply bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700;
+  }
+
+  .leaflet-touch .leaflet-bar a:hover {
+    @apply bg-gray-50 dark:bg-gray-700;
+  }
+
+  /* Estilos personalizados para o popup do mapa */
+  .custom-popup .leaflet-popup-content-wrapper {
+    padding: 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .custom-popup .leaflet-popup-content {
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .custom-popup .leaflet-popup-tip-container {
+    margin-top: -1px;
+  }
+
+  .custom-popup a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Fim dos estilos do Leaflet */
+
+  /* Estilos personalizados para os clusters do mapa */
+  .marker-cluster-small,
+  .marker-cluster-medium,
+  .marker-cluster-large {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+    border: 2px solid #3B82F6 !important;
+    border-radius: 999px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.2s ease-in-out !important;
+  }
+
+  .marker-cluster-small:hover,
+  .marker-cluster-medium:hover,
+  .marker-cluster-large:hover {
+    transform: scale(1.05);
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .marker-cluster-small div,
+  .marker-cluster-medium div,
+  .marker-cluster-large div {
+    background-color: #3B82F6 !important;
+    color: white !important;
+    width: 26px !important;
+    height: 26px !important;
+    margin: 2px !important;
+    border-radius: 999px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Tamanhos diferentes para os clusters */
+  .marker-cluster-small {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .marker-cluster-medium {
+    width: 35px !important;
+    height: 35px !important;
+  }
+
+  .marker-cluster-large {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  /* Ajuste do texto dentro dos clusters */
+  .marker-cluster span {
+    line-height: 1 !important;
+  }
+
+  /* Ocultar botões em dispositivos móveis */
+  .mobile-hidden {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .mobile-hidden {
+      display: block;
+    }
+  }
+
+  .mobile-hidden {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .mobile-hidden {
+      display: block;
+    }
+  }
+
+  /* Estilos responsivos para botões em dispositivos móveis */
+  @media screen and (max-width: 640px) {
+    button, 
+    .btn,
+    [type="button"],
+    [type="submit"] {
+      @apply w-full py-3 px-4 text-base;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 44px; /* Tamanho mínimo recomendado para área de toque */
+    }
+
+    /* Ajuste para botões em containers flex */
+    .flex button,
+    .flex .btn {
+      @apply flex-1;
+    }
+
+    /* Espaçamento entre botões em mobile */
+    button + button,
+    .btn + .btn {
+      @apply mt-2;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out forwards;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.2s ease-out forwards;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.2s ease-out forwards;
+  }
+
+  .toast-success {
+    background: linear-gradient(to right, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    animation: slideIn 0.2s ease-out forwards;
+  }
+
+  .toast-error {
+    background: linear-gradient(to right, #ef4444, #dc2626);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  @import 'react-day-picker/dist/style.css';
+
+  .rdp {
+    --rdp-cell-size: 40px;
+    --rdp-accent-color: rgb(37 99 235);
+    --rdp-background-color: rgb(37 99 235 / 0.1);
+    --rdp-accent-color-dark: rgb(37 99 235);
+    --rdp-background-color-dark: rgb(37 99 235 / 0.2);
+    --rdp-outline: 2px solid var(--rdp-accent-color);
+    --rdp-outline-selected: 2px solid var(--rdp-accent-color);
+    margin: 0;
+  }
+
+  /* Estilos para os dropdowns */
+  [role="listbox"] {
+    background-color: white !important;
+    max-height: 220px !important;
+    overflow-y: auto !important;
+  }
+
+  .select-content {
+    background-color: white !important;
+  }
+
+  .select-viewport {
+    max-height: 220px !important;
+    overflow-y: auto !important;
+  }
+
+  .select-item {
+    background-color: white !important;
+  }
+
+  .select-item:hover {
+    background-color: #f9fafb !important;
+  }
+
+  /* Estilos para a scrollbar personalizada */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(203, 213, 225, 0.3) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(203, 213, 225, 0.3);
+    border-radius: 2px;
+  }
+
+  .dark .custom-scrollbar {
+    scrollbar-color: rgba(75, 85, 99, 0.3) transparent;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(75, 85, 99, 0.3);
+  }
+
+  /* Esconder scrollbar quando não estiver em hover */
+  .custom-scrollbar:not(:hover)::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+
+  .custom-scrollbar:not(:hover) {
+    scrollbar-color: transparent transparent;
+  }
+
+  /* Scrollbar styles */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background-color: #d1d5db;
+    border-radius: 6px;
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  /* Esconder scrollbar quando não necessário */
+  .overflow-y-auto {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  /* Apenas mostrar scrollbar quando houver overflow */
+  @supports (overflow: overlay) {
+    .overflow-y-auto {
+      overflow-y: overlay;
+    }
+  }
+}

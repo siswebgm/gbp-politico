@@ -1,0 +1,71 @@
+/* Estilo para garantir que o formulário ocupe toda a altura da tela */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Container principal */
+.page-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f9fafb;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Cabeçalho */
+.header {
+  background-color: #3b82f6;
+  color: white;
+  padding: 1.25rem 1.5rem;
+  flex-shrink: 0;
+}
+
+/* Conteúdo principal */
+.content {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6rem;
+}
+
+/* Formulário */
+.form-container {
+  max-width: 48rem;
+  margin: 0 auto;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Barra de ações */
+.actions-bar {
+  background: white;
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+/* Layout responsivo */
+@media (min-width: 640px) {
+  .content {
+    padding: 1.5rem;
+  }
+  
+  .form-container {
+    padding: 2rem;
+  }
+  
+  .actions-bar {
+    padding: 1.5rem;
+  }
+}

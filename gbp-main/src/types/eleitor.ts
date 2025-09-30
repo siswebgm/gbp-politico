@@ -1,0 +1,91 @@
+export interface Eleitor {
+  uid: string;
+  nome: string | null;
+  cpf: string | null;
+  nascimento: string | null;
+  whatsapp: string | null;
+  telefone: string | null;
+  genero: string | null;
+  titulo: string | null;
+  zona: number | null;
+  secao: number | null;
+  cep: string | null;
+  logradouro: string | null;
+  cidade: string | null;
+  bairro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  empresa_uid: string;
+  created_at: string | null;
+  indicado: string | null;
+  uf: string | null;
+  categoria: string | null;
+  gbp_atendimentos: string | null;
+  responsavel: string | null;
+  usuario_uid: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  nome_mae: string | null;
+  facial_foto: string | null;
+  indicacao?: string | null;
+  categoria_uid?: string;
+  numero_do_sus: string | null;
+}
+
+export interface EleitorFormData {
+  uid?: string;
+  nome: string;
+  cpf?: string;
+  ignoreCpf?: boolean;
+  nascimento?: string;
+  genero: string;
+  nome_mae?: string;
+  whatsapp: string;
+  telefone?: string;
+  titulo?: string;
+  zona?: number;
+  secao?: number;
+  cep: string;
+  logradouro: string;
+  cidade: string;
+  bairro: string;
+  numero: string;
+  complemento?: string;
+  uf?: string;
+  categoria_uid: string;
+  usuario_uid: string;
+  empresa_uid: string;
+  indicacao?: string;
+  facial_foto?: string;
+  responsavel?: string;
+  numero_do_sus?: string;
+  instagram?: string;
+  responsavel_pelo_eleitor?: string;
+  confiabilidade_do_voto?: string;
+  quantidade_adultos_residencia?: string;
+  colegio_eleitoral?: string;
+  registrarAtendimento?: boolean;
+  descricaoAtendimento?: string;
+  categoriaAtendimento?: string | null;
+  statusAtendimento?: string;
+}
+
+export interface EleitorFilters {
+  nome?: string;
+  inicial?: string;
+  genero?: string;
+  zona?: number;
+  secao?: number;
+  bairro?: string;
+  categoria_uid?: string;
+  categoria_tipo_uid?: string;
+  logradouro?: string;
+  indicado?: string;
+  cep?: string;
+  responsavel?: string;
+  cidade?: string;
+  whatsapp?: string;
+  cpf?: string;
+  mes_nascimento?: string;
+  periodo?: 'today' | '7days' | '30days' | '60days' | '90days' | 'all' | '';
+}

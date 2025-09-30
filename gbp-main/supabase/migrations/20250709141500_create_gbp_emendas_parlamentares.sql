@@ -1,0 +1,28 @@
+create table
+  public.gbp_emendas_parlamentares (
+    uid uuid not null default gen_random_uuid (),
+    empresa_uid text not null,
+    numero_emenda character varying(50) not null,
+    ano integer not null,
+    tipo character varying(100) not null,
+    descricao text null,
+    valor_total numeric(15, 2) not null,
+    status character varying(50) null default 'Aguardando Empenho'::character varying,
+    beneficiario text null,
+    beneficiario_cnpj text null,
+    beneficiario_municipio text null,
+    beneficiario_estado text null,
+    data_empenho date null,
+    data_liberacao date null,
+    data_pagamento date null,
+    valor_empenhado numeric(15, 2) null,
+    valor_pago numeric(15, 2) null,
+    observacoes text null,
+    arquivos jsonb null,
+    created_at timestamp with time zone null default now(),
+    updated_at timestamp with time zone null default now(),
+    created_by text null,
+    updated_by text null,
+    deleted_at timestamp with time zone null,
+    constraint gbp_emendas_parlamentares_pkey primary key (uid)
+  ) tablespace pg_default;

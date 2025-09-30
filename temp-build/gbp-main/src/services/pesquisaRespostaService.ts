@@ -1,0 +1,338 @@
+import { supabaseClient } from '../lib/supabase';
+
+type RespostaPesquisa = {
+  uid: string;
+  pesquisa_uid: string;
+  pergunta_uid: string;
+  resposta: any;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+  participante_cidade?: string | null;
+  participante_bairro?: string | null;
+};
+
+type ResumoRespostas = {
+  totalRespostas: number;
+  respostasPorDia: Array<{ data: string; total: number }>;
+  dispositivos: Array<{ tipo: string; total: number; porcentagem: number }>;
+  localizacoes: Array<{ cidade: string; total: number; porcentagem: number }>;
+  perguntas: Array<{
+    id: string;
+    pergunta: string;
+    tipo: string;
+    totalRespostas: number;
+    respostas: Array<{
+      valor: string;
+      contagem: number;
+      porcentagem: number;
+    }>;
+  }>;
+};
+
+export const pesquisaRespostaService = {
+  async obterRespostasPorPesquisa(pesquisaId: string): Promise<RespostaPesquisa[]> {
+    console.log(`[pesquisaRespostaService] Buscando respostas para pesquisa: ${pesquisaId}`);
+    
+    if (!pesquisaId) {
+      console.error('ID da pesquisa não fornecido');
+      return [];
+    }
+
+    try {
+      // Buscar as respostas
+      const { data, error } = await supabaseClient
+        .from('ps_gbp_respostas')
+        .select('*')
+        .eq('pesquisa_uid', pesquisaId)
+        .order('created_at', { ascending: false });
+        
+      console.log(`[pesquisaRespostaService] Respostas encontradas:`, data?.length || 0);
+
+      if (error) {
+        console.error('Erro ao buscar respostas:', error);
+        throw error;
+      }
+
+      // Processar as respostas para garantir que o campo 'resposta' seja um objeto
+      const respostasProcessadas = (data || []).map(item => {
+        try {
+          // Se a resposta for uma string, tenta fazer o parse para JSON
+          if (item.resposta && typeof item.resposta === 'string') {
+            return {
+              ...item,
+              resposta: JSON.parse(item.resposta)
+            };
+          }
+          // Se já for um objeto, retorna como está
+          return item;
+        } catch (e) {
+          console.warn('Erro ao processar resposta:', e, 'Resposta:', item.resposta);
+          return {
+            ...item,
+            resposta: { valor: item.resposta } // Se não for possível converter, mantém o valor original
+          };
+        }
+      });
+
+      if (respostasProcessadas.length > 0) {
+        console.log('[pesquisaRespostaService] Primeira resposta processada:', JSON.stringify(respostasProcessadas[0], null, 2));
+      }
+
+      return (respostasProcessadas as unknown as RespostaPesquisa[]) || [];
+    } catch (error) {
+      console.error('Erro ao buscar respostas da pesquisa:', error);
+      throw error;
+    }
+  },
+
+  async obterResumoRespostas(pesquisaId: string): Promise<ResumoRespostas> {
+    console.log(`[pesquisaRespostaService] Gerando resumo para pesquisa: ${pesquisaId}`);
+    
+    if (!pesquisaId) {
+      throw new Error('ID da pesquisa não fornecido');
+    }
+
+    let respostas: RespostaPesquisa[] = [];
+    
+    try {
+      respostas = await this.obterRespostasPorPesquisa(pesquisaId);
+      console.log(`[pesquisaRespostaService] Total de respostas a serem processadas:`, respostas.length);
+      
+      if (respostas.length > 0) {
+        console.log('[pesquisaRespostaService] Exemplo de resposta processada:', {
+          pergunta_uid: respostas[0].pergunta_uid,
+          resposta: respostas[0].resposta,
+          tipo: typeof respostas[0].resposta
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao obter respostas para o resumo:', error);
+      throw error;
+    }
+
+    // Se não houver respostas, retornar estrutura vazia
+    if (respostas.length === 0) {
+      return {
+        totalRespostas: 0,
+        respostasPorDia: [],
+        dispositivos: [],
+        localizacoes: [],
+        perguntas: []
+      };
+    }
+
+    // Agrupar respostas por pergunta
+    const respostasPorPergunta = respostas.reduce((acc, resposta) => {
+      if (!acc[resposta.pergunta_uid]) {
+        acc[resposta.pergunta_uid] = [];
+      }
+      acc[resposta.pergunta_uid].push(resposta);
+      return acc;
+    }, {} as Record<string, RespostaPesquisa[]>);
+
+    // Processar estatísticas por pergunta
+    const perguntas = Object.entries(respostasPorPergunta).map(([perguntaUid, respostasPergunta]) => {
+      // Contar ocorrências de cada resposta
+      const contagemRespostas = respostasPergunta.reduce((acc, resposta) => {
+        // Extrair o valor da resposta, tratando diferentes formatos
+        let valorResposta = 'Sem resposta';
+        
+        if (resposta.resposta) {
+          if (typeof resposta.resposta === 'object' && resposta.resposta !== null) {
+            // Se for um objeto, verificar se tem propriedade 'valor' ou 'opcoes'
+            if ('valor' in resposta.resposta && resposta.resposta.valor !== undefined) {
+              valorResposta = resposta.resposta.valor.toString();
+            } else if ('opcoes' in resposta.resposta && Array.isArray(resposta.resposta.opcoes)) {
+              valorResposta = resposta.resposta.opcoes.join(', ');
+            } else {
+              // Se não tiver 'valor' nem 'opcoes', usar o objeto inteiro
+              valorResposta = JSON.stringify(resposta.resposta);
+            }
+          } else if (typeof resposta.resposta === 'string') {
+            // Se for string, tentar fazer parse para JSON
+            try {
+              const parsed = JSON.parse(resposta.resposta);
+              if (typeof parsed === 'object' && parsed !== null) {
+                if ('valor' in parsed) {
+                  valorResposta = parsed.valor?.toString() || 'Sem valor';
+                } else if ('opcoes' in parsed && Array.isArray(parsed.opcoes)) {
+                  valorResposta = parsed.opcoes.join(', ');
+                } else {
+                  valorResposta = JSON.stringify(parsed);
+                }
+              } else {
+                valorResposta = resposta.resposta;
+              }
+            } catch (e) {
+              // Se não for JSON, usar como está
+              valorResposta = resposta.resposta;
+            }
+          } else {
+            // Para outros tipos (number, boolean, etc.), converter para string
+            valorResposta = String(resposta.resposta);
+          }
+        }
+
+        // Contar ocorrências
+        if (!acc[valorResposta]) {
+          acc[valorResposta] = 0;
+        }
+        acc[valorResposta]++;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Calcular porcentagens
+      const totalRespostas = respostasPergunta.length;
+      const respostasComPorcentagem = Object.entries(contagemRespostas).map(([valor, contagem]) => ({
+        valor,
+        contagem,
+        porcentagem: Math.round((contagem / totalRespostas) * 100)
+      }));
+
+      // Obter o texto da pergunta (se disponível)
+      let perguntaTexto = 'Pergunta sem título';
+      if (respostasPergunta[0]?.resposta?.pergunta) {
+        perguntaTexto = respostasPergunta[0].resposta.pergunta;
+      } else if (respostasPergunta[0]?.resposta?.tipo) {
+        perguntaTexto = `Pergunta do tipo ${respostasPergunta[0].resposta.tipo}`;
+      }
+
+      return {
+        id: perguntaUid,
+        pergunta: perguntaTexto,
+        tipo: respostasPergunta[0]?.resposta?.tipo || 'texto',
+        respostas: respostasComPorcentagem,
+        totalRespostas
+      };
+    });
+
+    // Agrupar respostas por data
+    const respostasPorDia = respostas.reduce((acc, resposta) => {
+      try {
+        const dataObj = new Date(resposta.created_at);
+        if (isNaN(dataObj.getTime())) throw new Error('Data inválida');
+        
+        const dataFormatada = dataObj.toLocaleDateString('pt-BR');
+        if (!acc[dataFormatada]) {
+          acc[dataFormatada] = 0;
+        }
+        acc[dataFormatada]++;
+      } catch (e) {
+        console.warn('Erro ao processar data da resposta:', e);
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Converter para array e ordenar por data
+    const respostasPorDiaArray = Object.entries(respostasPorDia)
+      .map(([data, total]) => ({
+        data,
+        total
+      }))
+      .sort((a, b) => {
+        try {
+          const [diaA, mesA, anoA] = a.data.split('/').map(Number);
+          const [diaB, mesB, anoB] = b.data.split('/').map(Number);
+          const dataA = new Date(anoA, mesA - 1, diaA);
+          const dataB = new Date(anoB, mesB - 1, diaB);
+          return dataA.getTime() - dataB.getTime();
+        } catch (e) {
+          console.warn('Erro ao ordenar datas:', e);
+          return 0;
+        }
+      });
+
+    // Buscar localizações dos participantes diretamente da tabela ps_gbp_participantes
+    const participantesIds = [...new Set(respostas.map(r => r.participante_uid))];
+    console.log('Buscando participantes com IDs:', participantesIds);
+    
+    const { data: participantes, error: errorParticipantes } = await supabaseClient
+      .from('ps_gbp_participantes')
+      .select('uid, cidade, dados_completos')
+      .in('uid', participantesIds);
+      
+    console.log('Participantes encontrados:', participantes);
+
+    if (errorParticipantes) {
+      console.error('Erro ao buscar participantes:', errorParticipantes);
+      throw errorParticipantes;
+    }
+
+    // Processar localizações dos participantes
+    const localizacoesMap = (participantes || []).reduce((acc, participante) => {
+      // Extrair cidade do participante (pode estar em cidade ou dados_completos)
+      let cidade = participante.cidade;
+      
+      // Se não tiver cidade no campo direto, tenta pegar dos dados_completos
+      if (!cidade && participante.dados_completos) {
+        try {
+          const dados = typeof participante.dados_completos === 'string' 
+            ? JSON.parse(participante.dados_completos) 
+            : participante.dados_completos;
+          
+          cidade = dados.cidade || (dados.endereco_completo ? dados.endereco_completo.cidade : null);
+        } catch (e) {
+          console.error('Erro ao processar dados_completos:', e);
+        }
+      }
+      
+      // Ignorar cidades vazias ou inválidas
+      if (!cidade || typeof cidade !== 'string' || cidade.trim() === '') {
+        return acc;
+      }
+      
+      cidade = cidade.trim();
+      
+      // Ignorar valores padrão de cidade não informada
+      const cidadeMinuscula = cidade.toLowerCase();
+      if ([
+        'não informada', 'nao informada', 'n/a', 'null', 'undefined', 
+        'não informado', 'nao informado', ''
+      ].includes(cidadeMinuscula)) {
+        return acc;
+      }
+      
+      // Contabilizar a cidade
+      if (!acc[cidade]) {
+        acc[cidade] = 0;
+      }
+      acc[cidade]++;
+      
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Converter para array e calcular porcentagens
+    let localizacoes = Object.entries(localizacoesMap)
+      .map(([cidade, total]) => ({
+        cidade,
+        total,
+        porcentagem: Math.round((total / respostas.length) * 100)
+      }))
+      .sort((a, b) => b.total - a.total); // Ordenar por total (maior primeiro)
+    
+    // Se não houver localizações, adicionar um item padrão
+    if (localizacoes.length === 0) {
+      localizacoes = [
+        { cidade: 'Nenhuma localização disponível', total: 0, porcentagem: 0 }
+      ];
+    }
+
+    // Dados de dispositivos (simulados)
+    const dispositivos = [
+      { tipo: 'Desktop', total: Math.floor(respostas.length * 0.6), porcentagem: 60 },
+      { tipo: 'Mobile', total: Math.ceil(respostas.length * 0.35), porcentagem: 35 },
+      { tipo: 'Tablet', total: Math.ceil(respostas.length * 0.05), porcentagem: 5 }
+    ];
+
+    return {
+      totalRespostas: respostas.length,
+      respostasPorDia: respostasPorDiaArray.length > 0 ? respostasPorDiaArray : [
+        { data: new Date().toLocaleDateString('pt-BR'), total: respostas.length }
+      ],
+      dispositivos,
+      localizacoes,
+      perguntas
+    };
+  }
+};

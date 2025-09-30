@@ -1,0 +1,41 @@
+# Query: select('uid, nome, descricao')
+# ContextLines: 1
+
+9 results - 1 file
+
+src\pages\DisparoMidia\index.tsx:
+   331            .from('gbp_categorias')
+   332:           .select('uid, nome, descricao')
+   333            .eq('empresa_uid', userData.empresa_uid)
+
+   534            .from('gbp_categorias')
+   535:           .select('uid, nome, descricao')
+   536            .eq('empresa_uid', userData.empresa_uid)
+
+   737            .from('gbp_categorias')
+   738:           .select('uid, nome, descricao')
+   739            .eq('empresa_uid', userData.empresa_uid)
+
+   940            .from('gbp_categorias')
+   941:           .select('uid, nome, descricao')
+   942            .eq('empresa_uid', userData.empresa_uid)
+
+  1143            .from('gbp_categorias')
+  1144:           .select('uid, nome, descricao')
+  1145            .eq('empresa_uid', userData.empresa_uid)
+
+  1346            .from('gbp_categorias')
+  1347:           .select('uid, nome, descricao')
+  1348            .eq('empresa_uid', userData.empresa_uid)
+
+  1549            .from('gbp_categorias')
+  1550:           .select('uid, nome, descricao')
+  1551            .eq('empresa_uid', userData.empresa_uid)
+
+  1752            .from('gbp_categorias')
+  1753:           .select('uid, nome, descricao')
+  1754            .eq('empresa_uid', userData.empresa_uid)
+
+  1955            .from('gbp_categorias')
+  1956:           .select('uid, nome, descricao')
+  1957            .eq('empresa_uid', userData.empresa_uid)

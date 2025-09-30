@@ -1,0 +1,230 @@
+/* Estilos do Calendário */
+.rbc-calendar {
+  @apply font-sans bg-white rounded-lg p-2 md:p-4;
+  height: 100%;
+  min-height: 500px;
+}
+
+.rbc-toolbar {
+  @apply mb-4 flex flex-wrap justify-between items-center gap-2 md:gap-4;
+  @apply p-2 md:p-4 bg-white rounded-lg;
+}
+
+.rbc-toolbar button {
+  @apply px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-medium;
+  @apply rounded-md transition-colors;
+  @apply bg-white border border-gray-200 text-gray-700 hover:bg-gray-50;
+}
+
+.rbc-toolbar button.rbc-active {
+  @apply bg-blue-600 text-white border-blue-600 hover:bg-blue-700;
+}
+
+.rbc-header {
+  @apply py-2 md:py-3 px-1 md:px-2 text-xs md:text-sm font-semibold;
+  @apply text-gray-700 bg-gray-50 border-b border-gray-200;
+}
+
+.rbc-date-cell {
+  @apply p-1 md:p-2 text-xs md:text-sm text-gray-600;
+}
+
+.rbc-today {
+  @apply bg-blue-50;
+}
+
+.rbc-event {
+  @apply rounded-md shadow-sm border-none;
+  @apply transition-opacity hover:opacity-90;
+}
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
+  @apply border border-gray-200 rounded-lg overflow-hidden bg-white;
+  @apply text-xs md:text-sm h-full;
+}
+
+.calendar-event {
+  @apply my-0.5 transition-all duration-200;
+  @apply text-xs md:text-sm;
+}
+
+.calendar-event:hover {
+  @apply -translate-y-px shadow-md;
+}
+
+.rbc-time-content {
+  @apply border-t border-gray-200;
+}
+
+.rbc-timeslot-group {
+  @apply border-b border-gray-200;
+}
+
+.rbc-time-slot {
+  @apply text-gray-500 text-xs md:text-sm;
+}
+
+.rbc-agenda-view table.rbc-agenda-table {
+  @apply w-full border border-gray-200 rounded-lg overflow-hidden;
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  @apply p-2 md:p-3 text-xs md:text-sm font-semibold;
+  @apply text-gray-700 bg-gray-50 border-b border-gray-200;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  @apply p-2 md:p-3 text-xs md:text-sm border-b border-gray-200;
+}
+
+.rbc-agenda-time-cell {
+  @apply font-mono text-gray-700;
+}
+
+.rbc-agenda-event-cell {
+  @apply font-medium;
+}
+
+/* Estilos dos Eventos */
+.event-type-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.event-type-reuniao {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.event-type-servico {
+  @apply bg-green-100 text-green-800;
+}
+
+.event-type-outros {
+  @apply bg-purple-100 text-purple-800;
+}
+
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-confirmed {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-cancelled {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Animações */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Responsividade para telas pequenas */
+@media (max-width: 640px) {
+  .rbc-toolbar {
+    @apply flex-col items-stretch;
+  }
+
+  .rbc-toolbar-label {
+    @apply text-center my-2;
+  }
+
+  .rbc-btn-group {
+    @apply flex flex-wrap justify-center;
+  }
+
+  .rbc-event-content {
+    @apply truncate;
+  }
+}
+
+/* Ajustes para telas médias */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .rbc-toolbar {
+    @apply flex-row flex-wrap;
+  }
+
+  .rbc-toolbar-label {
+    @apply text-center;
+  }
+}
+
+/* Melhorias para visualização em dispositivos móveis */
+.rbc-month-view .rbc-header {
+  @apply sticky top-0 z-10;
+}
+
+.rbc-time-view .rbc-time-header {
+  @apply sticky top-0 z-10 bg-white;
+}
+
+.rbc-time-view .rbc-time-header-content {
+  @apply sticky left-0;
+}
+
+/* Melhorias para touch em dispositivos móveis */
+@media (hover: none) {
+  .rbc-event {
+    @apply active:opacity-80;
+  }
+
+  .calendar-event {
+    @apply active:shadow-md;
+  }
+
+  .rbc-toolbar button {
+    @apply active:bg-gray-100;
+  }
+}
+
+/* Ajustes de altura e scroll */
+.rbc-calendar-container {
+  @apply h-full flex flex-col;
+}
+
+.rbc-calendar-content {
+  @apply flex-1 overflow-hidden;
+}
+
+/* Correções de borda e sombra */
+.rbc-calendar,
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
+  @apply border-0 shadow-none;
+}
+
+/* Melhorias no espaçamento */
+.rbc-month-row + .rbc-month-row {
+  @apply border-t border-gray-200;
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  @apply border-l border-gray-200;
+}
+
+/* Estado vazio */
+.rbc-no-events {
+  @apply text-gray-500 text-center py-4;
+}
+
+/* Container externo */
+.calendar-container {
+  @apply min-h-screen bg-gray-50;
+}
+
+.calendar-inner {
+  @apply bg-white rounded-xl shadow-lg overflow-hidden;
+  height: calc(100vh - 2rem);
+}
