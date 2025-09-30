@@ -1,0 +1,21 @@
+{
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^10.0.0"
+  },
+  "dependencies": {
+    "@stripe/react-stripe-js": "^3.10.0",
+    "@stripe/stripe-js": "^7.9.0",
+    "@types/leaflet-draw": "^1.0.12",
+    "@types/qrcode.react": "^1.0.5",
+    "asaas": "^1.1.0",
+    "cmdk": "^1.1.1",
+    "exceljs": "^4.4.0",
+    "leaflet-draw": "^1.0.4",
+    "lucide-react": "^0.535.0",
+    "qrcode.react": "^4.2.0",
+    "react-leaflet-draw": "^0.20.6",
+    "react-youtube": "^10.1.0",
+    "xlsx": "^0.18.5"
+  }
+}

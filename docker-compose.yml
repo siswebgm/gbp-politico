@@ -1,0 +1,21 @@
+services:
+  gbp-politico-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.simplified
+    container_name: gbp-politico-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - gbp-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  gbp-network:
+    driver: bridge

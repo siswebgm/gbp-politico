@@ -1,0 +1,4 @@
+FROM nginx:stable-alpine
+
+# Copiar um arquivo simples para testar
+RUN echo 'Teste de construção bem-sucedida!' > /usr/share/nginx/html/index.html

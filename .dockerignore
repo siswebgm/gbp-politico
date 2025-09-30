@@ -1,0 +1,79 @@
+# Node
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build
+dist
+build
+.next
+.nuxt
+.output
+.cache
+.temp
+*.tsbuildinfo
+*.map
+
+# Dependencies
+.gradle
+.venv
+venv
+env
+.env
+.env.*
+!.env.example
+
+# IDEs and editors
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.md
+*.tmp
+*.temp
+
+# Project specific
+migrations/
+scripts/
+*.sql
+*.bak
+
+# Keep only the necessary files in gbp-main
+!gbp-main/package.json
+!gbp-main/package-lock.json
+!gbp-main/tsconfig.json
+!gbp-main/next.config.js
+!gbp-main/next-env.d.ts
+!gbp-main/postcss.config.js
+!gbp-main/tailwind.config.js
+!gbp-main/tsconfig.json
+!gbp-main/public/
+!gbp-main/src/
+!gbp-main/nginx.conf

@@ -1,0 +1,62 @@
+# Multi-stage build otimizado para Windows
+FROM node:20-alpine as deps
+
+# Configura o npm para usar menos memória
+RUN npm config set fetch-retries 3 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 60000
+
+WORKDIR /app
+
+# Copia apenas os arquivos necessários para instalação das dependências
+COPY package.json package-lock.json ./
+
+# Instala as dependências de produção primeiro
+RUN npm ci --only=production --no-audit --prefer-offline --no-fund --no-optional --no-package-lock
+
+# Stage de build
+FROM node:20-alpine as build
+
+WORKDIR /app
+
+# Copia as dependências de produção
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copia apenas os arquivos necessários para o build
+COPY tsconfig.json ./
+COPY vite.config.ts ./
+COPY postcss.config.js ./
+COPY tailwind.config.js ./
+COPY src ./src
+COPY public ./public
+
+# Configura o Node.js para usar mais memória durante o build
+ENV NODE_OPTIONS=--max_old_space_size=4096
+
+# Executa o build com otimizações
+RUN npm run build:optimized
+
+# Stage de produção
+FROM nginx:stable-alpine
+
+# Configuração do Nginx
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copia apenas os arquivos de build necessários
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Configura permissões
+RUN chown -R nginx:nginx /usr/share/nginx/html \
+    && chmod -R 755 /usr/share/nginx/html \
+    && rm -rf /var/cache/apk/* /tmp/*
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+
+# Expõe a porta 80
+EXPOSE 80
+
+# Inicia o Nginx
+CMD ["nginx", "-g", "daemon off;"]
