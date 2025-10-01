@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
 
-// https://vitejs.dev/config/
-export default defineConfig(({ command, mode }) => ({
+// Development build configuration - no minification
+export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
@@ -39,7 +39,6 @@ export default defineConfig(({ command, mode }) => ({
   },
   optimizeDeps: {
     esbuildOptions: {
-      // Enable esbuild polyfill for Node.js globals and built-ins
       define: {
         global: 'globalThis'
       }
@@ -59,27 +58,18 @@ export default defineConfig(({ command, mode }) => ({
     ]
   },
   build: {
-    // Force development mode settings
     sourcemap: false,
-    minify: false,
-    target: 'es2015',
-    cssMinify: false,
-    // Disable all optimizations
+    minify: false, // No minification
+    target: 'es2020',
     rollupOptions: {
       output: {
-        // No chunking at all - single file
-        manualChunks: undefined,
-        inlineDynamicImports: true,
-        // Preserve original names
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]'
+        // Simple chunking strategy
+        manualChunks: {
+          'vendor': ['react', 'react-dom'],
+          'firebase': ['firebase'],
+        },
       },
-      // Disable tree shaking
-      treeshake: false,
     },
-
-    // Increase chunk size warning limit
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
   },
-}));
+});

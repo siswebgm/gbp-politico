@@ -1,6 +1,7 @@
 import { supabaseClient } from '../lib/supabase';
-import { messaging } from '../lib/firebase';
-import { getMessaging, getToken } from 'firebase/messaging';
+// Firebase desabilitado
+// import { messaging } from '../lib/firebase';
+// import { getMessaging, getToken } from 'firebase/messaging';
 import * as rs from 'jsrsasign';
 
 interface SendNotificationParams {
@@ -10,20 +11,8 @@ interface SendNotificationParams {
   userIds?: string[];
 }
 
-// Configuração da conta de serviço do Firebase
-const serviceAccount = {
-  type: 'service_account',
-  project_id: 'gbppolitico',
-  private_key_id: 'af1b5824b60dba79440b735a0274e30ba5938e6d',
-  private_key: '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCkeYgZYTnyMXAp\niw45n+rwMQTOBCSzfqFcHDqhvGQfXBTtIALyL4DdFG8HhcbI9NiKYzcPi5e6RGXK\nGhGU9YfoOmuy+YpFZw4JvW+nd0tyiWJgmQYW+gs9RzqEPAJQhkPnbPvuZLJipFAf\n1z212Mcwb7tvIT4Uim2BUZ9Ja7fUY2HFFgdIlUdXACrwYXZV7WScmFW592cPwiLD\nHH286ATh54CKIacEbrnn9wtOnbWrZJK1M9EEmhKydx/B42MkIibtITVKhuQkrdVM\nYJAiGIemSxWJZ8rHuUL+APnrnx7FeF5Mz26K0Gv5lXCPgmF3zhdmxOGhzIDX7bw0\n9hO3ZTNJAgMBAAECggEAUPo+/lPmri4WDXYXvlpUVwajWXUjxrXpZwrE+T1iRChX\nazoQCUJHHVICqj78lJMsC9J2WPJ+9OfY/8ye7GqIi9c7kEYZBDuNZ1E76EUtQcqP\nQ4UDwQtBvl1T26gZ8aBxTT9UuFYel79TbaHREbeVtmzEaR4CTSWsbXeMx56/xtKP\nUaWe1xdxV8Q8ZzvgSg5NZ5yVCJbQJ291Q2lOOMOBAWlMvTuBfuxJ6q0Wejs7mTdz\n7VJFkI8MHRcooJex94q/pu0FvckqemCi1i8hzvMrRRFWOuERkNyxLzKO40PyDW+k\nBoD0cXcI0vMbH+uP9Fbmlw2F8SfKs402+5hKaCj9awKBgQDNN6XuYZk02yNqJWPX\nOcdngI4C4ZIcfcnmVfPZha2i4PjAi3EnjdCsqya5juUy9fXXjkjbZ4Jc2U1aHvXD\nb5HqAxErm0EjyIaMxONTpi4zahcWuOUet/s1ore6lmEVl/OSxV79XF6TaZY4qGIi\nidGXyWnsbCnIZC4LnjMSf1nvkwKBgQDNLN7e73KqQhc/owV2ylAte71Lw032r9H3\nFb4CKi3OL/Zmq6euduifutYP8UEpccykz9dmNI/wjulPpSOkOczS5lomuW6+cIrw\njSd+kKeheVlZkqrGSqZVVYMj/HN892lrWVHJLV6t49bZl5EplY1OGnbnt2m3Ze65\nzkDfXH1DMwKBgBxWpOlIPPnZkQhlZWYhKnIWhIXNVHnuvOS71dKh7Rpi6rbcCqIl\nqT1O3SgenXPuFybPFSyHHK9pqo7ZW6LDU2j3R3W4GMSyOjJSNfolJpge/FU87xbQ\n3TXI5Io1ne53b0FDVBy0lrLQj9f/GJ4gXfsR6zikrxhnDRy5md/iCi9VAoGANoCB\n35SZ0BJoXJYwgGKzs7FYEoUZ87q2ur0C0U5lBo2FFbbpfxXFK5EVBf0fQyQgqXMw\nk8zIo61C2s5STnCwMSHRttGxUlNRBR9p61v/u4whqQKl7LCtyKNDh86q2vpZ/ZMn\nf5pWuTh5vSle/T3l4GZ1SY5WPcqNBLx+TRcjizMCgYA5geRBZVW91rNZkhnrllJX\nDxN9KYoAp+T301IZ6lEXatp4chu4nrKFeHbW5SnAQL9geNSQwzbIq64cXCkoh49I\nat10Al72VsidiIzvI5MshcGIDW+0CHqYpsfelyOVHJGvDP860Vcc2K94EfWA+WS9\n5xfzNkzIGn4pLS6iEhuSkA==\n-----END PRIVATE KEY-----\n',
-  client_email: 'firebase-adminsdk-fbsvc@gbppolitico.iam.gserviceaccount.com',
-  client_id: '118025298094462929281',
-  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-  token_uri: 'https://oauth2.googleapis.com/token',
-  auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-  client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40gbppolitico.iam.gserviceaccount.com',
-  universe_domain: 'googleapis.com'
-};
+// Firebase desabilitado - configuração comentada
+// const serviceAccount = { ... };
 
 class NotificationService {
   private accessToken: string | null = null;
@@ -176,6 +165,10 @@ class NotificationService {
   }
 
   async sendNotification({ title, body, data = {}, userIds }: SendNotificationParams) {
+    console.log('Firebase desabilitado - notificação não enviada:', { title, body, userIds });
+    return { success: false, message: 'Firebase desabilitado' };
+    
+    /* CÓDIGO ORIGINAL COMENTADO:
     try {
       if (!userIds || userIds.length === 0) {
         console.log('Nenhum usuário especificado para enviar notificação');
@@ -346,6 +339,7 @@ class NotificationService {
       console.error('Erro ao enviar notificação:', error);
       throw error;
     }
+    */ // FIM DO CÓDIGO COMENTADO
   }
 
   async sendTestNotification(userId: string) {

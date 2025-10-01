@@ -1,0 +1,37 @@
+# Dockerfile com correção do erro JavaScript
+FROM nginx:stable-alpine
+
+# Instalar curl e sed para healthcheck e correções
+RUN apk add --no-cache curl sed
+
+# Copiar arquivos construídos localmente
+COPY dist /usr/share/nginx/html
+
+# Copiar configuração do nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Aplicar correção JavaScript diretamente
+RUN find /usr/share/nginx/html/js -name "utils-*.js" -exec sed -i 's/import{J as e,/import{J as supabaseCreate,/g' {} \; && \
+    find /usr/share/nginx/html/js -name "utils-*.js" -exec sed -i 's/const c=e(/const c=supabaseCreate(/g' {} \;
+
+# Configurar permissões
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx/conf.d && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost/ || exit 1
+
+# Executar como usuário não-root
+USER nginx
+
+# Expor a porta 80
+EXPOSE 80
+
+# Iniciar nginx
+CMD ["nginx", "-g", "daemon off;"]
