@@ -538,7 +538,7 @@ const ListaAnualOficios: React.FC = () => {
         </svg>
       </button>
 
-      <div className="max-w-7xl mx-auto mt-6">
+      <div className="mx-auto mt-6">
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow p-4 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -607,36 +607,19 @@ const ListaAnualOficios: React.FC = () => {
                 <select
                   value={selectedTipoDemanda}
                   onChange={(e) => setSelectedTipoDemanda(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                  className="w-full md:w-64 px-3 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs bg-white shadow-sm hover:border-slate-400 transition-colors"
                 >
-                  <option value="">Tipo de Demanda</option>
-                  <optgroup label="Iluminação e Segurança">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Iluminação e Segurança'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Iluminação e Segurança:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Infraestrutura">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Infraestrutura'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Infraestrutura:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Serviços Públicos">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Serviços Públicos'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Serviços Públicos:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
+                  <option value="" className="text-slate-500">Tipo de Demanda</option>
+                  {Object.entries(tiposDemandaGroups).map(([categoria, demandas]) => (
+                    <optgroup key={categoria} label={categoria.toUpperCase()} style={{fontSize: '0.75rem', fontWeight: 'bold'}}>
+                      {demandas.map(demanda => {
+                        const originalTipo = tiposDemanda.find(tipo => tipo.includes(demanda) || demanda.includes(tipo.split('::')[1] || tipo));
+                        return (
+                          <option key={demanda} value={originalTipo || demanda} className="py-1 px-2 hover:bg-blue-50 break-words whitespace-pre-wrap text-xs truncate" style={{width: '100%', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis'}}>{demanda}</option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
             </div>
@@ -682,36 +665,19 @@ const ListaAnualOficios: React.FC = () => {
                 <select
                   value={selectedTipoDemanda}
                   onChange={(e) => setSelectedTipoDemanda(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                  className="w-full md:w-64 px-3 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs bg-white shadow-sm hover:border-slate-400 transition-colors"
                 >
-                  <option value="">Tipo de Demanda</option>
-                  <optgroup label="Iluminação e Segurança">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Iluminação e Segurança'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Iluminação e Segurança:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Infraestrutura">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Infraestrutura'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Infraestrutura:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Serviços Públicos">
-                    {tiposDemanda
-                      .filter(tipo => tipo.startsWith('Serviços Públicos'))
-                      .map(tipo => (
-                        <option key={tipo} value={tipo} className="pl-2 py-2 text-sm">
-                          {tipo.replace('Serviços Públicos:', '')}
-                        </option>
-                      ))}
-                  </optgroup>
+                  <option value="" className="text-slate-500">Tipo de Demanda</option>
+                  {Object.entries(tiposDemandaGroups).map(([categoria, demandas]) => (
+                    <optgroup key={categoria} label={categoria.toUpperCase()} style={{fontSize: '0.75rem', fontWeight: 'bold'}}>
+                      {demandas.map(demanda => {
+                        const originalTipo = tiposDemanda.find(tipo => tipo.includes(demanda) || demanda.includes(tipo.split('::')[1] || tipo));
+                        return (
+                          <option key={demanda} value={originalTipo || demanda} className="py-1 px-2 hover:bg-blue-50 break-words whitespace-pre-wrap text-xs truncate" style={{width: '100%', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis'}}>{demanda}</option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
             )}

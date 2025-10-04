@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import type { CategoryWithType } from '../../../services/categories';
 import { categoriaTipoService } from '../../../services/categories';
 import { useCompanyStore } from '../../../store/useCompanyStore';
+import { supabaseClient } from '../../../lib/supabase';
 
 interface CategoriaFormData {
   nome: string;
@@ -71,6 +72,9 @@ export function CategorySettings() {
   });
 
   const [newTipo, setNewTipo] = useState({ nome: '', isCreating: false });
+  
+  // Estado local para cores em tempo real
+  const [localColors, setLocalColors] = useState<Record<string, string>>({});
 
   const filteredCategorias = useMemo(() => {
     if (!categorias) return [];
@@ -685,8 +689,50 @@ export function CategorySettings() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 justify-between">
-                        <span className="text-slate-700 flex-1">{categoria.nome}</span>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="relative">
+                            <input
+                              type="color"
+                              value={localColors[categoria.uid] || categoria.cor || '#3B82F6'}
+                              onChange={async (e) => {
+                                const newColor = e.target.value;
+                                
+                                // Atualiza imediatamente no estado local
+                                setLocalColors(prev => ({ ...prev, [categoria.uid]: newColor }));
+                                
+                                try {
+                                  const { error } = await supabaseClient
+                                    .from('gbp_categorias')
+                                    .update({ cor: newColor })
+                                    .eq('uid', categoria.uid);
+                                  
+                                  if (error) throw error;
+                                  // Atualiza silenciosamente sem toast
+                                  refetch();
+                                } catch (error) {
+                                  console.error('Erro ao atualizar cor:', error);
+                                  toast.error('Erro ao atualizar cor');
+                                  // Reverte a cor local em caso de erro
+                                  setLocalColors(prev => {
+                                    const newColors = { ...prev };
+                                    delete newColors[categoria.uid];
+                                    return newColors;
+                                  });
+                                }
+                              }}
+                              className="w-12 h-12 rounded-lg cursor-pointer border-2 border-gray-300 hover:border-indigo-400 transition-colors"
+                              style={{ 
+                                backgroundColor: localColors[categoria.uid] || categoria.cor || '#3B82F6',
+                                appearance: 'none',
+                                WebkitAppearance: 'none',
+                                MozAppearance: 'none'
+                              }}
+                              title="Alterar cor da categoria"
+                            />
+                          </div>
+                          <span className="text-slate-700 flex-1">{categoria.nome}</span>
+                        </div>
                         <div className="flex items-center gap-2 ml-auto">
                           <button
                             onClick={() => handleStartEdit(categoria)}
@@ -712,6 +758,7 @@ export function CategorySettings() {
           ))}
         </div>
       )}
+
       {/* Modal de Confirmação de Exclusão */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">

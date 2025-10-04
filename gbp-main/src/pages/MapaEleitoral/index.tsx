@@ -86,8 +86,7 @@ export function ElectoralMap() {
 
           const lat = parseFloat(voter.latitude);
           const lng = parseFloat(voter.longitude);
-
-          let genero = voter.genero || voter.sexo || voter.gender || '';
+          const genero = voter.genero || voter.sexo || voter.gender || '';
 
           return {
             id: voter.id.toString(),
@@ -102,13 +101,13 @@ export function ElectoralMap() {
             telefone: voter.telefone || voter.whatsapp || '',
             influencia: voter.influencia || '',
             categoria: voter.categoria || '',
+            categoria_uid: voter.categoria_uid || '',
             genero
           };
         });
 
       // Calcula as estatísticas uma única vez
       const bairros = new Set(votersWithLocation.map(v => v.bairro).filter(Boolean));
-      
       setVoters(votersWithLocation);
       setTotalEleitores(eleitores.length);
       setTotalComLocalizacao(votersWithLocation.length);
@@ -162,23 +161,7 @@ export function ElectoralMap() {
 
       {/* Content Section */}
       <div className="px-2 sm:px-4 pt-6">
-        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg p-6 mb-4">
-          {/* Estatísticas Rápidas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg text-center">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total de Eleitores</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{totalEleitores}</p>
-            </div>
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg text-center">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Com Localização</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{totalComLocalizacao}</p>
-            </div>
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg text-center">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Bairros</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">{bairrosUnicos}</p>
-            </div>
-          </div>
-
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg mb-4">
           {loading ? (
             <div className="flex items-center justify-center h-[600px]">
               <div className="text-center">

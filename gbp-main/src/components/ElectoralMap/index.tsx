@@ -4,8 +4,10 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users } from 'lucide-react';
+import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users, Camera } from 'lucide-react';
 import debounce from 'lodash/debounce';
+import { supabaseClient } from '../../lib/supabase';
+import { useCompanyStore } from '../../store/useCompanyStore';
 
 // Ícone padrão para o mapa
 const DefaultIcon = L.icon({
@@ -24,6 +26,7 @@ interface Voter {
   address: string;
   telefone: string;
   categoria: string;
+  categoria_uid?: string;
   influencia: string;
   lat: number;
   lng: number;
@@ -81,6 +84,7 @@ interface MapStats {
 }
 
 export default function MapComponent({ voters }: MapComponentProps) {
+  const company = useCompanyStore(state => state.company);
   const mapRef = useRef<L.Map | null>(null);
   const markerClusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const [map, setMap] = useState<L.Map | null>(null);
@@ -95,6 +99,16 @@ export default function MapComponent({ voters }: MapComponentProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
   const [isStatsVisible, setIsStatsVisible] = useState(false);
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<Array<{uid: string, nome: string, cor: string, tipo_uid: string | null, tipo_nome?: string}>>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  const [showRadius, setShowRadius] = useState(true);
+  const [radiusSize, setRadiusSize] = useState(500); // Raio em metros
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const userLocationCircleRef = useRef<L.Circle | null>(null);
+  const userLocationMarkerRef = useRef<L.Marker | null>(null);
+  const [disableClustering, setDisableClustering] = useState(false);
   const [mapStats, setMapStats] = useState<MapStats>({
     totalEleitores: 0,
     bairros: { total: 0, maisPopuloso: { nome: '', quantidade: 0, percentual: 0 } },
@@ -169,6 +183,152 @@ export default function MapComponent({ voters }: MapComponentProps) {
     return bounds;
   }, []);
 
+  // Obter localização do usuário
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.log('Erro ao obter localização:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        }
+      );
+    }
+  }, []);
+
+  // Desenhar círculo de raio na localização do usuário
+  useEffect(() => {
+    if (!map || !userLocation || !showRadius) {
+      // Remove círculo e marcador se existirem
+      if (userLocationCircleRef.current) {
+        map?.removeLayer(userLocationCircleRef.current);
+        userLocationCircleRef.current = null;
+      }
+      if (userLocationMarkerRef.current) {
+        map?.removeLayer(userLocationMarkerRef.current);
+        userLocationMarkerRef.current = null;
+      }
+      return;
+    }
+
+    // Remove círculo e marcador anteriores
+    if (userLocationCircleRef.current) {
+      map.removeLayer(userLocationCircleRef.current);
+    }
+    if (userLocationMarkerRef.current) {
+      map.removeLayer(userLocationMarkerRef.current);
+    }
+
+    // Cria círculo de raio
+    const circle = L.circle([userLocation.lat, userLocation.lng], {
+      radius: radiusSize,
+      color: '#3B82F6',
+      fillColor: '#3B82F6',
+      fillOpacity: 0.1,
+      weight: 2,
+      opacity: 0.5
+    });
+
+    // Cria marcador de localização do usuário
+    const userIcon = L.divIcon({
+      html: `
+        <div style="
+          width: 20px;
+          height: 20px;
+          background-color: #3B82F6;
+          border: 3px solid white;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        "></div>
+      `,
+      className: 'user-location-marker',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+
+    const marker = L.marker([userLocation.lat, userLocation.lng], {
+      icon: userIcon
+    });
+
+    marker.bindPopup(`
+      <div class="p-2">
+        <p class="font-semibold text-sm">📍 Sua Localização</p>
+        <p class="text-xs text-gray-600 mt-1">Raio: ${radiusSize}m</p>
+      </div>
+    `);
+
+    circle.addTo(map);
+    marker.addTo(map);
+
+    userLocationCircleRef.current = circle;
+    userLocationMarkerRef.current = marker;
+
+    return () => {
+      if (userLocationCircleRef.current) {
+        map.removeLayer(userLocationCircleRef.current);
+      }
+      if (userLocationMarkerRef.current) {
+        map.removeLayer(userLocationMarkerRef.current);
+      }
+    };
+  }, [map, userLocation, showRadius, radiusSize]);
+
+  // Carregar cores e dados das categorias com tipos
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!company?.uid) return;
+      
+      try {
+        const { data, error } = await supabaseClient
+          .from('gbp_categorias')
+          .select(`
+            uid, 
+            nome, 
+            cor, 
+            tipo_uid,
+            tipo:gbp_categoria_tipos(nome)
+          `)
+          .eq('empresa_uid', company.uid)
+          .order('nome');
+        
+        if (error) throw error;
+        
+        const colorsMap: Record<string, string> = {};
+        const categoriesList: Array<{uid: string, nome: string, cor: string, tipo_uid: string | null, tipo_nome?: string}> = [];
+        
+        data?.forEach((cat: any) => {
+          if (cat.uid) {
+            if (cat.cor) colorsMap[cat.uid] = cat.cor;
+            categoriesList.push({
+              uid: cat.uid,
+              nome: cat.nome,
+              cor: cat.cor || '#3B82F6',
+              tipo_uid: cat.tipo_uid,
+              tipo_nome: cat.tipo?.nome || null
+            });
+          }
+        });
+        
+        setCategoryColors(colorsMap);
+        setCategories(categoriesList);
+        setSelectedCategories(new Set()); // Inicia sem nenhuma selecionada
+      } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+      }
+    };
+    
+    loadCategories();
+  }, [company?.uid]);
+
   // Inicialização do mapa
   useEffect(() => {
     if (!containerRef.current || map) return;
@@ -235,16 +395,77 @@ export default function MapComponent({ voters }: MapComponentProps) {
         collapsed: false
       }).addTo(newMap);
 
-      // Configuração do cluster de marcadores
+      // Configuração do cluster de marcadores com cores personalizadas
+      // Desabilita clustering se:
+      // 1. Opção manual ativada OU
+      // 2. 5 ou menos categorias selecionadas
+      const shouldDisableClustering = disableClustering || (selectedCategories.size > 0 && selectedCategories.size <= 5);
+      
       const markers = L.markerClusterGroup({
-        maxClusterRadius: 50,
+        maxClusterRadius: shouldDisableClustering ? 0 : 50, // 0 = sem agrupamento
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true,
-        disableClusteringAtZoom: 19, // Ajustado para um nível antes do zoom máximo
+        disableClusteringAtZoom: shouldDisableClustering ? 1 : 16,
         chunkedLoading: true,
         chunkInterval: 100,
-        chunkDelay: 50
+        chunkDelay: 50,
+        iconCreateFunction: function(cluster) {
+          const childCount = cluster.getChildCount();
+          const markers = cluster.getAllChildMarkers();
+          
+          // Conta as categorias no cluster
+          const categoryCounts: Record<string, number> = {};
+          markers.forEach((marker: any) => {
+            const voter = marker.options.voter;
+            if (voter?.categoria_uid) {
+              categoryCounts[voter.categoria_uid] = (categoryCounts[voter.categoria_uid] || 0) + 1;
+            }
+          });
+          
+          // Encontra a categoria predominante
+          let dominantCategory = '';
+          let maxCount = 0;
+          Object.entries(categoryCounts).forEach(([catUid, count]) => {
+            if (count > maxCount) {
+              maxCount = count;
+              dominantCategory = catUid;
+            }
+          });
+          
+          // Usa a cor da categoria predominante ou azul padrão
+          const clusterColor = dominantCategory && categoryColors[dominantCategory] 
+            ? categoryColors[dominantCategory] 
+            : '#3B82F6';
+          
+          // Define o tamanho do cluster baseado na quantidade
+          let iconSize = 40;
+          if (childCount >= 100) iconSize = 50;
+          else if (childCount >= 10) iconSize = 45;
+          
+          return L.divIcon({
+            html: `
+              <div style="
+                background-color: ${clusterColor};
+                width: ${iconSize}px;
+                height: ${iconSize}px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                border: 3px solid rgba(255,255,255,0.8);
+              ">
+                <span>${childCount}</span>
+              </div>
+            `,
+            className: 'marker-cluster-custom',
+            iconSize: L.point(iconSize, iconSize)
+          });
+        }
       });
 
       setMap(newMap);
@@ -258,7 +479,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
         map.remove();
       }
     };
-  }, [map, voters]);
+  }, [map, voters, selectedCategories, disableClustering]);
 
   // Efeito para alternar entre as camadas do mapa
   useEffect(() => {
@@ -289,11 +510,17 @@ export default function MapComponent({ voters }: MapComponentProps) {
 
   // Função para criar o ícone personalizado do eleitor
   const createVoterIcon = (voter: Voter) => {
-    // Determina a cor com base no gênero
-    const color = voter.genero?.toUpperCase() === 'F' || 
-                 voter.genero?.toLowerCase() === 'feminino'
-      ? '#EC4899' // Rosa (pink-500)
-      : '#3B82F6'; // Azul (blue-500)
+    // Determina a cor com base na categoria (se configurada) ou no gênero
+    let color = '#3B82F6'; // Azul padrão
+    
+    // Prioridade 1: Cor da categoria
+    if (voter.categoria_uid && categoryColors[voter.categoria_uid]) {
+      color = categoryColors[voter.categoria_uid];
+    }
+    // Prioridade 2: Cor por gênero (fallback)
+    else if (voter.genero?.toUpperCase() === 'F' || voter.genero?.toLowerCase() === 'feminino') {
+      color = '#EC4899'; // Rosa (pink-500)
+    }
     
     // Cria um ícone SVG de ponto de localização
     const svgTemplate = `
@@ -325,8 +552,9 @@ export default function MapComponent({ voters }: MapComponentProps) {
       if (!voter.lat || !voter.lng) return;
 
       const marker = L.marker([voter.lat, voter.lng], {
-        icon: createVoterIcon(voter)
-      });
+        icon: createVoterIcon(voter),
+        voter: voter // Adiciona os dados do eleitor ao marcador para uso no cluster
+      } as any);
 
       const popupContent = `
         <div class="p-1 min-w-[280px]">
@@ -389,29 +617,120 @@ export default function MapComponent({ voters }: MapComponentProps) {
     });
 
     map.addLayer(markerClusterGroup);
-  }, [map, markerClusterGroup]);
+  }, [map, markerClusterGroup, categoryColors]);
+
+  // Filtrar eleitores por categoria selecionada
+  const filteredVoters = useMemo(() => {
+    // Se nenhuma categoria selecionada, não mostra nada
+    if (selectedCategories.size === 0) return [];
+    
+    return voters.filter(voter => {
+      // Mostra apenas se a categoria estiver selecionada
+      return voter.categoria_uid && selectedCategories.has(voter.categoria_uid);
+    });
+  }, [voters, selectedCategories]);
+
+  // Efeito para recriar o mapa quando o agrupamento muda
+  useEffect(() => {
+    if (!map) return;
+    
+    // Remove o cluster atual
+    if (markerClusterGroup) {
+      map.removeLayer(markerClusterGroup);
+    }
+    
+    // Recria o cluster com a nova configuração
+    const shouldDisableClustering = disableClustering || (selectedCategories.size > 0 && selectedCategories.size <= 5);
+    
+    const newMarkers = L.markerClusterGroup({
+      maxClusterRadius: shouldDisableClustering ? 0 : 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      disableClusteringAtZoom: shouldDisableClustering ? 1 : 16,
+      chunkedLoading: true,
+      chunkInterval: 100,
+      chunkDelay: 50,
+      iconCreateFunction: function(cluster) {
+        const childCount = cluster.getChildCount();
+        const markers = cluster.getAllChildMarkers();
+        
+        const categoryCounts: Record<string, number> = {};
+        markers.forEach((marker: any) => {
+          const voter = marker.options.voter;
+          if (voter?.categoria_uid) {
+            categoryCounts[voter.categoria_uid] = (categoryCounts[voter.categoria_uid] || 0) + 1;
+          }
+        });
+        
+        let dominantCategory = '';
+        let maxCount = 0;
+        Object.entries(categoryCounts).forEach(([catUid, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            dominantCategory = catUid;
+          }
+        });
+        
+        const clusterColor = dominantCategory && categoryColors[dominantCategory] 
+          ? categoryColors[dominantCategory] 
+          : '#3B82F6';
+        
+        let iconSize = 40;
+        if (childCount >= 100) iconSize = 50;
+        else if (childCount >= 10) iconSize = 45;
+        
+        return L.divIcon({
+          html: `
+            <div style="
+              background-color: ${clusterColor};
+              width: ${iconSize}px;
+              height: ${iconSize}px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: bold;
+              font-size: 14px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+              border: 3px solid rgba(255,255,255,0.8);
+            ">
+              <span>${childCount}</span>
+            </div>
+          `,
+          className: 'marker-cluster-custom',
+          iconSize: L.point(iconSize, iconSize)
+        });
+      }
+    });
+    
+    map.addLayer(newMarkers);
+    setMarkerClusterGroup(newMarkers);
+  }, [disableClustering, selectedCategories.size, map, categoryColors]);
 
   // Atualização dos marcadores
   useEffect(() => {
-    if (!map || !markerClusterGroup || isLoading) return;
+    if (!map || !markerClusterGroup) return;
 
     const updateMarkers = () => {
       if (!map || !markerClusterGroup) return;
+
+      // Limpa todos os marcadores
+      markerClusterGroup.clearLayers();
+
+      // Se não há eleitores filtrados, não adiciona nada
+      if (filteredVoters.length === 0) {
+        return;
+      }
 
       // Restaurar última posição conhecida se disponível
       if (lastCenter.current && lastZoom.current) {
         map.setView(lastCenter.current, lastZoom.current, { animate: false });
       }
 
-      setIsLoading(true);
-      try {
-        markerClusterGroup.clearLayers();
-
-        // Criar marcadores apenas para os eleitores visíveis
-        addMarkersToMap(voters);
-      } finally {
-        setIsLoading(false);
-      }
+      // Criar marcadores apenas para os eleitores filtrados
+      addMarkersToMap(filteredVoters);
     };
 
     // Atualizar marcadores com debounce
@@ -425,15 +744,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
         clearTimeout(updateTimeout.current);
       }
     };
-  }, [voters, map, markerClusterGroup, addMarkersToMap]); // Dependências reduzidas
-
-  // Efeito para atualizar os marcadores quando os eleitores visíveis mudam
-  useEffect(() => {
-    if (!map || !markerClusterGroup) return;
-
-    markerClusterGroup.clearLayers();
-    addMarkersToMap(visibleVoters);
-  }, [map, markerClusterGroup, visibleVoters, addMarkersToMap]);
+  }, [filteredVoters, map, markerClusterGroup, addMarkersToMap]);
 
   // Eventos do mapa
   useEffect(() => {
@@ -453,6 +764,59 @@ export default function MapComponent({ voters }: MapComponentProps) {
       map.off('zoomend', handleMoveEnd);
     };
   }, [map]);
+
+  // Função para capturar/imprimir o mapa
+  const handleCaptureMap = useCallback(async () => {
+    try {
+      // Importa html2canvas dinamicamente
+      const html2canvas = (await import('html2canvas')).default;
+      
+      const mapElement = containerRef.current;
+      if (!mapElement) return;
+
+      // Esconde temporariamente os painéis e controles
+      const elementsToHide = mapElement.querySelectorAll('.leaflet-control-container, [class*="absolute"]');
+      const originalDisplays: string[] = [];
+      
+      elementsToHide.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        originalDisplays.push(htmlEl.style.display);
+        htmlEl.style.display = 'none';
+      });
+
+      // Aguarda um momento para garantir que os elementos foram escondidos
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Captura o elemento do mapa
+      const canvas = await html2canvas(mapElement, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scale: 2, // Maior qualidade
+      });
+
+      // Restaura a visibilidade dos elementos
+      elementsToHide.forEach((el, index) => {
+        const htmlEl = el as HTMLElement;
+        htmlEl.style.display = originalDisplays[index];
+      });
+
+      // Converte para blob e baixa
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `mapa-eleitoral-${new Date().toISOString().split('T')[0]}.png`;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+      });
+    } catch (error) {
+      console.error('Erro ao capturar mapa:', error);
+      alert('Erro ao capturar o mapa. Tente novamente.');
+    }
+  }, []);
 
   // Função para alternar o modo tela cheia
   const toggleFullscreen = useCallback(async () => {
@@ -819,6 +1183,23 @@ export default function MapComponent({ voters }: MapComponentProps) {
               {isStatsVisible ? 'Ocultar Estatísticas' : 'Ver Estatísticas'}
             </span>
           </button>
+
+          <button
+            onClick={() => setShowCategoryFilter(!showCategoryFilter)}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 px-3 py-2 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
+              Filtrar Categorias
+            </span>
+            {selectedCategories.size < categories.length && (
+              <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
+                {selectedCategories.size}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Controles do mapa */}
@@ -850,6 +1231,31 @@ export default function MapComponent({ voters }: MapComponentProps) {
             </button>
           </div>
 
+          {userLocation && (
+            <button
+              onClick={() => {
+                if (map && userLocation) {
+                  map.setView([userLocation.lat, userLocation.lng], 15);
+                }
+              }}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              title="Ir para minha localização"
+            >
+              <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          )}
+
+          <button
+            onClick={handleCaptureMap}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            title="Capturar/Imprimir Mapa"
+          >
+            <Camera className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+          </button>
+
           <button
             onClick={toggleFullscreen}
             className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -861,6 +1267,296 @@ export default function MapComponent({ voters }: MapComponentProps) {
               <Maximize2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
             )}
           </button>
+        </div>
+      </div>
+
+      {/* Painel de Filtro de Categorias */}
+      {showCategoryFilter && (
+        <div 
+          className="fixed sm:absolute inset-0 sm:inset-auto sm:right-2 sm:top-16 sm:bottom-2 z-[1000] sm:w-[450px] transition-all duration-200 ease-in-out flex flex-col cursor-default"
+          style={{ cursor: 'default' }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            // Desabilita temporariamente o drag do mapa
+            if (map) {
+              map.dragging.disable();
+            }
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            // Reabilita o drag do mapa
+            if (map) {
+              map.dragging.enable();
+            }
+          }}
+          onMouseLeave={() => {
+            // Reabilita o drag quando o mouse sai do painel
+            if (map) {
+              map.dragging.enable();
+            }
+          }}
+          onDragStart={(e) => e.preventDefault()}
+        >
+          <div className="bg-white dark:bg-gray-800 sm:bg-white/95 sm:dark:bg-gray-800/95 sm:backdrop-blur-sm rounded-none sm:rounded-lg shadow-lg flex flex-col h-full sm:max-h-full">
+            <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filtrar por Categoria
+              </h2>
+              <button onClick={() => setShowCategoryFilter(false)} className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="p-3 overflow-y-auto overflow-x-hidden flex-1">
+              {/* Botões Gerais de Seleção */}
+              <div className="flex gap-3 mb-4 pb-4 border-b-2 border-gray-200 dark:border-gray-600">
+                <button
+                  onClick={() => setSelectedCategories(new Set(categories.map(c => c.uid)))}
+                  className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Selecionar Todas
+                </button>
+                <button
+                  onClick={() => setSelectedCategories(new Set())}
+                  className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 dark:from-gray-600 dark:to-gray-700 dark:text-gray-200 dark:hover:from-gray-700 dark:hover:to-gray-800 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Limpar Tudo
+                </button>
+              </div>
+
+              {/* Controle de Raio */}
+              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <label className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={showRadius}
+                    onChange={(e) => setShowRadius(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Exibir raio de alcance
+                  </span>
+                </label>
+                {showRadius && (
+                  <div className="mt-2">
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">
+                      Raio: {radiusSize}m
+                    </label>
+                    <input
+                      type="range"
+                      min="100"
+                      max="2000"
+                      step="100"
+                      value={radiusSize}
+                      onChange={(e) => setRadiusSize(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Controle de Agrupamento */}
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={disableClustering}
+                    onChange={(e) => setDisableClustering(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
+                      Desagrupar todos os pinos
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Mostra todos os marcadores individualmente
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Categorias agrupadas por tipo */}
+              <div className="space-y-3">
+                {(() => {
+                  // Filtra categorias que têm pelo menos 1 eleitor
+                  const categoriesWithVoters = categories.filter(cat => 
+                    voters.some(voter => voter.categoria_uid === cat.uid)
+                  );
+
+                  // Agrupa categorias por tipo
+                  const grouped = categoriesWithVoters.reduce((acc, cat) => {
+                    const tipo = cat.tipo_nome || 'Sem Tipo';
+                    if (!acc[tipo]) acc[tipo] = [];
+                    acc[tipo].push(cat);
+                    return acc;
+                  }, {} as Record<string, typeof categoriesWithVoters>);
+
+                  return Object.entries(grouped).map(([tipo, cats]) => (
+                    <div key={tipo} className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2 flex items-center justify-between">
+                        <span className="font-semibold text-sm text-gray-700 dark:text-gray-300">{tipo}</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              const newSelected = new Set(selectedCategories);
+                              cats.forEach(cat => newSelected.add(cat.uid));
+                              setSelectedCategories(newSelected);
+                              
+                              // Centralizar no mapa
+                              if (map) {
+                                const selectedVoters = filteredVoters.filter(v => 
+                                  cats.some(cat => cat.uid === v.categoria_uid)
+                                );
+                                if (selectedVoters.length > 0) {
+                                  const bounds = L.latLngBounds(
+                                    selectedVoters.map(v => [v.lat, v.lng])
+                                  );
+                                  map.fitBounds(bounds, { padding: [50, 50] });
+                                }
+                              }
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            title="Selecionar todas deste tipo"
+                          >
+                            Todos
+                          </button>
+                          <button
+                            onClick={() => {
+                              const newSelected = new Set(selectedCategories);
+                              cats.forEach(cat => newSelected.delete(cat.uid));
+                              setSelectedCategories(newSelected);
+                            }}
+                            className="px-2 py-1 text-xs bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
+                            title="Desmarcar todas deste tipo"
+                          >
+                            Nenhum
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-2 space-y-1">
+                        {cats.map((category) => (
+                          <label
+                            key={category.uid}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCategories.has(category.uid)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedCategories);
+                                if (e.target.checked) {
+                                  newSelected.add(category.uid);
+                                } else {
+                                  newSelected.delete(category.uid);
+                                }
+                                setSelectedCategories(newSelected);
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <input
+                              type="color"
+                              value={category.cor}
+                              onChange={async (e) => {
+                                e.stopPropagation();
+                                const newColor = e.target.value;
+                                
+                                // Atualiza no banco de dados
+                                try {
+                                  const { error } = await supabaseClient
+                                    .from('gbp_categorias')
+                                    .update({ cor: newColor })
+                                    .eq('uid', category.uid);
+                                  
+                                  if (error) throw error;
+                                  
+                                  // Atualiza localmente
+                                  setCategoryColors(prev => ({ ...prev, [category.uid]: newColor }));
+                                  setCategories(prev => prev.map(c => 
+                                    c.uid === category.uid ? { ...c, cor: newColor } : c
+                                  ));
+                                } catch (error) {
+                                  console.error('Erro ao atualizar cor:', error);
+                                }
+                              }}
+                              className="w-8 h-8 rounded cursor-pointer border-2 border-gray-300 flex-shrink-0"
+                              title="Alterar cor da categoria"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {category.nome}
+                              </span>
+                              {category.tipo_nome && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 block">
+                                  {category.tipo_nome}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                // Seleciona apenas esta categoria
+                                setSelectedCategories(new Set([category.uid]));
+                                
+                                // Centralizar no mapa
+                                if (map) {
+                                  const categoryVoters = voters.filter(v => v.categoria_uid === category.uid);
+                                  if (categoryVoters.length > 0) {
+                                    const bounds = L.latLngBounds(
+                                      categoryVoters.map(v => [v.lat, v.lng])
+                                    );
+                                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+                                  }
+                                }
+                              }}
+                              className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                              title="Ver apenas esta categoria no mapa"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {categories.length === 0 && (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+                  Nenhuma categoria cadastrada
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Estatísticas Discretas */}
+      <div className="absolute left-2 bottom-16 z-[999] flex gap-2">
+        <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2 border border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+          <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{voters.length}</p>
+        </div>
+        <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2 border border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Visíveis</p>
+          <p className="text-lg font-bold text-green-600 dark:text-green-400">{filteredVoters.length}</p>
         </div>
       </div>
 

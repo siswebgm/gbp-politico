@@ -260,7 +260,7 @@ export function AttendanceList() {
 
   return (
     <div className="bg-white dark:bg-gray-800 min-h-screen py-6">
-      <Container maxWidth="xl">
+      <Container maxWidth={false}>
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

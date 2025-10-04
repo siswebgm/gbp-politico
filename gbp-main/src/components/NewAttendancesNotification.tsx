@@ -124,7 +124,7 @@ export function NewAttendancesNotification() {
         .gte('data_atendimento', startISO)
         .lte('data_atendimento', endISO)
         .order('data_atendimento', { ascending: false })
-        .limit(10);
+        .limit(50);
 
       if (error) throw error;
       
@@ -175,7 +175,7 @@ export function NewAttendancesNotification() {
               .single();
               
             if (data) {
-              setNewAttendances(prev => [data, ...prev].slice(0, 10));
+              setNewAttendances(prev => [data, ...prev].slice(0, 50));
               setLastUpdate(new Date());
             }
           }
@@ -357,8 +357,8 @@ export function NewAttendancesNotification() {
         </div>
         
         {!isMinimized && (
-          <div className="bg-gray-50 p-1 border-b border-gray-200">
-            <div className="grid grid-cols-3 gap-1">
+          <div className="bg-gray-50 p-2 border-b border-gray-200">
+            <div className="grid grid-cols-3 gap-3">
               <div 
                 onClick={() => toggleStatusFilter('concluído')}
                 className={`border rounded-md p-1.5 text-center cursor-pointer transition-colors ${

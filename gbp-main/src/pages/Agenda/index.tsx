@@ -84,8 +84,8 @@ export default function AgendaPage() {
 
     let filtered = [...events];
     const now = new Date();
-    const startOfWeekDate = startOfWeek(now, { weekStartsOn: 0 }); // Domingo
-    const endOfWeekDate = endOfWeek(now, { weekStartsOn: 0 });
+    const startOfWeekDate = startOfWeek(now, { weekStartsOn: 1 }); // Segunda-feira
+    const endOfWeekDate = endOfWeek(now, { weekStartsOn: 1 });
     const startOfMonthDate = startOfMonth(now);
     const endOfMonthDate = endOfMonth(now);
 
@@ -500,13 +500,17 @@ export default function AgendaPage() {
                     </Button>
                   </div>
                   <div className="grid grid-cols-7 text-sm">
-                    {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map((day) => (
+                    {["seg", "ter", "qua", "qui", "sex", "sab", "dom"].map((day) => (
                       <div key={day} className="text-center py-2 font-medium text-gray-500 border-b sticky top-[73px] bg-white z-10">
                         {day}
                       </div>
                     ))}
                     {Array.from({ length: 35 }).map((_, index) => {
-                      const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), index - selectedDate.getDay() + 1);
+                      // Ajusta para semana começar na segunda-feira (1)
+                      const firstDayOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                      const dayOfWeek = firstDayOfMonth.getDay();
+                      const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Ajuste para segunda-feira
+                      const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), index - offset + 1);
                       const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
                       const dayEvents = events?.filter(event => 
                         format(new Date(event.start_time), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')

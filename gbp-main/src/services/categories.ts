@@ -7,6 +7,7 @@ export interface Category {
   tipo_uid: string | null;
   empresa_uid: string;
   created_at: string;
+  cor?: string; // Cor hexadecimal para o mapa (ex: #FF5733)
 }
 
 export interface CategoriaTipo {
@@ -92,6 +93,9 @@ export const categoryService = {
     }
     if (updates.tipo_uid !== undefined) {
       updateData.tipo_uid = updates.tipo_uid;
+    }
+    if (updates.cor !== undefined) {
+      updateData.cor = updates.cor;
     }
 
     const { data, error } = await supabaseClient
