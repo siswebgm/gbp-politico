@@ -182,6 +182,14 @@ interface FormConfig {
     backgroundColor: string;
     subtitle?: string;
     subtitleColor?: string;
+    logoSize?: number;
+    logoX?: number;
+    logoY?: number;
+    textSize?: number;
+    textX?: number;
+    textY?: number;
+    textFontFamily?: string;
+    textAlignMode?: 'left' | 'center' | 'right';
   };
   categoria_tipos?: string;
   varias_categorias?: string[];
@@ -225,6 +233,8 @@ export function FormularioPublico() {
   });
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [categorias, setCategorias] = useState<any[]>([]);
+  const [indicados, setIndicados] = useState<any[]>([]);
+  const [selectedIndicado, setSelectedIndicado] = useState<string>('');
   const [openModal, setOpenModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(0);
@@ -235,6 +245,32 @@ export function FormularioPublico() {
   useEffect(() => {
     setSelectedCategory('');
   }, [formConfig?.categoria_tipos]);
+
+  // Carregar indicados da empresa
+  useEffect(() => {
+    const loadIndicados = async () => {
+      if (!formConfig?.empresa_uid) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('gbp_indicado')
+          .select('uid, nome, cidade, bairro, whatsapp')
+          .eq('empresa_uid', formConfig.empresa_uid)
+          .order('nome', { ascending: true });
+
+        if (error) {
+          console.error('Erro ao carregar indicados:', error);
+          return;
+        }
+
+        setIndicados(data || []);
+      } catch (error) {
+        console.error('Erro ao carregar indicados:', error);
+      }
+    };
+
+    loadIndicados();
+  }, [formConfig?.empresa_uid]);
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -634,6 +670,7 @@ export function FormularioPublico() {
         uf: formData.uf || '', 
         categoria_uid: selectedCategory,
         empresa_uid: formConfig.empresa_uid,
+        indicado_uid: selectedIndicado || null,
         latitude: formData.latitude, 
         longitude: formData.longitude, 
         mes_nascimento: mesNascimento, 
@@ -1375,7 +1412,7 @@ export function FormularioPublico() {
     boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     borderRadius: '8px 8px 0 0',
     [theme.breakpoints.down('sm')]: {
-      padding: theme.spacing(3, 2, 2),
+      padding: 0,
       borderRadius: 0
     }
   }));
@@ -1395,7 +1432,7 @@ export function FormularioPublico() {
   }));
 
   return (
-    <FormContainer maxWidth="md">
+    <FormContainer maxWidth="md" disableGutters>
       <Backdrop open={isSubmitting}>
         <CircularProgress
           variant="determinate"
@@ -1416,7 +1453,7 @@ export function FormularioPublico() {
           p: 0,
           display: 'flex',
           flexDirection: 'column',
-mb: 3, // Adiciona margem inferior
+          mb: 3, // Adiciona margem inferior
           [theme.breakpoints.down('sm')]: {
             borderRadius: 0,
             boxShadow: 'none',
@@ -1427,23 +1464,86 @@ mb: 3, // Adiciona margem inferior
         }}
       >
         <FormHeader>
-          {formConfig?.form_logo_url && (
-            <LogoContainer>
-              <Box 
+          <Box sx={{ 
+            position: 'relative', 
+            height: { xs: '200px', sm: '200px' },
+            width: '100%',
+            display: 'block',
+            overflow: { xs: 'hidden', sm: 'visible' }
+          }}>
+            {/* Logo com posicionamento absoluto */}
+            {formConfig?.form_logo_url && (
+              <Box
                 component="img"
                 src={formConfig.form_logo_url}
                 alt="Logo"
-                sx={{ 
-                  height: { xs: 60, sm: 80 },
+                sx={{
+                  position: 'absolute',
+                  left: `${formConfig?.form_theme?.logoX || 85}%`,
+                  top: `${formConfig?.form_theme?.logoY || 50}%`,
+                  transform: 'translate(-50%, -50%)',
                   width: 'auto',
-                  maxWidth: '100%',
+                  height: {
+                    xs: `${(formConfig?.form_theme?.logoSize || 250) * 0.5}px`,
+                    sm: `${Math.max(Math.min((formConfig?.form_theme?.logoSize || 250) * 0.75, 190), 140)}px`
+                  },
+                  maxWidth: { xs: '50%', sm: '45%' },
+                  maxHeight: { xs: '100%', sm: '95%' },
                   objectFit: 'contain',
-                  margin: '0 auto',
-                  display: 'block'
+                  zIndex: 10
                 }}
               />
-            </LogoContainer>
-          )}
+            )}
+            {/* Texto com posicionamento absoluto */}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${formConfig?.form_theme?.textX || 45}%`,
+                top: `${formConfig?.form_theme?.textY || 50}%`,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 5,
+                textAlign: formConfig?.form_theme?.textAlignMode || 'center',
+                width: 'auto',
+                maxWidth: { xs: '55%', sm: '50%' }
+              }}
+            >
+              <Typography
+                sx={{
+                  color: formConfig?.form_title_color || '#ffffff',
+                  fontWeight: 700,
+                  fontSize: {
+                    xs: `${(formConfig?.form_theme?.textSize || 48) * 0.5}px`,
+                    sm: `${Math.min((formConfig?.form_theme?.textSize || 48) * 0.85, 42)}px`
+                  },
+                  fontFamily: formConfig?.form_theme?.textFontFamily || 'Verdana, sans-serif',
+                  lineHeight: 1.2,
+                  whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                  marginBottom: 1
+                }}
+              >
+                {formConfig?.form_title || 'Formulário de Cadastro'}
+              </Typography>
+              {formConfig?.form_theme?.subtitle && (
+                <Typography
+                  sx={{
+                    color: formConfig?.form_theme?.subtitleColor || '#ffffff',
+                    fontSize: {
+                      xs: `${(formConfig?.form_theme?.textSize || 48) * 0.3}px`,
+                      sm: `${(formConfig?.form_theme?.textSize || 48) * 0.6}px`
+                    },
+                    fontFamily: formConfig?.form_theme?.textFontFamily || 'Verdana, sans-serif',
+                    whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                    lineHeight: 1.6
+                  }}
+                >
+                  {formConfig.form_theme.subtitle}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </FormHeader>
+        <FormHeader sx={{ display: 'none' }}>
+          {/* Cabeçalho antigo escondido para compatibilidade */}
           <Box sx={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
             <Typography 
               variant="h4"
@@ -1516,7 +1616,7 @@ mb: 3, // Adiciona margem inferior
               
               <FieldGrid>
                 {isFieldVisible('cpf') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="CPF"
@@ -1539,7 +1639,7 @@ mb: 3, // Adiciona margem inferior
                 )}
 
                 {isFieldVisible('nome') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 8' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Nome Completo"
@@ -1565,7 +1665,7 @@ mb: 3, // Adiciona margem inferior
                 )}
 
                 {isFieldVisible('nascimento') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Data de Nascimento"
@@ -1589,7 +1689,7 @@ mb: 3, // Adiciona margem inferior
                 )}
 
                 {isFieldVisible('nome_mae') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 8' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Nome da Mãe"
@@ -1656,7 +1756,7 @@ mb: 3, // Adiciona margem inferior
               <FieldGrid>
                 {/* WhatsApp */}
                 {isFieldVisible('whatsapp') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 6' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="WhatsApp"
@@ -1680,7 +1780,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* Telefone */}
                 {isFieldVisible('telefone') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 6' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Telefone"
@@ -1716,7 +1816,7 @@ mb: 3, // Adiciona margem inferior
               <FieldGrid>
                 {/* CEP */}
                 {isFieldVisible('cep') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <Box>
                       <StyledTextField
                         fullWidth
@@ -1759,7 +1859,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* LOGRADOURO */}
                 {isFieldVisible('logradouro') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 8' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Logradouro"
@@ -1783,7 +1883,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* CIDADE */}
                 {isFieldVisible('cidade') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 6' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Cidade"
@@ -1807,7 +1907,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* BAIRRO */}
                 {isFieldVisible('bairro') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 6' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Bairro"
@@ -1831,7 +1931,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* NÚMERO */}
                 {isFieldVisible('numero') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 3' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Número"
@@ -1855,7 +1955,7 @@ mb: 3, // Adiciona margem inferior
 
                 {/* COMPLEMENTO */}
                 {isFieldVisible('complemento') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 9' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Complemento"
@@ -1880,6 +1980,45 @@ mb: 3, // Adiciona margem inferior
             </FormSection>
           )}
 
+          {/* Indicado */}
+          {indicados.length > 0 && (
+            <FormSection>
+              <SectionTitle>
+                <PersonIcon sx={{ color: 'primary.main' }} />
+                <Typography variant="h6">Indicado por</Typography>
+              </SectionTitle>
+
+              <FieldGrid>
+                <Box sx={{ gridColumn: '1/-1' }}>
+                  <StyledTextField
+                    select
+                    fullWidth
+                    label="Quem te indicou? (Opcional)"
+                    value={selectedIndicado}
+                    onChange={(e) => setSelectedIndicado(e.target.value)}
+                    helperText="Selecione a pessoa que te indicou para este cadastro"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PersonIcon />
+                        </InputAdornment>
+                      )
+                    }}
+                  >
+                    <MenuItem value="">
+                      <em>Nenhum / Não fui indicado</em>
+                    </MenuItem>
+                    {indicados.map((indicado) => (
+                      <MenuItem key={indicado.uid} value={indicado.uid}>
+                        {indicado.nome} {indicado.cidade && `- ${indicado.cidade}`}
+                      </MenuItem>
+                    ))}
+                  </StyledTextField>
+                </Box>
+              </FieldGrid>
+            </FormSection>
+          )}
+
           {/* Informações Eleitorais */}
           {['titulo', 'zona', 'secao'].some(field => isFieldVisible(field)) && (
             <FormSection>
@@ -1890,7 +2029,7 @@ mb: 3, // Adiciona margem inferior
               
               <FieldGrid>
                 {isFieldVisible('titulo') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Título de Eleitor"
@@ -1913,7 +2052,7 @@ mb: 3, // Adiciona margem inferior
                 )}
 
                 {isFieldVisible('zona') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Zona"
@@ -1936,7 +2075,7 @@ mb: 3, // Adiciona margem inferior
                 )}
 
                 {isFieldVisible('secao') && (
-                  <FormField sx={{ gridColumn: { xs: '1/-1', sm: 'span 4' } }}>
+                  <FormField sx={{ gridColumn: '1/-1' }}>
                     <StyledTextField
                       fullWidth
                       label="Seção"
