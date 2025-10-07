@@ -181,34 +181,40 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[650px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-gray-900 dark:text-white">
-            <UserCircle2 className="h-7 w-7 text-blue-600 dark:text-blue-400" />
-            <span>Editar Usuário</span>
-          </DialogTitle>
-          <DialogDescription className="text-gray-500 dark:text-gray-400">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="space-y-3 pb-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-gray-900 dark:text-white">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <UserCircle2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <span>Editar Usuário</span>
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400">
             Atualize as informações do usuário abaixo
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="mt-2">
+        <form onSubmit={handleSubmit} className="mt-6">
           <div className="space-y-6">
             {/* Seção 1: Informações Pessoais */}
-            <div className="space-y-4">
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2">
-                <UserCircle2 className="h-5 w-5 text-blue-600" />
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Informações Pessoais</h3>
+                <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <UserCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wide">Informações Pessoais</h3>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome" className="flex items-center gap-1">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="nome" className="flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-gray-300">
                     Nome <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <UserCircle2 className="h-5 w-5 text-gray-400" />
+                      <UserCircle2 className="h-4 w-4 text-gray-400" />
                     </div>
                     <Input
                       id="nome"
@@ -226,40 +232,40 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
                           .join(' ');
                         setFormData(prev => ({ ...prev, nome: value }));
                       }}
-                      className="pl-10 h-11"
+                      className="pl-10 h-10 text-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Nome completo"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="flex items-center gap-1">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-gray-300">
                     Email <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
+                      <Mail className="h-4 w-4 text-gray-400" />
                     </div>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       onChange={handleEmailChange}
-                      className="pl-10 h-11"
+                      className="pl-10 h-10 text-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="exemplo@email.com"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="contato">
+                <div className="space-y-1.5">
+                  <Label htmlFor="contato" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                     Telefone
                   </Label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone className="h-5 w-5 text-gray-400" />
+                      <Phone className="h-4 w-4 text-gray-400" />
                     </div>
                     <Input
                       id="contato"
@@ -267,7 +273,7 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
                       maxLength={15}
                       value={formData.contato}
                       placeholder="(00) 00000-0000"
-                      className="h-11 pl-10"
+                      className="h-10 pl-10 text-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       onChange={(e) => {
                         let value = e.target.value.replace(/\D/g, '');
                         
@@ -297,24 +303,26 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
             </div>
 
             {/* Seção 2: Configurações de Acesso */}
-            <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-blue-600" />
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Configurações de Acesso</h3>
+            <div className="space-y-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl p-5 border border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">Configurações de Acesso</h3>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nivel_acesso" className="flex items-center gap-1">
+                  <Label htmlFor="nivel_acesso" className="flex items-center gap-1 text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Nível de Acesso <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.nivel_acesso}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, nivel_acesso: value }))}
                   >
-                    <SelectTrigger className="h-11 pl-10">
-                      <div className="absolute left-3">
-                        <ShieldCheck className="h-5 w-5 text-gray-400" />
+                    <SelectTrigger className="h-12 pl-11 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                      <div className="absolute left-3.5">
+                        <ShieldCheck className="h-4.5 w-4.5 text-gray-400" />
                       </div>
                       <SelectValue placeholder="Selecione um nível" />
                     </SelectTrigger>
@@ -329,16 +337,16 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="status" className="flex items-center gap-1">
+                  <Label htmlFor="status" className="flex items-center gap-1 text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Status da Conta <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.status}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, status: value as any }))}
                   >
-                    <SelectTrigger className="h-11 pl-10">
-                      <div className="absolute left-3">
-                        <StatusIcon className="h-5 w-5" />
+                    <SelectTrigger className="h-12 pl-11 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                      <div className="absolute left-3.5">
+                        <StatusIcon className="h-4.5 w-4.5" />
                       </div>
                       <SelectValue placeholder="Selecione um status" />
                     </SelectTrigger>
@@ -368,21 +376,21 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
             <div className="flex justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
                 disabled={loading}
-                className="h-11 px-6"
+                className="h-12 px-8 font-semibold border-2 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
                 Cancelar
               </Button>
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="h-11 px-6 bg-blue-600 hover:bg-blue-700"
+                className="h-12 px-8 font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 {loading ? (
                   <>

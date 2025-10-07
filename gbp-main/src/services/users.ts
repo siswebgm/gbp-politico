@@ -99,7 +99,7 @@ export const userService = {
           adm_empresa
         `)
         .eq('empresa_uid', empresa_uid)
-        .order('nome');
+        .order('ultimo_acesso', { ascending: false, nullsFirst: false });
 
       if (error) {
         console.error('Erro na consulta:', error);

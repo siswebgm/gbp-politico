@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { EditUserModal } from './components/EditUserModal';
 import { DeleteUserModal } from './components/DeleteUserModal';
-import { UserCard } from './components/UserCard';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
@@ -23,9 +22,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Pencil,
-  Trash2,
-  LayoutGrid,
-  List
+  Trash2
 } from 'lucide-react';
 import { userService, User as UserType } from '../../services/users';
 import { statsService, UserStats } from '../../services/stats';
@@ -78,7 +75,6 @@ export function Users() {
   const company = useCompanyStore((state) => state.company);
   const authUser = useAuthStore((state) => state.user);
   const [userStats, setUserStats] = useState<Record<string, UserStats>>({});
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const loadUsers = async () => {
     if (!company?.uid) {
@@ -156,38 +152,6 @@ export function Users() {
     };
 
     return statusMap[status] || statusMap.pending;
-  };
-
-  const getNivelAcessoInfo = (nivel: string) => {
-    const nivelMap: Record<string, { label: string; color: string; bgColor: string }> = {
-      admin: {
-        label: 'Administrador',
-        color: 'text-purple-700 dark:text-purple-400',
-        bgColor: 'bg-purple-100 dark:bg-purple-900/30 border-purple-200 dark:border-purple-800'
-      },
-      coordenador: {
-        label: 'Coordenador',
-        color: 'text-blue-700 dark:text-blue-400',
-        bgColor: 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800'
-      },
-      analista: {
-        label: 'Analista',
-        color: 'text-cyan-700 dark:text-cyan-400',
-        bgColor: 'bg-cyan-100 dark:bg-cyan-900/30 border-cyan-200 dark:border-cyan-800'
-      },
-      colaborador: {
-        label: 'Colaborador',
-        color: 'text-green-700 dark:text-green-400',
-        bgColor: 'bg-green-100 dark:bg-green-900/30 border-green-200 dark:border-green-800'
-      },
-      visitante: {
-        label: 'Visitante',
-        color: 'text-gray-700 dark:text-gray-400',
-        bgColor: 'bg-gray-100 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800'
-      }
-    };
-
-    return nivelMap[nivel] || nivelMap.visitante;
   };
 
   const isOnline = (lastAccess: string | null) => {
@@ -554,31 +518,9 @@ export function Users() {
                     className="pl-8 w-full md:w-[250px]"
                   />
                 </div>
-                
-                {/* Toggle View Mode */}
-                <div className="flex items-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
-                  <Button
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <List className="h-4 w-4" />
-                  </Button>
-                </div>
-
                 <Button 
                   onClick={() => setIsCreating(!isCreating)}
                   variant={isCreating ? 'outline' : 'default'}
-                  className="hidden sm:flex whitespace-nowrap"
                 >
                   {isCreating ? (
                     <>
@@ -820,115 +762,115 @@ export function Users() {
               </Card>
             </div>
 
-            {/* Grid/List de Usuários */}
-            <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6' : 'flex flex-col gap-3'}>
+            {/* Grid de Usuários */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               {currentUsers.map((user) => {
                 const stats = userStats[user.uid] || {
                   totalEleitores: 0,
                   totalAtendimentos: 0
                 };
 
-                if (viewMode === 'list') {
-                  const statusInfo = getStatusInfo(user.status);
-                  const isUserOnline = isOnline(user.ultimo_acesso);
-                  const nivelAcessoInfo = getNivelAcessoInfo(user.nivel_acesso || 'visitante');
-                  
-                  return (
-                    <Card key={user.uid} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0">
-                            {user.foto ? (
-                              <AvatarImage src={user.foto} alt={user.nome || ''} />
-                            ) : (
-                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-sm sm:text-base">
-                                {getInitials(user.nome || '')}
-                              </AvatarFallback>
-                            )}
-                          </Avatar>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5 sm:mb-1">
-                              <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate">{user.nome}</h3>
-                              <span className={cn(
-                                "hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-                                statusInfo.color
-                              )}>
-                                {statusInfo.label}
-                              </span>
-                              {isUserOnline && (
-                                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
-                              )}
-                            </div>
-                            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate mb-1">{user.email}</p>
-                            {/* Badges mobile */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={cn(
-                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border",
-                                nivelAcessoInfo.bgColor,
-                                nivelAcessoInfo.color
-                              )}>
-                                <Shield className="h-2.5 w-2.5" />
-                                {nivelAcessoInfo.label}
-                              </span>
-                              <span className={cn(
-                                "sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-                                statusInfo.color
-                              )}>
-                                {statusInfo.label}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-3 sm:gap-6 flex-shrink-0">
-                            <div className="text-center">
-                              <p className="text-xs text-gray-500 hidden sm:block">Atendimentos</p>
-                              <p className="text-sm sm:text-lg font-bold text-blue-600">{stats.totalAtendimentos}</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-xs text-gray-500 hidden sm:block">Eleitores</p>
-                              <p className="text-sm sm:text-lg font-bold text-green-600">{stats.totalEleitores}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditUser(user)}
-                              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-                            >
-                              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(user)}
-                              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                }
+                const statusInfo = getStatusInfo(user.status);
+                const isUserOnline = isOnline(user.ultimo_acesso);
 
                 return (
-                  <UserCard
-                    key={user.uid}
-                    user={user}
-                    stats={stats}
-                    onEdit={handleEditUser}
-                    onDelete={handleDeleteClick}
-                    getInitials={getInitials}
-                    formatDisplayName={formatDisplayName}
-                    getStatusInfo={getStatusInfo}
-                    isOnline={isOnline}
-                    formatLastAccess={formatLastAccess}
-                    calcularPorcentagem={calcularPorcentagem}
-                  />
+                  <Card key={user.uid} className="relative overflow-hidden">
+                    {/* Status Badge */}
+                    <div className="absolute top-4 right-4">
+                      <span className={cn(
+                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+                        statusInfo.color
+                      )}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
+
+                    <CardHeader className="pb-0">
+                      <div className="flex items-start space-x-4">
+                        <Avatar className="h-12 w-12">
+                          {user.foto ? (
+                            <AvatarImage src={user.foto} alt={user.nome || ''} />
+                          ) : (
+                            <AvatarFallback className="bg-blue-100 text-blue-600">
+                              {getInitials(user.nome || '')}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                            {formatDisplayName(user.nome || '')}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="pt-4">
+                      {/* Métricas */}
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500">Atendimentos</p>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-blue-500" />
+                            <span className="text-sm font-medium">{stats.totalAtendimentos} / 1.000</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full transition-all"
+                              style={{ width: `${calcularPorcentagem(stats.totalAtendimentos)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs text-gray-500">Eleitores</p>
+                          <div className="flex items-center space-x-1">
+                            <UsersIcon className="h-4 w-4 text-green-500" />
+                            <span className="text-sm font-medium">{stats.totalEleitores} / 1.000</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-green-500 rounded-full transition-all"
+                              style={{ width: `${calcularPorcentagem(stats.totalEleitores)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Última atividade e ações */}
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center">
+                          <span className={cn(
+                            "h-2 w-2 rounded-full mr-2",
+                            isUserOnline ? "bg-green-500" : "bg-gray-300"
+                          )} />
+                          <span className="text-xs text-gray-500">
+                            {formatLastAccess(user.ultimo_acesso)}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditUser(user)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-4 w-4 text-gray-500 hover:text-blue-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteClick(user)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
