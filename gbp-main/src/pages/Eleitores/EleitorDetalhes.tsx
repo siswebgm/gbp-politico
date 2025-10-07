@@ -14,6 +14,7 @@ import { Menu, Transition, Dialog } from '@headlessui/react';
 import { CheckCircle, Clock, Hourglass, XCircle } from 'lucide-react';
 import { toast } from "../../components/ui/use-toast";
 import { DocumentosAnexados } from './components/DocumentosAnexados';
+import PrintEleitor from './PrintEleitor';
 
 interface Eleitor {
   uid: string;
@@ -687,9 +688,249 @@ export const EleitorDetalhes: FC = () => {
     setModalState(prev => ({ ...prev, [modalKey]: !prev[modalKey] }));
   };
 
-  const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
+  const handlePrint = useCallback(async () => {
+    if (!eleitor) return;
+    
+    try {
+      // Importar jsPDF e jspdf-autotable dinamicamente
+      const { default: jsPDF } = await import('jspdf');
+      await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      let yPosition = 20;
+      const pageHeight = doc.internal.pageSize.height;
+      const margin = 20;
+      const lineHeight = 7;
+      
+      // Função auxiliar para verificar se precisa de nova página
+      const checkNewPage = (neededSpace: number) => {
+        if (yPosition + neededSpace > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+      
+      // Cabeçalho
+      doc.setFontSize(20);
+      doc.setTextColor(30, 64, 175);
+      doc.text(eleitor.nome, margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(9);
+      doc.setTextColor(107, 114, 128);
+      doc.text(`Cadastrado em ${eleitor.created_at ? new Date(eleitor.created_at).toLocaleDateString('pt-BR') : '-'}${eleitor.responsavel ? ` • por ${eleitor.responsavel}` : ''}`, margin, yPosition);
+      yPosition += 10;
+      
+      // Linha separadora
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(1);
+      doc.line(margin, yPosition, 190, yPosition);
+      yPosition += 10;
+      
+      // Dados Pessoais
+      checkNewPage(40);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Dados Pessoais', margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`CPF: ${eleitor.cpf || '-'}`, margin, yPosition);
+      doc.text(`Nascimento: ${eleitor.nascimento ? new Date(eleitor.nascimento).toLocaleDateString('pt-BR') : '-'}`, 110, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Gênero: ${eleitor.genero || '-'}`, margin, yPosition);
+      doc.text(`Nome da Mãe: ${eleitor.nome_mae || '-'}`, 110, yPosition);
+      yPosition += 12;
+      
+      // Contato
+      checkNewPage(30);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Contato', margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`WhatsApp: ${eleitor.whatsapp || '-'}`, margin, yPosition);
+      doc.text(`Telefone: ${eleitor.telefone || '-'}`, 110, yPosition);
+      yPosition += 12;
+      
+      // Endereço
+      checkNewPage(35);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Endereco', margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`Logradouro: ${eleitor.logradouro || '-'}, ${eleitor.numero || 'S/N'}${eleitor.complemento ? ` - ${eleitor.complemento}` : ''}`, margin, yPosition);
+      doc.text(`CEP: ${eleitor.cep || '-'}`, 140, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Bairro: ${eleitor.bairro || '-'}`, margin, yPosition);
+      doc.text(`Cidade/UF: ${eleitor.cidade || '-'}/${eleitor.uf || '-'}`, 110, yPosition);
+      yPosition += 12;
+      
+      // Dados Eleitorais
+      checkNewPage(40);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Dados Eleitorais', margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`Título: ${eleitor.titulo || '-'}`, margin, yPosition);
+      doc.text(`Zona: ${eleitor.zona || '-'}`, 80, yPosition);
+      doc.text(`Seção: ${eleitor.secao || '-'}`, 140, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Colégio Eleitoral: ${eleitor.colegio_eleitoral || '-'}`, margin, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Categoria: ${eleitor.gbp_categorias?.nome || '-'}`, margin, yPosition);
+      doc.text(`Indicado por: ${eleitor.gbp_indicado?.nome || '-'}`, 110, yPosition);
+      yPosition += 12;
+      
+      // Informações Adicionais
+      checkNewPage(35);
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Informacoes Adicionais', margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`Número do SUS: ${eleitor.numero_do_sus || '-'}`, margin, yPosition);
+      doc.text(`Instagram: ${eleitor.instagram || '-'}`, 110, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Confiabilidade: ${eleitor.confiabilidade_do_voto || '-'}`, margin, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Responsável pelo Eleitor: ${eleitor.responsavel_pelo_eleitor || '-'}`, margin, yPosition);
+      yPosition += lineHeight;
+      doc.text(`Qtd Adultos na Residência: ${eleitor.quantidade_adultos_residencia || '-'}`, margin, yPosition);
+      yPosition += 12;
+      
+      // Atendimentos
+      if (atendimentos && atendimentos.length > 0) {
+        checkNewPage(50);
+        doc.setFontSize(12);
+        doc.setTextColor(30, 64, 175);
+        doc.text(`Historico de Atendimentos (${atendimentos.length})`, margin, yPosition);
+        yPosition += 8;
+        
+        (doc as any).autoTable({
+          startY: yPosition,
+          head: [['Nº', 'Data', 'Categoria', 'Descrição', 'Status']],
+          body: atendimentos.map(a => [
+            `#${a.numero}`,
+            a.data_atendimento ? new Date(a.data_atendimento).toLocaleDateString('pt-BR') : '-',
+            a.gbp_categorias?.nome || '-',
+            a.descricao || '-',
+            a.status
+          ]),
+          styles: { 
+            fontSize: 8, 
+            cellPadding: 3,
+            overflow: 'linebreak',
+            cellWidth: 'wrap'
+          },
+          headStyles: { 
+            fillColor: [59, 130, 246], 
+            textColor: 255,
+            fontStyle: 'bold'
+          },
+          columnStyles: {
+            0: { cellWidth: 15 },  // Nº
+            1: { cellWidth: 22 },  // Data
+            2: { cellWidth: 30 },  // Categoria
+            3: { cellWidth: 70 },  // Descrição (maior)
+            4: { cellWidth: 25 }   // Status
+          },
+          margin: { left: margin, right: margin }
+        });
+        
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      }
+      
+      // Ofícios
+      if (oficios && oficios.length > 0) {
+        checkNewPage(50);
+        doc.setFontSize(12);
+        doc.setTextColor(30, 64, 175);
+        doc.text(`Oficios Relacionados (${oficios.length})`, margin, yPosition);
+        yPosition += 8;
+        
+        (doc as any).autoTable({
+          startY: yPosition,
+          head: [['Nº Ofício', 'Data', 'Tipo', 'Descrição', 'Status']],
+          body: oficios.map(o => {
+            let descricaoCompleta = o.descricao || o.titulo || '-';
+            if (o.descricao_do_problema) {
+              descricaoCompleta += `\n\nProblema: ${o.descricao_do_problema}`;
+            }
+            return [
+              o.numero_oficio || '-',
+              o.data_solicitacao ? new Date(o.data_solicitacao).toLocaleDateString('pt-BR') : '-',
+              o.tipo_de_demanda || '-',
+              descricaoCompleta,
+              o.status_solicitacao || o.status || '-'
+            ];
+          }),
+          styles: { 
+            fontSize: 8, 
+            cellPadding: 3,
+            overflow: 'linebreak',
+            cellWidth: 'wrap'
+          },
+          headStyles: { 
+            fillColor: [59, 130, 246], 
+            textColor: 255,
+            fontStyle: 'bold'
+          },
+          columnStyles: {
+            0: { cellWidth: 25 },  // Nº Ofício
+            1: { cellWidth: 22 },  // Data
+            2: { cellWidth: 35 },  // Tipo
+            3: { cellWidth: 60 },  // Descrição (maior)
+            4: { cellWidth: 20 }   // Status
+          },
+          margin: { left: margin, right: margin }
+        });
+      }
+      
+      // Rodapé em todas as páginas
+      const totalPages = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(107, 114, 128);
+        doc.text(
+          `Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} - Página ${i} de ${totalPages}`,
+          doc.internal.pageSize.width / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+      
+      // Salvar PDF
+      doc.save(`eleitor_${eleitor.nome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      toast({
+        title: "PDF gerado com sucesso!",
+        description: "O arquivo foi baixado para o seu computador.",
+        className: "bg-green-50 border-green-200",
+      });
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Não foi possível gerar o arquivo PDF.",
+        variant: "destructive",
+      });
+    }
+  }, [eleitor, atendimentos, oficios, toast]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -1152,8 +1393,8 @@ export const EleitorDetalhes: FC = () => {
                       onClick={handlePrint}
                       className="hidden md:inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                     >
-                      <Printer className="w-4 h-4 mr-2" />
-                      Imprimir
+                      <FileText className="w-4 h-4 mr-2" />
+                      Baixar PDF
                     </button>
                   </div>
                 </div>
@@ -3020,6 +3261,15 @@ export const EleitorDetalhes: FC = () => {
           </div>
         </Dialog>
       </Transition>
+
+      {/* Componente de Impressão */}
+      {eleitor && (
+        <PrintEleitor 
+          eleitor={eleitor} 
+          atendimentos={atendimentos || []} 
+          oficios={oficios || []}
+        />
+      )}
     </div>
   );
 };

@@ -19,6 +19,7 @@ interface Voter {
   bairro: string;
   cidade: string;
   estado: string;
+  cep: string;
   telefone: string;
   influencia: string;
   categoria: string;
@@ -98,6 +99,7 @@ export function ElectoralMap() {
             bairro: voter.bairro || '',
             cidade: voter.cidade || '',
             estado: voter.estado || '',
+            cep: voter.cep || '',
             telefone: voter.telefone || voter.whatsapp || '',
             influencia: voter.influencia || '',
             categoria: voter.categoria || '',

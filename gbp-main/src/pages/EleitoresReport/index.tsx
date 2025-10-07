@@ -4,11 +4,14 @@ import { useCompanyStore } from '../../store/useCompanyStore';
 import { eleitorStatsService, EleitorStats } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2 } from 'lucide-react';
+import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical } from 'lucide-react';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
+import { supabaseClient } from '../../lib/supabase';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export function EleitoresReport() {
   const navigate = useNavigate();
@@ -17,6 +20,12 @@ export function EleitoresReport() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<EleitorStats | null>(null);
   const [bairroPages, setBairroPages] = useState<Record<string, number>>({});
+  const [openMenuBairro, setOpenMenuBairro] = useState<string | null>(null);
+  const [openMenuCidade, setOpenMenuCidade] = useState<string | null>(null);
+  const [openMenuUsuario, setOpenMenuUsuario] = useState<string | null>(null);
+  const [openMenuConfiabilidade, setOpenMenuConfiabilidade] = useState<string | null>(null);
+  const [openMenuIndicado, setOpenMenuIndicado] = useState<string | null>(null);
+  const [openMenuZona, setOpenMenuZona] = useState<string | null>(null);
   
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
 
@@ -49,6 +58,28 @@ export function EleitoresReport() {
     }
     loadStats();
   }, [company?.uid, canAccess]);
+
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.relative')) {
+        setOpenMenuBairro(null);
+        setOpenMenuCidade(null);
+        setOpenMenuUsuario(null);
+        setOpenMenuConfiabilidade(null);
+        setOpenMenuIndicado(null);
+        setOpenMenuZona(null);
+      }
+    };
+    
+    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona) {
+      setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+      }, 0);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona]);
 
   const loadStats = async () => {
     if (!company?.uid) {
@@ -352,6 +383,618 @@ export function EleitoresReport() {
   // Função para obter a página atual dos bairros de uma cidade
   const getBairroPage = (cidade: string) => bairroPages[cidade] || 1;
 
+  // Função auxiliar para definir colunas completas do Excel
+  const getExcelColumns = () => [
+    { header: 'Nome', key: 'nome', width: 30 },
+    { header: 'CPF', key: 'cpf', width: 15 },
+    { header: 'Nascimento', key: 'nascimento', width: 12 },
+    { header: 'WhatsApp', key: 'whatsapp', width: 15 },
+    { header: 'Telefone', key: 'telefone', width: 15 },
+    { header: 'Gênero', key: 'genero', width: 12 },
+    { header: 'Título', key: 'titulo', width: 15 },
+    { header: 'Zona', key: 'zona', width: 10 },
+    { header: 'Seção', key: 'secao', width: 10 },
+    { header: 'CEP', key: 'cep', width: 12 },
+    { header: 'Logradouro', key: 'logradouro', width: 35 },
+    { header: 'Número', key: 'numero', width: 10 },
+    { header: 'Complemento', key: 'complemento', width: 20 },
+    { header: 'Bairro', key: 'bairro', width: 20 },
+    { header: 'Cidade', key: 'cidade', width: 20 },
+    { header: 'UF', key: 'uf', width: 5 },
+    { header: 'Nome da Mãe', key: 'nome_mae', width: 30 },
+    { header: 'Instagram', key: 'instagram', width: 20 },
+    { header: 'Número do SUS', key: 'numero_do_sus', width: 18 },
+    { header: 'Responsável pelo Eleitor', key: 'responsavel_pelo_eleitor', width: 25 },
+    { header: 'Confiabilidade do Voto', key: 'confiabilidade_do_voto', width: 20 },
+    { header: 'Colégio Eleitoral', key: 'colegio_eleitoral', width: 25 },
+    { header: 'Qtd Adultos Residência', key: 'quantidade_adultos_residencia', width: 20 }
+  ];
+
+  // Função auxiliar para formatar dados do eleitor para Excel
+  const formatEleitorForExcel = (eleitor: any) => ({
+    nome: eleitor.nome || '',
+    cpf: eleitor.cpf || '',
+    nascimento: eleitor.nascimento ? new Date(eleitor.nascimento).toLocaleDateString('pt-BR') : '',
+    whatsapp: eleitor.whatsapp || '',
+    telefone: eleitor.telefone || '',
+    genero: eleitor.genero || '',
+    titulo: eleitor.titulo || '',
+    zona: eleitor.zona || '',
+    secao: eleitor.secao || '',
+    cep: eleitor.cep || '',
+    logradouro: eleitor.logradouro || '',
+    numero: eleitor.numero || '',
+    complemento: eleitor.complemento || '',
+    bairro: eleitor.bairro || '',
+    cidade: eleitor.cidade || '',
+    uf: eleitor.uf || '',
+    nome_mae: eleitor.nome_mae || '',
+    instagram: eleitor.instagram || '',
+    numero_do_sus: eleitor.numero_do_sus || '',
+    responsavel_pelo_eleitor: eleitor.responsavel_pelo_eleitor || '',
+    confiabilidade_do_voto: eleitor.confiabilidade_do_voto || '',
+    colegio_eleitoral: eleitor.colegio_eleitoral || '',
+    quantidade_adultos_residencia: eleitor.quantidade_adultos_residencia || ''
+  });
+
+  // Função para exportar eleitores de um bairro específico para Excel
+  const handleExportBairroExcel = async (cidade: string, bairro: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // Buscar eleitores do bairro específico
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('cidade', cidade)
+        .eq('bairro', bairro)
+        .order('nome');
+
+      if (error) throw error;
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(`${bairro} - ${cidade}`);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eleitores_${bairro}_${cidade}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar bairro:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores de uma cidade específica para Excel
+  const handleExportCidadeExcel = async (cidade: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('cidade', cidade)
+        .order('bairro')
+        .order('nome');
+
+      if (error) throw error;
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(cidade);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eleitores_${cidade}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar cidade:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores de uma cidade específica para PDF
+  const handleExportCidadePDF = async (cidade: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('cidade', cidade)
+        .order('bairro')
+        .order('nome');
+
+      if (error) throw error;
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Eleitores - ${cidade}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Bairro', 'Telefone', 'Zona/Seção']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || '',
+          `${e.zona || ''}/${e.secao || ''}`
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`eleitores_${cidade}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar cidade PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
+  // Função para exportar eleitores de um usuário específico para Excel
+  const handleExportUsuarioExcel = async (usuarioNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*, gbp_usuarios!inner(nome)')
+        .eq('empresa_uid', company.uid)
+        .eq('gbp_usuarios.nome', usuarioNome)
+        .order('cidade')
+        .order('nome');
+
+      if (error) throw error;
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(usuarioNome);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eleitores_${usuarioNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar usuário:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores de um usuário específico para PDF
+  const handleExportUsuarioPDF = async (usuarioNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*, gbp_usuarios!inner(nome)')
+        .eq('empresa_uid', company.uid)
+        .eq('gbp_usuarios.nome', usuarioNome)
+        .order('cidade')
+        .order('nome');
+
+      if (error) throw error;
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Cadastros - ${usuarioNome}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Cidade', 'Bairro', 'Telefone']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.cidade || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || ''
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`cadastros_${usuarioNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar usuário PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
+  // Função para exportar eleitores por confiabilidade para Excel
+  const handleExportConfiabilidadeExcel = async (confiabilidade: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // Buscar eleitores com filtro de confiabilidade
+      const query = supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid);
+      
+      // Aplicar filtro de confiabilidade_do_voto (pode ser null)
+      if (confiabilidade && confiabilidade !== 'null') {
+        query.eq('confiabilidade_do_voto', confiabilidade);
+      } else {
+        query.is('confiabilidade_do_voto', null);
+      }
+      
+      const { data: eleitores, error } = await query
+        .order('cidade')
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para esta confiabilidade');
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(confiabilidade);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eleitores_${confiabilidade.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar confiabilidade:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores por confiabilidade para PDF
+  const handleExportConfiabilidadePDF = async (confiabilidade: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // Buscar eleitores com filtro de confiabilidade
+      const query = supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid);
+      
+      // Aplicar filtro de confiabilidade_do_voto (pode ser null)
+      if (confiabilidade && confiabilidade !== 'null') {
+        query.eq('confiabilidade_do_voto', confiabilidade);
+      } else {
+        query.is('confiabilidade_do_voto', null);
+      }
+      
+      const { data: eleitores, error } = await query
+        .order('cidade')
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para esta confiabilidade');
+        return;
+      }
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Confiabilidade: ${confiabilidade}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Cidade', 'Bairro', 'Telefone']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.cidade || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || ''
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`confiabilidade_${confiabilidade.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar confiabilidade PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
+  // Função para exportar eleitores por indicado para Excel
+  const handleExportIndicadoExcel = async (indicadoNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*, gbp_indicado!inner(nome)')
+        .eq('empresa_uid', company.uid)
+        .eq('gbp_indicado.nome', indicadoNome)
+        .order('cidade')
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para este indicado');
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(indicadoNome);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `indicados_${indicadoNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar indicado:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores por indicado para PDF
+  const handleExportIndicadoPDF = async (indicadoNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*, gbp_indicado!inner(nome)')
+        .eq('empresa_uid', company.uid)
+        .eq('gbp_indicado.nome', indicadoNome)
+        .order('cidade')
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para este indicado');
+        return;
+      }
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Indicados - ${indicadoNome}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Cidade', 'Bairro', 'Telefone']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.cidade || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || ''
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`indicados_${indicadoNome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar indicado PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
+  // Função para exportar eleitores por zona/seção para Excel
+  const handleExportZonaExcel = async (zona: string, secao: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error} = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('zona', zona)
+        .eq('secao', secao)
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para esta zona/seção');
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(`Zona ${zona} Seção ${secao}`);
+
+      sheet.columns = getExcelColumns();
+
+      eleitores?.forEach(eleitor => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `zona_${zona}_secao_${secao}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar zona/seção:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores por zona/seção para PDF
+  const handleExportZonaPDF = async (zona: string, secao: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('zona', zona)
+        .eq('secao', secao)
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao buscar eleitores:', error);
+        throw error;
+      }
+
+      if (!eleitores || eleitores.length === 0) {
+        alert('Nenhum eleitor encontrado para esta zona/seção');
+        return;
+      }
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Zona ${zona} - Seção ${secao}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Cidade', 'Bairro', 'Telefone']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.cidade || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || ''
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`zona_${zona}_secao_${secao}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar zona/seção PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
+  // Função para exportar eleitores de um bairro específico para PDF
+  const handleExportBairroPDF = async (cidade: string, bairro: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // Buscar eleitores do bairro específico
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('cidade', cidade)
+        .eq('bairro', bairro)
+        .order('nome');
+
+      if (error) throw error;
+
+      const doc = new jsPDF();
+      
+      // Título
+      doc.setFontSize(16);
+      doc.text(`Eleitores - ${bairro}`, 14, 15);
+      doc.setFontSize(12);
+      doc.text(`${cidade}`, 14, 22);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 28);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 33);
+
+      // Tabela
+      (doc as any).autoTable({
+        startY: 38,
+        head: [['Nome', 'Telefone', 'Endereço', 'Zona/Seção']],
+        body: eleitores?.map(e => [
+          e.nome || '',
+          e.whatsapp || e.telefone || '',
+          `${e.logradouro || ''} ${e.numero || ''}`.trim(),
+          `${e.zona || ''}/${e.secao || ''}`
+        ]) || [],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`eleitores_${bairro}_${cidade}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar bairro PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -539,6 +1182,7 @@ export function EleitoresReport() {
                       <th className="text-right py-2">Total</th>
                       <th className="text-right py-2">%</th>
                       <th className="px-4 py-2 w-1/3">Progresso</th>
+                      <th className="text-center py-2">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -555,6 +1199,50 @@ export function EleitoresReport() {
                                 className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                                 style={{ width: `${percentage}%` }}
                               ></div>
+                            </div>
+                          </td>
+                          <td className="py-2">
+                            <div className="relative flex items-center justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuCidade(openMenuCidade === cidade ? null : cidade);
+                                }}
+                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                title="Opções de exportação"
+                              >
+                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                              </button>
+                              
+                              {openMenuCidade === cidade && (
+                                <div 
+                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportCidadeExcel(cidade);
+                                      setOpenMenuCidade(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <span>Excel</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportCidadePDF(cidade);
+                                      setOpenMenuCidade(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <span>PDF</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -598,6 +1286,7 @@ export function EleitoresReport() {
                     <th className="text-right py-2">Total</th>
                     <th className="text-right py-2">%</th>
                     <th className="px-4 py-2">Distribuição</th>
+                    <th className="text-center py-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -614,6 +1303,50 @@ export function EleitoresReport() {
                               className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                               style={{ width: `${percentage}%` }}
                             ></div>
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="relative flex items-center justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuIndicado(openMenuIndicado === item.indicado_nome ? null : item.indicado_nome);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Opções de exportação"
+                            >
+                              <MoreVertical className="w-4 h-4 text-gray-600" />
+                            </button>
+                            
+                            {openMenuIndicado === item.indicado_nome && (
+                              <div 
+                                className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportIndicadoExcel(item.indicado_nome);
+                                    setOpenMenuIndicado(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                  <span>Excel</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportIndicadoPDF(item.indicado_nome);
+                                    setOpenMenuIndicado(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  <FileText className="w-4 h-4 text-red-600" />
+                                  <span>PDF</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -690,6 +1423,7 @@ export function EleitoresReport() {
                               <th className="text-right py-2">% da Cidade</th>
                               <th className="text-right py-2">% Total</th>
                               <th className="px-4 py-2 w-1/3">Progresso</th>
+                              <th className="text-center py-2">Ações</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -716,6 +1450,50 @@ export function EleitoresReport() {
                                         }`}
                                         style={{ width: `${percentageCidade}%` }}
                                       ></div>
+                                    </div>
+                                  </td>
+                                  <td className="py-2">
+                                    <div className="relative flex items-center justify-center">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuBairro(openMenuBairro === `${bairro.cidade}-${bairro.bairro}` ? null : `${bairro.cidade}-${bairro.bairro}`);
+                                        }}
+                                        className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                        title="Opções de exportação"
+                                      >
+                                        <MoreVertical className="w-4 h-4 text-gray-600" />
+                                      </button>
+                                      
+                                      {openMenuBairro === `${bairro.cidade}-${bairro.bairro}` && (
+                                        <div 
+                                          className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleExportBairroExcel(bairro.cidade, bairro.bairro);
+                                              setOpenMenuBairro(null);
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                          >
+                                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                            <span>Excel</span>
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleExportBairroPDF(bairro.cidade, bairro.bairro);
+                                              setOpenMenuBairro(null);
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                          >
+                                            <FileText className="w-4 h-4 text-red-600" />
+                                            <span>PDF</span>
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -778,13 +1556,15 @@ export function EleitoresReport() {
                     <th className="text-right py-2">Total</th>
                     <th className="text-right py-2">%</th>
                     <th className="px-4 py-2">Distribuição</th>
+                    <th className="text-center py-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {getPaginatedData(stats.porZonaSecao, zonaPage).map((item, index) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
+                    const zonaSecaoKey = `${item.zona}-${item.secao}`;
                     return (
-                      <tr key={`${item.zona}-${item.secao}`} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
+                      <tr key={zonaSecaoKey} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
                         <td className="py-2">{item.zona}</td>
                         <td className="py-2">{item.secao}</td>
                         <td className="text-right py-2">{item.total}</td>
@@ -795,6 +1575,50 @@ export function EleitoresReport() {
                               className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                               style={{ width: `${percentage}%` }}
                             ></div>
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="relative flex items-center justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuZona(openMenuZona === zonaSecaoKey ? null : zonaSecaoKey);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Opções de exportação"
+                            >
+                              <MoreVertical className="w-4 h-4 text-gray-600" />
+                            </button>
+                            
+                            {openMenuZona === zonaSecaoKey && (
+                              <div 
+                                className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportZonaExcel(item.zona, item.secao);
+                                    setOpenMenuZona(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                  <span>Excel</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportZonaPDF(item.zona, item.secao);
+                                    setOpenMenuZona(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  <FileText className="w-4 h-4 text-red-600" />
+                                  <span>PDF</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -898,6 +1722,7 @@ export function EleitoresReport() {
                       <th className="text-right py-2">Total</th>
                       <th className="text-right py-2">%</th>
                       <th className="px-4 py-2 w-1/3">Progresso</th>
+                      <th className="text-center py-2">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -923,6 +1748,50 @@ export function EleitoresReport() {
                                 className="h-2.5 rounded-full bg-blue-600"
                                 style={{ width: `${percentage}%` }}
                               ></div>
+                            </div>
+                          </td>
+                          <td className="py-2">
+                            <div className="relative flex items-center justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuConfiabilidade(openMenuConfiabilidade === confiabilidade ? null : confiabilidade);
+                                }}
+                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                title="Opções de exportação"
+                              >
+                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                              </button>
+                              
+                              {openMenuConfiabilidade === confiabilidade && (
+                                <div 
+                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportConfiabilidadeExcel(confiabilidade);
+                                      setOpenMenuConfiabilidade(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <span>Excel</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportConfiabilidadePDF(confiabilidade);
+                                      setOpenMenuConfiabilidade(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <span>PDF</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -962,6 +1831,7 @@ export function EleitoresReport() {
                       <th className="text-right py-2">Total</th>
                       <th className="text-right py-2">%</th>
                       <th className="px-4 py-2 w-1/3">Progresso</th>
+                      <th className="text-center py-2">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -978,6 +1848,50 @@ export function EleitoresReport() {
                                 className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                                 style={{ width: `${percentage}%` }}
                               ></div>
+                            </div>
+                          </td>
+                          <td className="py-2">
+                            <div className="relative flex items-center justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuUsuario(openMenuUsuario === usuario_nome ? null : usuario_nome);
+                                }}
+                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                title="Opções de exportação"
+                              >
+                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                              </button>
+                              
+                              {openMenuUsuario === usuario_nome && (
+                                <div 
+                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportUsuarioExcel(usuario_nome);
+                                      setOpenMenuUsuario(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <span>Excel</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportUsuarioPDF(usuario_nome);
+                                      setOpenMenuUsuario(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  >
+                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <span>PDF</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>

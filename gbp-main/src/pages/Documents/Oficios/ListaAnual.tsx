@@ -384,13 +384,8 @@ const ListaAnualOficios: React.FC = () => {
           }
           groups[mainType].push(subType);
         }
-      } else {
-        // Se não tiver '::', adiciona como um grupo sem subgrupos
-        if (!groups['Outros']) {
-          groups['Outros'] = [];
-        }
-        groups['Outros'].push(tipo);
       }
+      // Removido: não adiciona tipos sem '::' ao grupo 'Outros'
     });
 
     // Ordena os subgrupos de cada grupo

@@ -2,7 +2,7 @@ import { Container, Button, IconButton, Tooltip, Dialog } from '@mui/material';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { Filter, FileSpreadsheet, FileText } from 'lucide-react';
+import { Filter, FileSpreadsheet, FileText, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect } from 'react';
 import { AttendanceFilters, AttendanceFilters as IAttendanceFilters } from './components/AttendanceFilters';
@@ -10,11 +10,13 @@ import { useAtendimentos } from '../../hooks/useAtendimentos';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { AttendanceTable } from './components/AttendanceTable';
+import { useNavigate } from 'react-router-dom';
 
 type AtendimentoStatus = 'Pendente' | 'Em Andamento' | 'Concluído';
 
 export function AttendanceList() {
   const { company } = useCompanyStore();
+  const navigate = useNavigate();
 
   // Espera os dados da empresa estarem carregados
   if (!company) {
@@ -264,9 +266,17 @@ export function AttendanceList() {
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold dark:text-white">Atendimentos</h1>
-                <p className="text-gray-600 dark:text-gray-400">Gerencie todos os atendimentos em um só lugar</p>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => navigate('/app')}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-semibold dark:text-white">Atendimentos</h1>
+                  <p className="text-gray-600 dark:text-gray-400">Gerencie todos os atendimentos em um só lugar</p>
+                </div>
               </div>
               <div className="hidden md:flex items-center gap-2">
                 <Button
