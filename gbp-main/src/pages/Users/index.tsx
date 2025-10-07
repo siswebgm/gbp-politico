@@ -78,6 +78,7 @@ export function Users() {
   const company = useCompanyStore((state) => state.company);
   const authUser = useAuthStore((state) => state.user);
   const [userStats, setUserStats] = useState<Record<string, UserStats>>({});
+  const [loadingStats, setLoadingStats] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const loadUsers = async () => {
@@ -218,31 +219,34 @@ export function Users() {
   };
 
   const loadUserStats = async () => {
-    if (!company?.uid) {
-      console.log('Empresa não encontrada');
+    if (!company?.uid || loadingStats) {
       return;
     }
     
-    const stats: Record<string, UserStats> = {};
-    console.log('Empresa:', company);
-    
-    for (const user of users) {
-      console.log('Carregando stats para usuário:', user);
-      if (user.uid) {
-        const userStat = await statsService.getUserStats(user.uid, company.uid);
-        stats[user.uid] = userStat;
-      }
+    try {
+      setLoadingStats(true);
+      console.log('🚀 Carregando stats otimizadas para empresa:', company.uid);
+      const startTime = performance.now();
+      
+      const stats = await statsService.getAllUsersStats(company.uid);
+      
+      const endTime = performance.now();
+      console.log(`✅ Stats carregadas em ${(endTime - startTime).toFixed(2)}ms`);
+      console.log('Stats:', stats);
+      
+      setUserStats(stats);
+    } catch (error) {
+      console.error('❌ Erro ao carregar stats:', error);
+    } finally {
+      setLoadingStats(false);
     }
-    console.log('Stats finais:', stats);
-    setUserStats(stats);
   };
 
   useEffect(() => {
-    if (users.length > 0 && company?.uid) {
-      console.log('Iniciando carregamento de stats para', users.length, 'usuários');
+    if (users.length > 0 && company?.uid && !loadingStats) {
       loadUserStats();
     }
-  }, [users, company?.uid]);
+  }, [users.length, company?.uid]);
 
   const handleEditUser = (user: UserType) => {
     setSelectedUser(user);
