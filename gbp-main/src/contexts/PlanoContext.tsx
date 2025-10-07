@@ -33,7 +33,10 @@ export function PlanoProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false })
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      // Ignora erros de permissão (406) e registro não encontrado (PGRST116)
+      if (error && error.code !== 'PGRST116' && !error.message?.includes('406')) {
+        throw error;
+      }
       
       if (data) {
         setPlanoAtual({
@@ -44,8 +47,8 @@ export function PlanoProvider({ children }: { children: ReactNode }) {
         setPlanoAtual(null);
       }
     } catch (error) {
-      console.error('Erro ao carregar plano:', error);
-      toast.error('Erro ao carregar informações do plano');
+      // Silencia erros de permissão - plano é opcional
+      console.warn('Plano não disponível:', error);
     } finally {
       setIsLoading(false);
     }

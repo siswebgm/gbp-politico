@@ -205,7 +205,7 @@ export function Users() {
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 1000 / 60);
     
-    if (minutes < 1) return 'Agora';
+    if (minutes < 1) return 'Online';
     if (minutes < 60) return `há ${minutes} minutos`;
     
     const hours = Math.floor(minutes / 60);

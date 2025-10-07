@@ -102,7 +102,8 @@ export default function MapComponent({ voters }: MapComponentProps) {
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Array<{uid: string, nome: string, cor: string, tipo_uid: string | null, tipo_nome?: string}>>([]);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  // Inicia aberto apenas em desktop (largura >= 640px)
+  const [showCategoryFilter, setShowCategoryFilter] = useState(window.innerWidth >= 640);
   const [showRadius, setShowRadius] = useState(true);
   const [radiusSize, setRadiusSize] = useState(500); // Raio em metros
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -320,7 +321,8 @@ export default function MapComponent({ voters }: MapComponentProps) {
         
         setCategoryColors(colorsMap);
         setCategories(categoriesList);
-        setSelectedCategories(new Set()); // Inicia sem nenhuma selecionada
+        // Inicia com todas as categorias selecionadas
+        setSelectedCategories(new Set(categoriesList.map(cat => cat.uid)));
       } catch (error) {
         console.error('Erro ao carregar categorias:', error);
       }
