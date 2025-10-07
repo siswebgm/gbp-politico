@@ -13,7 +13,8 @@ import {
   MapPin, 
   User, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings } from 'lucide-react';
 
 export function DemandasRuas() {
@@ -41,7 +43,11 @@ export function DemandasRuas() {
   const [cidadeFilter, setCidadeFilter] = useState<string>('todos');
   const [bairroFilter, setBairroFilter] = useState<string>('todos');
   const [showFavoritos, setShowFavoritos] = useState(false);
+  const [nivelFavoritoFilter, setNivelFavoritoFilter] = useState<string>('todos');
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [demandaToDelete, setDemandaToDelete] = useState<DemandaRua | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Carregar as demandas
   const loadDemandas = async () => {
@@ -177,32 +183,108 @@ export function DemandasRuas() {
     const matchesStatus = statusFilter === 'todos' || demanda.status === statusFilter;
     const matchesUrgencia = urgenciaFilter === 'todos' || demanda.nivel_de_urgencia === urgenciaFilter;
     const matchesDate = filterByDate(demanda.criado_em);
-    const matchesFavoritos = !showFavoritos || (showFavoritos && demanda.favorito);
+    // Favoritos: mostra apenas demandas com nível > 0
+    const matchesFavoritos = !showFavoritos || (showFavoritos && demanda.nivel_favorito && demanda.nivel_favorito > 0);
+    const matchesNivelFavorito = nivelFavoritoFilter === 'todos' || 
+      (nivelFavoritoFilter === '0' && (!demanda.nivel_favorito || demanda.nivel_favorito === 0)) ||
+      (demanda.nivel_favorito && demanda.nivel_favorito.toString() === nivelFavoritoFilter);
     const matchesTipoDemanda = tipoDemandaFilter === 'todos' || demanda.tipo_de_demanda === tipoDemandaFilter;
     const matchesCidade = cidadeFilter === 'todos' || demanda.cidade === cidadeFilter;
     const matchesBairro = bairroFilter === 'todos' || demanda.bairro === bairroFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesFavoritos && matchesTipoDemanda && matchesCidade && matchesBairro;
+    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesFavoritos && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro;
   });
 
   // Formatar data
   const handleToggleFavorito = async (e: React.MouseEvent, demanda: DemandaRua) => {
     e.stopPropagation();
     try {
-      const novoStatus = !demanda.favorito;
-      await demandasRuasService.toggleFavorito(demanda.uid, novoStatus);
+      // Ciclar entre os níveis: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 0
+      const nivelAtual = demanda.nivel_favorito || 0;
+      const novoNivel = nivelAtual >= 5 ? 0 : nivelAtual + 1;
+      
+      await demandasRuasService.setNivelFavorito(demanda.uid, novoNivel);
       setDemandas(demandas.map(d => 
-        d.uid === demanda.uid ? { ...d, favorito: novoStatus } : d
+        d.uid === demanda.uid ? { 
+          ...d, 
+          nivel_favorito: novoNivel,
+          favorito: novoNivel > 0 
+        } : d
       ));
     } catch (error) {
       console.error('Erro ao atualizar favorito:', error);
     }
   };
+
+  // Definir nível de favorito diretamente
+  const handleSetNivelFavorito = async (demanda: DemandaRua, nivel: number) => {
+    try {
+      await demandasRuasService.setNivelFavorito(demanda.uid, nivel);
+      setDemandas(demandas.map(d => 
+        d.uid === demanda.uid ? { 
+          ...d, 
+          nivel_favorito: nivel,
+          favorito: nivel > 0 
+        } : d
+      ));
+    } catch (error) {
+      console.error('Erro ao atualizar nível de favorito:', error);
+    }
+  };
+
+  // Função para abrir modal de confirmação de exclusão
+  const handleOpenDeleteModal = (e: React.MouseEvent, demanda: DemandaRua) => {
+    e.stopPropagation();
+    setDemandaToDelete(demanda);
+    setShowDeleteModal(true);
+  };
+
+  // Função para fechar modal de exclusão
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDemandaToDelete(null);
+  };
+
+  // Função para deletar demanda
+  const handleDeleteDemanda = async () => {
+    if (!demandaToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await demandasRuasService.deleteDemanda(demandaToDelete.uid);
+      setDemandas(demandas.filter(d => d.uid !== demandaToDelete.uid));
+      handleCloseDeleteModal();
+    } catch (error) {
+      console.error('Erro ao deletar demanda:', error);
+      alert('Erro ao deletar demanda. Tente novamente.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     try {
       return format(new Date(dateString), "dd/MM/yyyy HH:mm", { locale: ptBR });
     } catch (e) {
       return 'Data inválida';
+    }
+  };
+
+  // Função para obter cor e estilo da estrela baseado no nível
+  const getStarStyle = (nivel: number) => {
+    switch (nivel) {
+      case 1:
+        return { color: 'text-blue-500', fill: 'fill-blue-500', label: 'Nível 1' };
+      case 2:
+        return { color: 'text-green-500', fill: 'fill-green-500', label: 'Nível 2' };
+      case 3:
+        return { color: 'text-yellow-500', fill: 'fill-yellow-500', label: 'Nível 3' };
+      case 4:
+        return { color: 'text-orange-500', fill: 'fill-orange-500', label: 'Nível 4' };
+      case 5:
+        return { color: 'text-red-500', fill: 'fill-red-500', label: 'Nível 5 - Urgente' };
+      default:
+        return { color: 'text-gray-400', fill: '', label: 'Não marcado' };
     }
   };
 
@@ -374,6 +456,47 @@ export function DemandasRuas() {
                           <Star className={`h-4 w-4 ${showFavoritos ? 'fill-yellow-400' : ''}`} />
                           <span className="sr-only sm:not-sr-only sm:ml-1 text-xs">{showFavoritos ? 'Todas' : 'Favoritos'}</span>
                         </Button>
+
+                        {/* Filtro de Nível de Favorito */}
+                        <Select value={nivelFavoritoFilter} onValueChange={setNivelFavoritoFilter}>
+                          <SelectTrigger className="w-[140px] h-9 text-xs">
+                            <SelectValue placeholder="Nível" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os níveis</SelectItem>
+                            <SelectItem value="0">Não marcado</SelectItem>
+                            <SelectItem value="1">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-blue-500 text-blue-500" />
+                                <span>Nível 1</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="2">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-green-500 text-green-500" />
+                                <span>Nível 2</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="3">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                                <span>Nível 3</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="4">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-orange-500 text-orange-500" />
+                                <span>Nível 4</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="5">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-red-500 text-red-500" />
+                                <span>Nível 5</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                         
                         <Button 
                           variant="outline" 
@@ -520,7 +643,7 @@ export function DemandasRuas() {
                     </div>
                     
                     {/* Botão Limpar Filtros */}
-                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dateFilter !== 'todos' || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos') && (
+                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dateFilter !== 'todos' || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos' || nivelFavoritoFilter !== 'todos') && (
                       <div className="ml-auto">
                         <Button 
                           variant="ghost" 
@@ -533,6 +656,7 @@ export function DemandasRuas() {
                             setTipoDemandaFilter('todos');
                             setCidadeFilter('todos');
                             setBairroFilter('todos');
+                            setNivelFavoritoFilter('todos');
                           }}
                           className="whitespace-nowrap text-xs sm:text-sm h-9 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                         >
@@ -554,16 +678,149 @@ export function DemandasRuas() {
                         >
                           {/* Área da Imagem */}
                           <div className="relative">
-                            {/* Botão de Favorito */}
-                            <button 
-                              onClick={(e) => handleToggleFavorito(e, demanda)}
-                              className="absolute top-2 right-2 z-10 p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-700 transition-colors"
-                              title={demanda.favorito ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-                            >
-                              <Star 
-                                className={`w-4 h-4 ${demanda.favorito ? 'fill-yellow-400 text-yellow-500' : 'text-gray-400'}`} 
-                              />
-                            </button>
+                            {/* Botões de Ação */}
+                            <div className="absolute top-2 right-2 z-10 flex gap-2">
+                              {/* Botão de Favorito com Nível - Popover */}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button 
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="relative p-1.5 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-700 transition-colors"
+                                    title={`${getStarStyle(demanda.nivel_favorito || 0).label} - Clique para escolher nível`}
+                                  >
+                                    <Star 
+                                      className={`w-5 h-5 ${getStarStyle(demanda.nivel_favorito || 0).fill} ${getStarStyle(demanda.nivel_favorito || 0).color}`} 
+                                    />
+                                    {/* Badge com o número do nível - Só mostra se nivel > 0 */}
+                                    {demanda.nivel_favorito > 0 && (
+                                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-sm border border-gray-200 dark:border-gray-600">
+                                        <span className={`text-[10px] font-bold ${getStarStyle(demanda.nivel_favorito).color}`}>
+                                          {demanda.nivel_favorito}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent 
+                                  className="w-56 p-2 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700" 
+                                  onClick={(e) => e.stopPropagation()}
+                                  align="end"
+                                >
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 px-2 py-1 mb-1">
+                                      Selecione o nível de prioridade
+                                    </p>
+                                    
+                                    {/* Opção: Remover favorito */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 0);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        (!demanda.nivel_favorito || demanda.nivel_favorito === 0) 
+                                          ? 'bg-gray-100 dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600' 
+                                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 text-gray-400" />
+                                      <span className="text-sm font-medium">Não marcado</span>
+                                    </button>
+
+                                    {/* Nível 1 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 1);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        demanda.nivel_favorito === 1 
+                                          ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 dark:border-blue-600' 
+                                          : 'bg-blue-50/50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/20'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 fill-blue-500 text-blue-500" />
+                                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Nível 1 - Baixa</span>
+                                    </button>
+
+                                    {/* Nível 2 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 2);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        demanda.nivel_favorito === 2 
+                                          ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-400 dark:border-green-600' 
+                                          : 'bg-green-50/50 dark:bg-green-900/10 hover:bg-green-100 dark:hover:bg-green-900/20'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 fill-green-500 text-green-500" />
+                                      <span className="text-sm font-medium text-green-700 dark:text-green-300">Nível 2 - Média-Baixa</span>
+                                    </button>
+
+                                    {/* Nível 3 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 3);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        demanda.nivel_favorito === 3 
+                                          ? 'bg-yellow-100 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600' 
+                                          : 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100 dark:hover:bg-yellow-900/20'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+                                      <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">Nível 3 - Média</span>
+                                    </button>
+
+                                    {/* Nível 4 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 4);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        demanda.nivel_favorito === 4 
+                                          ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-400 dark:border-orange-600' 
+                                          : 'bg-orange-50/50 dark:bg-orange-900/10 hover:bg-orange-100 dark:hover:bg-orange-900/20'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 fill-orange-500 text-orange-500" />
+                                      <span className="text-sm font-medium text-orange-700 dark:text-orange-300">Nível 4 - Média-Alta</span>
+                                    </button>
+
+                                    {/* Nível 5 */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSetNivelFavorito(demanda, 5);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
+                                        demanda.nivel_favorito === 5 
+                                          ? 'bg-red-100 dark:bg-red-900/30 border-2 border-red-400 dark:border-red-600' 
+                                          : 'bg-red-50/50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20'
+                                      }`}
+                                    >
+                                      <Star className="w-4 h-4 fill-red-500 text-red-500" />
+                                      <span className="text-sm font-bold text-red-700 dark:text-red-300">Nível 5 - Urgente</span>
+                                    </button>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              
+                              {/* Botão de Excluir */}
+                              <button 
+                                onClick={(e) => handleOpenDeleteModal(e, demanda)}
+                                className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group"
+                                title="Excluir demanda"
+                              >
+                                <Trash2 
+                                  className="w-4 h-4 text-gray-400 group-hover:text-red-600 dark:group-hover:text-red-500 transition-colors" 
+                                />
+                              </button>
+                            </div>
                             
                             {demanda.fotos_do_problema && demanda.fotos_do_problema.length > 0 ? (
                               <div className="w-full">
@@ -820,6 +1077,72 @@ export function DemandasRuas() {
                 className="max-w-full max-h-[85vh] object-contain"
                 onClick={(e) => e.stopPropagation()}
               />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <div className="flex flex-col items-center text-center space-y-4 py-4">
+            <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+              <Trash2 className="w-8 h-8 text-red-600 dark:text-red-500" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Excluir Demanda
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Tem certeza que deseja excluir esta demanda?
+              </p>
+              {demandaToDelete && (
+                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-left">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {demandaToDelete.tipo_de_demanda?.replace('Infraestrutura::', '')}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    {demandaToDelete.logradouro}
+                    {demandaToDelete.numero && `, ${demandaToDelete.numero}`}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    {demandaToDelete.bairro} • {demandaToDelete.cidade}
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-red-600 dark:text-red-400 font-medium mt-3">
+                Esta ação não pode ser desfeita.
+              </p>
+            </div>
+
+            <div className="flex gap-3 w-full pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={handleCloseDeleteModal}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleDeleteDemanda}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -63,6 +63,7 @@ export interface DemandaRua {
   documento_protocolado?: string;
   observação_resposta?: string[];
   favorito?: boolean;
+  nivel_favorito?: number; // 0 = não favorito, 1-5 = níveis de prioridade
   // Relacionamentos
   requerente?: {
     nome: string;
@@ -315,7 +316,7 @@ export const demandasRuasService = {
     }
   },
 
-  // Alternar status de favorito de uma demanda
+  // Alternar status de favorito de uma demanda (mantido para compatibilidade)
   async toggleFavorito(uid: string, favorito: boolean): Promise<boolean> {
     try {
       const { data, error } = await supabaseClient
@@ -329,6 +330,30 @@ export const demandasRuasService = {
       return true;
     } catch (error) {
       console.error('Erro ao atualizar favorito:', error);
+      return false;
+    }
+  },
+
+  // Atualizar nível de favorito (0-5)
+  async setNivelFavorito(uid: string, nivel: number): Promise<boolean> {
+    try {
+      // Validar nível (0-5)
+      const nivelValido = Math.max(0, Math.min(5, nivel));
+      
+      const { data, error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({ 
+          nivel_favorito: nivelValido,
+          favorito: nivelValido > 0 // Manter compatibilidade com o campo boolean
+        })
+        .eq('uid', uid)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao atualizar nível de favorito:', error);
       return false;
     }
   },
