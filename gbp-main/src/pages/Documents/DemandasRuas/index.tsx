@@ -8,13 +8,18 @@ import {
   XCircle, 
   ImageIcon, 
   ChevronLeft, 
-  RefreshCw, 
   CalendarDays, 
   MapPin, 
   User, 
   FileText,
   AlertCircle,
-  Trash2
+  Trash2,
+  Clock,
+  MessageCircle,
+  Archive,
+  ArchiveRestore,
+  RefreshCw,
+  Folder
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,21 +38,31 @@ import { Settings } from 'lucide-react';
 export function DemandasRuas() {
   const navigate = useNavigate();
   const { company } = useCompanyStore();
+  const { user } = useAuth();
   const [demandas, setDemandas] = useState<DemandaRua[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [urgenciaFilter, setUrgenciaFilter] = useState<string>('todos');
-  const [dateFilter, setDateFilter] = useState<string>('todos');
+  const [dataInicio, setDataInicio] = useState<string>('');
+  const [dataFim, setDataFim] = useState<string>('');
   const [tipoDemandaFilter, setTipoDemandaFilter] = useState<string>('todos');
   const [cidadeFilter, setCidadeFilter] = useState<string>('todos');
   const [bairroFilter, setBairroFilter] = useState<string>('todos');
   const [showFavoritos, setShowFavoritos] = useState(false);
   const [nivelFavoritoFilter, setNivelFavoritoFilter] = useState<string>('todos');
+  const [respostaFilter, setRespostaFilter] = useState<string>('todos'); // novo filtro
+  const [showArquivadas, setShowArquivadas] = useState(false); // mostrar arquivadas
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [demandaToDelete, setDemandaToDelete] = useState<DemandaRua | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [demandaToArchive, setDemandaToArchive] = useState<DemandaRua | null>(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [pastaFilter, setPastaFilter] = useState<string>('todas');
+  const [mostrarNovaPasta, setMostrarNovaPasta] = useState(false);
+  const [nomePastaArquivo, setNomePastaArquivo] = useState('');
+  const [pastasSelecionada, setPastasSelecionada] = useState('');
 
   // Carregar as demandas
   const loadDemandas = async () => {
@@ -132,44 +147,38 @@ export function DemandasRuas() {
 
   // Filtrar demandas por data
   const filterByDate = (dateString: string) => {
-    if (dateFilter === 'todos') return true;
+    if (!dataInicio && !dataFim) return true;
     
     const date = new Date(dateString);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
     
-    switch (dateFilter) {
-      case 'hoje':
-        const startOfToday = new Date(today);
-        const endOfToday = new Date(today);
-        endOfToday.setHours(23, 59, 59, 999);
-        return date >= startOfToday && date <= endOfToday;
-        
-      case 'semana':
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo da semana atual
-        startOfWeek.setHours(0, 0, 0, 0);
-        const endOfWeek = new Date(today);
-        endOfWeek.setDate(today.getDate() + (6 - today.getDay())); // Sábado da semana atual
-        endOfWeek.setHours(23, 59, 59, 999);
-        return date >= startOfWeek && date <= endOfWeek;
-        
-      case 'mes':
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        endOfMonth.setHours(23, 59, 59, 999);
-        return date >= startOfMonth && date <= endOfMonth;
-        
-      case 'ano':
-        const startOfYear = new Date(today.getFullYear(), 0, 1);
-        const endOfYear = new Date(today.getFullYear(), 11, 31);
-        endOfYear.setHours(23, 59, 59, 999);
-        return date >= startOfYear && date <= endOfYear;
-        
-      default:
-        return true;
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio);
+      inicio.setHours(0, 0, 0, 0);
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+      return date >= inicio && date <= fim;
+    } else if (dataInicio) {
+      const inicio = new Date(dataInicio);
+      inicio.setHours(0, 0, 0, 0);
+      return date >= inicio;
+    } else if (dataFim) {
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+      return date <= fim;
     }
+    
+    return true;
   };
+
+  // Extrair pastas únicas das demandas arquivadas
+  const pastasArquivo = Array.from(
+    new Set(
+      demandas
+        .filter(d => d.arquivado && d.pasta_arquivo)
+        .map(d => d.pasta_arquivo)
+    )
+  ).sort();
 
   // Filtrar demandas
   const filteredDemandas = demandas.filter(demanda => {
@@ -191,8 +200,17 @@ export function DemandasRuas() {
     const matchesTipoDemanda = tipoDemandaFilter === 'todos' || demanda.tipo_de_demanda === tipoDemandaFilter;
     const matchesCidade = cidadeFilter === 'todos' || demanda.cidade === cidadeFilter;
     const matchesBairro = bairroFilter === 'todos' || demanda.bairro === bairroFilter;
+    const matchesResposta = respostaFilter === 'todos' || 
+      (respostaFilter === 'respondidas' && demanda.tem_resposta_whatsapp) ||
+      (respostaFilter === 'nao_respondidas' && !demanda.tem_resposta_whatsapp);
+    // Filtro de arquivadas: 
+    // se showArquivadas = true, mostra APENAS arquivadas
+    // se showArquivadas = false, mostra APENAS não arquivadas
+    const matchesArquivadas = showArquivadas ? demanda.arquivado : !demanda.arquivado;
+    // Filtro de pasta: só aplica quando showArquivadas está ativo
+    const matchesPasta = !showArquivadas || pastaFilter === 'todas' || demanda.pasta_arquivo === pastaFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesFavoritos && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro;
+    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesFavoritos && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesArquivadas && matchesPasta;
   });
 
   // Formatar data
@@ -232,6 +250,64 @@ export function DemandasRuas() {
     }
   };
 
+  // Abrir modal de confirmação de arquivamento
+  const handleOpenArchiveModal = (e: React.MouseEvent, demanda: DemandaRua) => {
+    e.stopPropagation();
+    setDemandaToArchive(demanda);
+    setPastasSelecionada(demanda.pasta_arquivo || '');
+    setNomePastaArquivo('');
+    setMostrarNovaPasta(false);
+    setShowArchiveModal(true);
+  };
+
+  // Confirmar arquivamento
+  const handleConfirmArchive = async () => {
+    if (!demandaToArchive) return;
+    
+    // Determinar o nome da pasta
+    let nomePasta = '';
+    if (mostrarNovaPasta) {
+      nomePasta = nomePastaArquivo.trim();
+    } else {
+      nomePasta = pastasSelecionada;
+    }
+    
+    // Se está arquivando e não tem nome de pasta, exige
+    if (!demandaToArchive.arquivado && !nomePasta) {
+      alert('Por favor, selecione ou digite o nome da pasta de arquivamento');
+      return;
+    }
+    
+    try {
+      const novoEstado = !demandaToArchive.arquivado;
+      await demandasRuasService.setArquivado(
+        demandaToArchive.uid, 
+        novoEstado,
+        novoEstado ? nomePasta : undefined
+      );
+      
+      // Atualizar estado local imediatamente
+      setDemandas(demandas.map(d => 
+        d.uid === demandaToArchive.uid ? { 
+          ...d, 
+          arquivado: novoEstado,
+          pasta_arquivo: novoEstado ? nomePasta : null
+        } : d
+      ));
+      
+      setShowArchiveModal(false);
+      setDemandaToArchive(null);
+      setNomePastaArquivo('');
+      setPastasSelecionada('');
+      setMostrarNovaPasta(false);
+      
+      // Recarregar dados do servidor para garantir sincronização
+      await loadDemandas();
+    } catch (error) {
+      console.error('Erro ao arquivar/desarquivar demanda:', error);
+    }
+  };
+
   // Função para abrir modal de confirmação de exclusão
   const handleOpenDeleteModal = (e: React.MouseEvent, demanda: DemandaRua) => {
     e.stopPropagation();
@@ -245,13 +321,20 @@ export function DemandasRuas() {
     setDemandaToDelete(null);
   };
 
-  // Função para deletar demanda
+  // Função para deletar demanda (soft delete)
   const handleDeleteDemanda = async () => {
-    if (!demandaToDelete) return;
+    if (!demandaToDelete || !user) return;
 
     setIsDeleting(true);
     try {
-      await demandasRuasService.deleteDemanda(demandaToDelete.uid);
+      // Soft delete: marca como excluído mas não remove do banco
+      await demandasRuasService.deleteDemanda(
+        demandaToDelete.uid,
+        user.uid,
+        user.nome
+      );
+      
+      // Remove da listagem local
       setDemandas(demandas.filter(d => d.uid !== demandaToDelete.uid));
       handleCloseDeleteModal();
     } catch (error) {
@@ -431,19 +514,18 @@ export function DemandasRuas() {
               <CardHeader className="p-4 sm:p-6">
                 <div className="space-y-3">
                   {/* Barra de busca e ações */}
-                  <div className="flex flex-col sm:flex-row gap-3 w-full">
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <div className="relative flex-1 min-w-[120px]">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          placeholder="Buscar demandas..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full pl-9 pr-3 py-2 text-sm"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center gap-1 sm:gap-2">
+                  <div className="flex flex-col gap-3 w-full">
+                    <div className="relative w-full">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar demandas..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-sm"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center gap-2 flex-wrap">
                         <Button 
                           variant={showFavoritos ? "default" : "outline"} 
                           size="icon" 
@@ -457,39 +539,97 @@ export function DemandasRuas() {
                           <span className="sr-only sm:not-sr-only sm:ml-1 text-xs">{showFavoritos ? 'Todas' : 'Favoritos'}</span>
                         </Button>
 
-                        {/* Filtro de Nível de Favorito */}
-                        <Select value={nivelFavoritoFilter} onValueChange={setNivelFavoritoFilter}>
-                          <SelectTrigger className="w-[140px] h-9 text-xs">
-                            <SelectValue placeholder="Nível" />
+                        {/* Botão/Select de Arquivadas com filtro de pasta integrado */}
+                        <Select 
+                          value={showArquivadas ? pastaFilter : 'ocultar'} 
+                          onValueChange={(value) => {
+                            if (value === 'ocultar') {
+                              setShowArquivadas(false);
+                              setPastaFilter('todas');
+                            } else {
+                              setShowArquivadas(true);
+                              setPastaFilter(value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`h-9 flex-1 min-w-[120px] text-xs transition-colors ${
+                            showArquivadas ? 'bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200' : ''
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <Archive className={`h-4 w-4 ${showArquivadas ? 'fill-blue-400' : ''}`} />
+                              <span className="truncate">
+                                {!showArquivadas ? 'Arquivadas' : 
+                                 pastaFilter === 'todas' ? 'Todas as pastas' : 
+                                 pastaFilter}
+                              </span>
+                            </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="todos">Todos os níveis</SelectItem>
-                            <SelectItem value="0">Não marcado</SelectItem>
-                            <SelectItem value="1">
+                            <SelectItem value="ocultar" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Archive className="h-3.5 w-3.5" />
+                                <span>Ocultar arquivadas</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="todas" className="text-xs font-medium">
+                              <div className="flex items-center gap-2">
+                                <Archive className="h-3.5 w-3.5 fill-blue-400 text-blue-600" />
+                                <span>Todas as pastas</span>
+                              </div>
+                            </SelectItem>
+                            {pastasArquivo.length > 0 && (
+                              <>
+                                <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">Pastas:</div>
+                                {pastasArquivo.map(pasta => (
+                                  <SelectItem key={pasta} value={pasta} className="text-xs pl-6">
+                                    <div className="flex items-center gap-2">
+                                      <Folder className="h-3.5 w-3.5 text-blue-600" />
+                                      <span>{pasta}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Filtro de Nível de Favorito */}
+                        <Select value={nivelFavoritoFilter} onValueChange={setNivelFavoritoFilter}>
+                          <SelectTrigger className="h-9 flex-1 min-w-[100px] text-xs">
+                            <span className="truncate">
+                              {nivelFavoritoFilter === 'todos' ? 'Todos os níveis' :
+                               nivelFavoritoFilter === '0' ? 'Não marcado' :
+                               `Nível ${nivelFavoritoFilter}`}
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos" className="text-xs">Todos os níveis</SelectItem>
+                            <SelectItem value="0" className="text-xs">Não marcado</SelectItem>
+                            <SelectItem value="1" className="text-xs">
                               <div className="flex items-center gap-2">
                                 <Star className="w-3 h-3 fill-blue-500 text-blue-500" />
                                 <span>Nível 1</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="2">
+                            <SelectItem value="2" className="text-xs">
                               <div className="flex items-center gap-2">
                                 <Star className="w-3 h-3 fill-green-500 text-green-500" />
                                 <span>Nível 2</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="3">
+                            <SelectItem value="3" className="text-xs">
                               <div className="flex items-center gap-2">
                                 <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
                                 <span>Nível 3</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="4">
+                            <SelectItem value="4" className="text-xs">
                               <div className="flex items-center gap-2">
                                 <Star className="w-3 h-3 fill-orange-500 text-orange-500" />
                                 <span>Nível 4</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="5">
+                            <SelectItem value="5" className="text-xs">
                               <div className="flex items-center gap-2">
                                 <Star className="w-3 h-3 fill-red-500 text-red-500" />
                                 <span>Nível 5</span>
@@ -497,23 +637,35 @@ export function DemandasRuas() {
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                        
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          onClick={loadDemandas}
-                          className="h-9 w-9 sm:w-auto px-2 sm:px-3"
-                          title="Atualizar lista"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                          <span className="sr-only sm:not-sr-only sm:ml-1 text-xs">Atualizar</span>
-                        </Button>
-                      </div>
+
+                        {/* Filtro de Data Início */}
+                        <div className="relative flex-1 min-w-[130px]">
+                          <CalendarDays className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none z-10" />
+                          <Input
+                            type="date"
+                            value={dataInicio}
+                            onChange={(e) => setDataInicio(e.target.value)}
+                            placeholder="Data início"
+                            className="w-full pl-9 pr-3 h-9 text-xs"
+                          />
+                        </div>
+
+                        {/* Filtro de Data Fim */}
+                        <div className="relative flex-1 min-w-[130px]">
+                          <CalendarDays className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none z-10" />
+                          <Input
+                            type="date"
+                            value={dataFim}
+                            onChange={(e) => setDataFim(e.target.value)}
+                            placeholder="Data fim"
+                            className="w-full pl-9 pr-3 h-9 text-xs"
+                          />
+                        </div>
                     </div>
                   </div>
                   
                   {/* Filtros */}
-                  <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <div className="flex flex-wrap gap-2">
                     {/* Filtro de Status */}
                     <div className="flex-1 min-w-[120px]">
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -619,31 +771,33 @@ export function DemandasRuas() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex-1 min-w-[120px]">
-                      <Select value={dateFilter} onValueChange={setDateFilter}>
+
+                    {/* Filtro de Resposta */}
+                    <div className="flex-1 min-w-[140px]">
+                      <Select value={respostaFilter} onValueChange={setRespostaFilter}>
                         <SelectTrigger className="w-full text-xs sm:text-sm h-9">
                           <div className="flex items-center gap-2">
-                            <CalendarDays className="h-3.5 w-3.5 text-gray-500" />
+                            <MessageCircle className={`h-3.5 w-3.5 ${
+                              respostaFilter === 'respondidas' ? 'text-green-600' :
+                              respostaFilter === 'nao_respondidas' ? 'text-orange-600' :
+                              'text-gray-400'
+                            }`} />
                             <span className="truncate">
-                              {dateFilter === 'todos' ? 'Período' : 
-                               dateFilter === 'hoje' ? 'Hoje' :
-                               dateFilter === 'semana' ? 'Esta semana' :
-                               dateFilter === 'mes' ? 'Este mês' : 'Este ano'}
+                              {respostaFilter === 'todos' ? 'Resposta' : 
+                               respostaFilter === 'respondidas' ? 'Respondidas' : 'Não respondidas'}
                             </span>
                           </div>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="todos" className="text-xs sm:text-sm">Todos os períodos</SelectItem>
-                          <SelectItem value="hoje" className="text-xs sm:text-sm">Hoje</SelectItem>
-                          <SelectItem value="semana" className="text-xs sm:text-sm">Esta semana</SelectItem>
-                          <SelectItem value="mes" className="text-xs sm:text-sm">Este mês</SelectItem>
-                          <SelectItem value="ano" className="text-xs sm:text-sm">Este ano</SelectItem>
+                          <SelectItem value="todos" className="text-xs sm:text-sm">Todas</SelectItem>
+                          <SelectItem value="respondidas" className="text-xs sm:text-sm">Respondidas</SelectItem>
+                          <SelectItem value="nao_respondidas" className="text-xs sm:text-sm">Não respondidas</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     
                     {/* Botão Limpar Filtros */}
-                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dateFilter !== 'todos' || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos' || nivelFavoritoFilter !== 'todos') && (
+                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dataInicio || dataFim || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos' || nivelFavoritoFilter !== 'todos' || respostaFilter !== 'todos' || showArquivadas) && (
                       <div className="ml-auto">
                         <Button 
                           variant="ghost" 
@@ -651,12 +805,16 @@ export function DemandasRuas() {
                           onClick={() => {
                             setStatusFilter('todos');
                             setUrgenciaFilter('todos');
-                            setDateFilter('todos');
+                            setDataInicio('');
+                            setDataFim('');
                             setSearchTerm('');
                             setTipoDemandaFilter('todos');
                             setCidadeFilter('todos');
                             setBairroFilter('todos');
                             setNivelFavoritoFilter('todos');
+                            setRespostaFilter('todos');
+                            setPastaFilter('todas');
+                            setShowArquivadas(false);
                           }}
                           className="whitespace-nowrap text-xs sm:text-sm h-9 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                         >
@@ -668,6 +826,32 @@ export function DemandasRuas() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Banner de Arquivadas */}
+                {showArquivadas && (
+                  <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg dark:bg-blue-900/20 dark:border-blue-400">
+                    <div className="flex items-center gap-3">
+                      {pastaFilter === 'todas' ? (
+                        <Archive className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      ) : (
+                        <Folder className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      )}
+                      <div>
+                        <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                          {pastaFilter === 'todas' 
+                            ? 'Visualizando Demandas Arquivadas' 
+                            : `Pasta: ${pastaFilter}`}
+                        </h3>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          {pastaFilter === 'todas' 
+                            ? 'Você está visualizando todas as demandas arquivadas de todas as pastas.'
+                            : `Visualizando apenas demandas da pasta "${pastaFilter}".`}
+                          {' '}Clique no botão "Arquivadas" e selecione "Ocultar arquivadas" para voltar às demandas ativas.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-8">
                   {filteredDemandas.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-6 lg:gap-8 pt-4">
@@ -810,6 +994,19 @@ export function DemandasRuas() {
                                 </PopoverContent>
                               </Popover>
                               
+                              {/* Botão de Arquivar */}
+                              <button 
+                                onClick={(e) => handleOpenArchiveModal(e, demanda)}
+                                className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+                                title={demanda.arquivado ? "Desarquivar demanda" : "Arquivar demanda"}
+                              >
+                                {demanda.arquivado ? (
+                                  <ArchiveRestore className="w-4 h-4 text-blue-600 group-hover:text-blue-700 transition-colors" />
+                                ) : (
+                                  <Archive className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                )}
+                              </button>
+
                               {/* Botão de Excluir */}
                               <button 
                                 onClick={(e) => handleOpenDeleteModal(e, demanda)}
@@ -913,6 +1110,43 @@ export function DemandasRuas() {
                                 <span className="text-foreground">
                                   {format(new Date(demanda.criado_em), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                                 </span>
+                              </div>
+
+                              {/* Dias desde criação e Status de resposta - DESTACADO */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* Dias desde criação - Badge */}
+                                {(() => {
+                                  const dias = Math.floor((new Date().getTime() - new Date(demanda.criado_em).getTime()) / (1000 * 60 * 60 * 24));
+                                  const isAtrasado = dias > 30;
+                                  const isRecente = dias <= 7;
+                                  
+                                  return (
+                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
+                                      isAtrasado 
+                                        ? 'bg-red-100 text-red-700 border border-red-200' 
+                                        : isRecente 
+                                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                        : 'bg-gray-100 text-gray-700 border border-gray-200'
+                                    }`}>
+                                      <Clock className="w-3.5 h-3.5" />
+                                      <span className="text-xs font-semibold">
+                                        {dias === 0 ? 'Hoje' : dias === 1 ? '1 dia' : `${dias} dias`}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Status de resposta - Badge */}
+                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
+                                  demanda.tem_resposta_whatsapp
+                                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                                    : 'bg-orange-100 text-orange-700 border border-orange-200'
+                                }`}>
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                  <span className="text-xs font-semibold">
+                                    {demanda.tem_resposta_whatsapp ? 'Respondido' : 'Sem resposta'}
+                                  </span>
+                                </div>
                               </div>
                               
                               <div className="flex items-start gap-2">
@@ -1082,6 +1316,126 @@ export function DemandasRuas() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal de Confirmação de Arquivamento */}
+      <Dialog open={showArchiveModal} onOpenChange={setShowArchiveModal}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <div className="flex flex-col items-center text-center space-y-3 sm:space-y-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+              {demandaToArchive?.arquivado ? (
+                <ArchiveRestore className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-500" />
+              ) : (
+                <Archive className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-500" />
+              )}
+            </div>
+            
+            <div className="space-y-2 w-full">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {demandaToArchive?.arquivado ? 'Desarquivar Demanda' : 'Arquivar Demanda'}
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 px-2">
+                {demandaToArchive?.arquivado 
+                  ? 'Tem certeza que deseja desarquivar esta demanda? Ela voltará a aparecer na listagem principal.'
+                  : 'Tem certeza que deseja arquivar esta demanda? Ela será ocultada da listagem principal.'}
+              </p>
+              {demandaToArchive && (
+                <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-left">
+                  <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
+                    {demandaToArchive.tipo_de_demanda?.replace('Infraestrutura::', '')}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 break-words">
+                    {demandaToArchive.logradouro}
+                    {demandaToArchive.numero && `, ${demandaToArchive.numero}`}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    {demandaToArchive.bairro} • {demandaToArchive.cidade}
+                  </p>
+                </div>
+              )}
+              {!demandaToArchive?.arquivado && (
+                <>
+                  <div className="w-full mt-3 sm:mt-4 space-y-2 sm:space-y-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 text-left px-1">
+                      📁 Pasta de Arquivamento *
+                    </label>
+                    
+                    {!mostrarNovaPasta ? (
+                      <>
+                        <Select 
+                          value={pastasSelecionada} 
+                          onValueChange={(value) => {
+                            if (value === '__nova__') {
+                              setMostrarNovaPasta(true);
+                              setPastasSelecionada('');
+                            } else {
+                              setPastasSelecionada(value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-full h-10 sm:h-11 text-xs sm:text-sm">
+                            <SelectValue placeholder="Selecione uma pasta..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pastasArquivo.map(pasta => (
+                              <SelectItem key={pasta} value={pasta || ''} className="text-xs sm:text-sm">
+                                📁 {pasta}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__nova__" className="text-blue-600 font-medium text-xs sm:text-sm">
+                              ➕ Criar Nova Pasta
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : (
+                      <>
+                        <Input
+                          type="text"
+                          placeholder="Ex: Resolvidas 2025..."
+                          value={nomePastaArquivo}
+                          onChange={(e) => setNomePastaArquivo(e.target.value)}
+                          className="w-full h-10 sm:h-11 text-xs sm:text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setMostrarNovaPasta(false);
+                            setNomePastaArquivo('');
+                          }}
+                          className="w-full text-gray-500 text-xs sm:text-sm h-9"
+                        >
+                          ← Voltar para lista de pastas
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-blue-600 dark:text-blue-400 font-medium mt-2 px-2">
+                    Você pode desarquivar a qualquer momento clicando no botão "Arquivadas".
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full pt-2 sm:pt-3">
+              <Button
+                variant="outline"
+                className="flex-1 h-10 sm:h-11 text-xs sm:text-sm order-2 sm:order-1"
+                onClick={() => setShowArchiveModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 h-10 sm:h-11 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 order-1 sm:order-2"
+                onClick={handleConfirmArchive}
+              >
+                {demandaToArchive?.arquivado ? 'Desarquivar' : 'Arquivar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de Confirmação de Exclusão */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-[425px]">
@@ -1111,8 +1465,8 @@ export function DemandasRuas() {
                   </p>
                 </div>
               )}
-              <p className="text-xs text-red-600 dark:text-red-400 font-medium mt-3">
-                Esta ação não pode ser desfeita.
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-3">
+                A demanda será ocultada mas os dados serão preservados no sistema.
               </p>
             </div>
 

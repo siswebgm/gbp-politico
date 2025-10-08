@@ -13,10 +13,27 @@ export interface DadosRelatorioDemandas {
     }>;
   };
   porStatus: Record<string, number>;
+  porTipoDemanda: Record<string, number>;
+  porNivelUrgencia: Record<string, number>;
+  porCidade: Record<string, number>;
+  porBairro: Record<string, number>;
+  porDocumentoProtocolado: Record<string, number>;
+  porNivelFavorito: Record<string, number>;
   evolucaoMensal: Array<{
     mes: string;
     total: number;
   }>;
+  tempoMedioResolucao: number | null;
+  demandasAtrasadas: number;
+  top10Bairros: Array<{ nome: string; total: number }>;
+  top10Logradouros: Array<{ nome: string; total: number }>;
+  porBoletimOcorrencia: Record<string, number>;
+  evolucaoSemanal: Array<{
+    semana: string;
+    abertas: number;
+    concluidas: number;
+  }>;
+  taxaConclusao: number;
 }
 
 export interface FiltroRelatorioDemandas {
@@ -64,6 +81,13 @@ export interface DemandaRua {
   observação_resposta?: string[];
   favorito?: boolean;
   nivel_favorito?: number; // 0 = não favorito, 1-5 = níveis de prioridade
+  tem_resposta_whatsapp?: boolean; // Indica se tem mensagens de resposta no WhatsApp
+  arquivado?: boolean; // Indica se a demanda foi arquivada
+  pasta_arquivo?: string; // Nome da pasta de arquivamento
+  excluido?: boolean; // Indica se a demanda foi excluída (soft delete)
+  excluido_em?: string; // Data/hora da exclusão
+  excluido_por_uid?: string; // UID do usuário que excluiu
+  excluido_por_nome?: string; // Nome do usuário que excluiu
   // Relacionamentos
   requerente?: {
     nome: string;
@@ -104,6 +128,7 @@ export const demandasRuasService = {
       console.log('Buscando demandas para empresa:', empresaUid);
       
       // Buscamos as demandas com os dados do requerente via join
+      // Filtra apenas demandas não excluídas (soft delete)
       const { data: demandas, error } = await supabaseClient
         .from('gbp_demandas_ruas')
         .select(`
@@ -117,6 +142,7 @@ export const demandasRuasService = {
           )
         `)
         .eq('empresa_uid', empresaUid)
+        .eq('excluido', false)
         .order('criado_em', { ascending: false });
 
       if (error) {
@@ -130,6 +156,31 @@ export const demandasRuasService = {
 
       console.log('Demandas encontradas:', demandas.length);
       
+      // Buscar mensagens de resposta do WhatsApp para todas as demandas
+      const demandasUids = demandas.map(d => d.uid);
+      console.log('Buscando respostas WhatsApp para demandas:', demandasUids);
+      
+      // Buscar mensagens de resposta (aquelas enviadas pelo sistema/empresa)
+      // Mensagens de resposta são aquelas que têm remetente_uid preenchido
+      const { data: mensagensWhatsApp, error: errorWhatsApp } = await supabaseClient
+        .from('gbp_whatsapp_demanda')
+        .select('demanda_rua_uid, remetente_uid, usuario_uid')
+        .in('demanda_rua_uid', demandasUids)
+        .not('usuario_uid', 'is', null); // Mensagens enviadas por usuários do sistema (respostas)
+      
+      if (errorWhatsApp) {
+        console.error('Erro ao buscar mensagens WhatsApp:', errorWhatsApp);
+      }
+      
+      console.log('Mensagens WhatsApp encontradas:', mensagensWhatsApp);
+      
+      // Criar um Set com os UIDs das demandas que têm resposta
+      const demandasComResposta = new Set(
+        mensagensWhatsApp?.map(m => m.demanda_rua_uid) || []
+      );
+      
+      console.log('Demandas com resposta WhatsApp:', Array.from(demandasComResposta));
+      
       // Mapear os dados para o formato esperado
       const demandasFormatadas = demandas.map((demanda) => {
         // Se tiver dados do requerente no relacionamento, usa eles
@@ -140,16 +191,22 @@ export const demandasRuasService = {
           genero: demanda.requerente.genero
         } : null;
 
+        const temResposta = demandasComResposta.has(demanda.uid);
+        
         return {
           ...demanda,
           requerente,
           // Mantém compatibilidade com código existente
           requerente_nome: requerente?.nome || '',
           requerente_whatsapp: requerente?.telefone || '',
-          requerente_cpf: requerente?.cpf || ''
+          requerente_cpf: requerente?.cpf || '',
+          // Adiciona flag indicando se tem resposta no WhatsApp
+          tem_resposta_whatsapp: temResposta
         };
       });
 
+      console.log('Exemplo de demanda formatada:', demandasFormatadas[0]);
+      
       return demandasFormatadas;
     } catch (error) {
       console.error('Erro ao buscar demandas:', error);
@@ -237,11 +294,20 @@ export const demandasRuasService = {
     return data;
   },
 
-  // Excluir uma demanda
-  async deleteDemanda(uid: string): Promise<void> {
+  // Excluir uma demanda (soft delete)
+  async deleteDemanda(
+    uid: string, 
+    usuarioUid: string, 
+    usuarioNome: string
+  ): Promise<void> {
     const { error } = await supabaseClient
       .from('gbp_demandas_ruas')
-      .delete()
+      .update({
+        excluido: true,
+        excluido_em: new Date().toISOString(),
+        excluido_por_uid: usuarioUid,
+        excluido_por_nome: usuarioNome
+      })
       .eq('uid', uid);
 
     if (error) throw error;
@@ -354,6 +420,25 @@ export const demandasRuasService = {
       return true;
     } catch (error) {
       console.error('Erro ao atualizar nível de favorito:', error);
+      return false;
+    }
+  },
+
+  // Arquivar/Desarquivar demanda
+  async setArquivado(uid: string, arquivado: boolean, pastaNome?: string): Promise<boolean> {
+    try {
+      const { error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({ 
+          arquivado,
+          pasta_arquivo: arquivado ? pastaNome : null // Remove pasta ao desarquivar
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao arquivar/desarquivar demanda:', error);
       return false;
     }
   },
@@ -475,7 +560,20 @@ export const demandasRuasService = {
           comDocumento: 0,
           concluidas: { total: 0, detalhes: [] },
           porStatus: {},
-          evolucaoMensal: []
+          porTipoDemanda: {},
+          porNivelUrgencia: {},
+          porCidade: {},
+          porBairro: {},
+          porDocumentoProtocolado: {},
+          porNivelFavorito: {},
+          evolucaoMensal: [],
+          tempoMedioResolucao: null,
+          demandasAtrasadas: 0,
+          top10Bairros: [],
+          top10Logradouros: [],
+          porBoletimOcorrencia: {},
+          evolucaoSemanal: [],
+          taxaConclusao: 0
         };
       }
       
@@ -534,7 +632,20 @@ export const demandasRuasService = {
           comDocumento: 0,
           concluidas: { total: 0, detalhes: [] },
           porStatus: {},
-          evolucaoMensal: []
+          porTipoDemanda: {},
+          porNivelUrgencia: {},
+          porCidade: {},
+          porBairro: {},
+          porDocumentoProtocolado: {},
+          porNivelFavorito: {},
+          evolucaoMensal: [],
+          tempoMedioResolucao: null,
+          demandasAtrasadas: 0,
+          top10Bairros: [],
+          top10Logradouros: [],
+          porBoletimOcorrencia: {},
+          evolucaoSemanal: [],
+          taxaConclusao: 0
         };
       }
 
@@ -561,6 +672,54 @@ export const demandasRuasService = {
         return acc;
       }, {});
       
+      // Estatísticas por tipo de demanda
+      const tipoDemandaAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        if (item.tipo_de_demanda) {
+          // Pegar apenas o último nível da hierarquia (após ::)
+          const tipoSimplificado = item.tipo_de_demanda.split('::').pop() || item.tipo_de_demanda;
+          acc[tipoSimplificado] = (acc[tipoSimplificado] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      // Estatísticas por nível de urgência
+      const urgenciaAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        if (item.nivel_de_urgencia) {
+          acc[item.nivel_de_urgencia] = (acc[item.nivel_de_urgencia] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      // Estatísticas por cidade
+      const cidadeAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        if (item.cidade) {
+          acc[item.cidade] = (acc[item.cidade] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      // Estatísticas por bairro
+      const bairroAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        if (item.bairro) {
+          acc[item.bairro] = (acc[item.bairro] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      // Estatísticas por documento protocolado
+      const documentoProtocoladoAgrupados = {
+        'Com Documento': todasDemandas.filter(d => d.documento_protocolado && d.documento_protocolado.trim() !== '').length,
+        'Sem Documento': todasDemandas.filter(d => !d.documento_protocolado || d.documento_protocolado.trim() === '').length
+      };
+      
+      // Estatísticas por nível de favorito
+      const nivelFavoritoAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        const nivel = item.nivel_favorito || 0;
+        const label = nivel === 0 ? 'Não marcado' : `Nível ${nivel}`;
+        acc[label] = (acc[label] || 0) + 1;
+        return acc;
+      }, {});
+      
       // Evolução mensal
       const evolucaoMensal = todasDemandas.reduce((acc: Record<string, number>, item) => {
         if (item.criado_em) {
@@ -576,6 +735,83 @@ export const demandasRuasService = {
         total: total as number
       }));
       
+      // Calcular tempo médio de resolução (em dias)
+      const demandasConcluidas = todasDemandas.filter(d => d.demanda_concluida && d.demanda_concluida_data && d.criado_em);
+      const tempoMedioResolucao = demandasConcluidas.length > 0
+        ? demandasConcluidas.reduce((acc, d) => {
+            const inicio = new Date(d.criado_em);
+            const fim = new Date(d.demanda_concluida_data!);
+            const diffDias = Math.floor((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+            return acc + diffDias;
+          }, 0) / demandasConcluidas.length
+        : null;
+      
+      // Calcular demandas atrasadas (>30 dias sem conclusão)
+      const hoje = new Date();
+      const demandasAtrasadas = todasDemandas.filter(d => {
+        if (d.demanda_concluida) return false;
+        const criacao = new Date(d.criado_em);
+        const diffDias = Math.floor((hoje.getTime() - criacao.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDias > 30;
+      }).length;
+      
+      // Top 10 Bairros
+      const top10Bairros = Object.entries(bairroAgrupados)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([nome, total]) => ({ nome, total }));
+      
+      // Top 10 Logradouros
+      const logradourosAgrupados = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        if (item.logradouro) {
+          acc[item.logradouro] = (acc[item.logradouro] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      const top10Logradouros = Object.entries(logradourosAgrupados)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([nome, total]) => ({ nome, total }));
+      
+      // Estatísticas por boletim de ocorrência
+      const porBoletimOcorrencia = todasDemandas.reduce((acc: Record<string, number>, item) => {
+        const temBO = item.boletim_ocorrencia === 'sim' ? 'Com B.O.' : 'Sem B.O.';
+        acc[temBO] = (acc[temBO] || 0) + 1;
+        return acc;
+      }, {});
+      
+      // Evolução semanal (últimas 8 semanas)
+      const evolucaoSemanal: Array<{ semana: string; abertas: number; concluidas: number }> = [];
+      for (let i = 7; i >= 0; i--) {
+        const inicioSemana = new Date(hoje);
+        inicioSemana.setDate(hoje.getDate() - (i * 7));
+        inicioSemana.setHours(0, 0, 0, 0);
+        
+        const fimSemana = new Date(inicioSemana);
+        fimSemana.setDate(inicioSemana.getDate() + 6);
+        fimSemana.setHours(23, 59, 59, 999);
+        
+        const abertas = todasDemandas.filter(d => {
+          const criacao = new Date(d.criado_em);
+          return criacao >= inicioSemana && criacao <= fimSemana;
+        }).length;
+        
+        const concluidas = todasDemandas.filter(d => {
+          if (!d.demanda_concluida_data) return false;
+          const conclusao = new Date(d.demanda_concluida_data);
+          return conclusao >= inicioSemana && conclusao <= fimSemana;
+        }).length;
+        
+        const semanaLabel = `${inicioSemana.getDate().toString().padStart(2, '0')}/${(inicioSemana.getMonth() + 1).toString().padStart(2, '0')}`;
+        evolucaoSemanal.push({ semana: semanaLabel, abertas, concluidas });
+      }
+      
+      // Taxa de conclusão
+      const taxaConclusao = totalDemandas > 0 
+        ? Math.round((concluidas.length / totalDemandas) * 100) 
+        : 0;
+      
       const resultado: DadosRelatorioDemandas = {
         totalDemandas: totalDemandas || 0,
         comDocumento,
@@ -584,7 +820,20 @@ export const demandasRuasService = {
           detalhes: concluidas
         },
         porStatus: statusAgrupados,
-        evolucaoMensal: evolucaoMensalFormatada
+        porTipoDemanda: tipoDemandaAgrupados,
+        porNivelUrgencia: urgenciaAgrupados,
+        porCidade: cidadeAgrupados,
+        porBairro: bairroAgrupados,
+        porDocumentoProtocolado: documentoProtocoladoAgrupados,
+        porNivelFavorito: nivelFavoritoAgrupados,
+        evolucaoMensal: evolucaoMensalFormatada,
+        tempoMedioResolucao,
+        demandasAtrasadas,
+        top10Bairros,
+        top10Logradouros,
+        porBoletimOcorrencia,
+        evolucaoSemanal,
+        taxaConclusao
       };
       
       console.log('Relatório gerado com sucesso:', {
@@ -605,7 +854,20 @@ export const demandasRuasService = {
         comDocumento: 0,
         concluidas: { total: 0, detalhes: [] },
         porStatus: {},
-        evolucaoMensal: []
+        porTipoDemanda: {},
+        porNivelUrgencia: {},
+        porCidade: {},
+        porBairro: {},
+        porDocumentoProtocolado: {},
+        porNivelFavorito: {},
+        evolucaoMensal: [],
+        tempoMedioResolucao: null,
+        demandasAtrasadas: 0,
+        top10Bairros: [],
+        top10Logradouros: [],
+        porBoletimOcorrencia: {},
+        evolucaoSemanal: [],
+        taxaConclusao: 0
       };
     }
   },
