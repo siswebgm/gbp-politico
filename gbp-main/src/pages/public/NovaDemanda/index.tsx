@@ -225,6 +225,30 @@ export function NovaDemanda() {
     return value;
   };
 
+  const formatarNome = (value: string): string => {
+    // Lista de preposições e artigos que devem permanecer em minúsculas
+    const preposicoes = ['de', 'da', 'do', 'das', 'dos', 'e'];
+    
+    return value
+      .toLowerCase()
+      .split(' ')
+      .map((palavra, index) => {
+        // Primeira palavra sempre maiúscula
+        if (index === 0) {
+          return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+        }
+        
+        // Verifica se é uma preposição
+        if (preposicoes.includes(palavra)) {
+          return palavra;
+        }
+        
+        // Capitaliza a primeira letra das outras palavras
+        return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+      })
+      .join(' ');
+  };
+
   const buscarEndereco = async (cep: string) => {
     const cepLimpo = cep.replace(/\D/g, '');
     if (cepLimpo.length !== 8) return;
@@ -358,6 +382,8 @@ export function NovaDemanda() {
       formattedValue = formatPhone(value);
     } else if (name === 'cep') {
       formattedValue = formatCEP(value);
+    } else if (name === 'requerente_nome' || name === 'logradouro' || name === 'bairro' || name === 'cidade' || name === 'referencia') {
+      formattedValue = formatarNome(value);
     }
     
     setFormData(prev => ({
@@ -1272,6 +1298,7 @@ export function NovaDemanda() {
                             className="sr-only"
                             multiple
                             accept="image/*"
+                            capture="environment"
                             onChange={handleFileChange}
                           />
                         </label>
