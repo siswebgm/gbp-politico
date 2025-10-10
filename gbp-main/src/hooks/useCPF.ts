@@ -78,15 +78,6 @@ export function useCPF() {
 
       const existsInOtherCompany = existingInOthers && existingInOthers.length > 0;
 
-      if (existsInOtherCompany) {
-        toast({
-          title: "ℹ️ Informação",
-          description: "Eleitor encontrado em outra empresa. Você pode cadastrá-lo aqui.",
-          className: "bg-blue-50 border-blue-200 text-blue-800",
-          duration: 3000,
-        });
-      }
-
       return { existingVoter: null, existsInOtherCompany };
     } catch (error) {
       console.error('Erro ao verificar CPF:', error);

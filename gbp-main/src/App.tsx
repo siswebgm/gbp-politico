@@ -17,6 +17,7 @@ import ClientesPage from './pages/Clientes';
 import { Toaster } from './components/ui/toaster';
 import { NovaDemanda } from './pages/public/NovaDemanda';
 import { DemandaSucesso } from './pages/public/DemandaSucesso';
+import { TermosUso } from './pages/public/TermosUso';
 
 // Inicializa o Stripe com sua chave pública
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
@@ -80,6 +81,11 @@ export function App() {
                       <Route path="/demanda-sucesso/:id" element={
                         <div className="min-h-screen bg-gray-50">
                           <DemandaSucesso />
+                        </div>
+                      } />
+                      <Route path="/termos-uso" element={
+                        <div className="min-h-screen bg-gray-50">
+                          <TermosUso />
                         </div>
                       } />
                       

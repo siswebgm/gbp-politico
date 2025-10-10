@@ -358,7 +358,17 @@ export function NovaDemanda() {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
+    
+    // Se for checkbox, usa checked ao invés de value
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({
+        ...prev,
+        [name]: checked
+      }));
+      return;
+    }
     
     // Se for o campo CPF
     if (name === 'requerente_cpf') {
@@ -1579,7 +1589,7 @@ export function NovaDemanda() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="aceite_termos" className="font-medium text-gray-700">
-                    Eu concordo com os <a href="/termos-de-uso" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500">termos de uso</a> e política de privacidade *
+                    Eu concordo com os <a href="/termos-uso" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500 underline">termos de uso e política de privacidade</a> *
                   </label>
                 </div>
               </div>
