@@ -739,9 +739,11 @@ export const NovoEleitor: React.FC = () => {
                   Dados Pessoais
                 </span>
               </h2>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {/* CPF Field */}
-                <div className="col-span-1">
+              <div className="space-y-6">
+                {/* Linha 1: CPF e Nome */}
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* CPF Field */}
+                  <div className="w-full md:w-64 flex-shrink-0">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     CPF
                   </label>
@@ -762,8 +764,8 @@ export const NovoEleitor: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Nome Field */}
-                <div className="col-span-1 sm:col-span-2">
+                  {/* Nome Field */}
+                  <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     Nome <span className="text-red-500">*</span>
                   </label>
@@ -779,10 +781,13 @@ export const NovoEleitor: React.FC = () => {
                     style={globalStyles.input}
                   />
                   {errors.nome && <span className="text-red-500 text-sm">Campo obrigatório</span>}
+                  </div>
                 </div>
 
-                {/* Nome da Mãe */}
-                <div>
+                {/* Linha 2: Nome da Mãe, Nascimento e Gênero */}
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Nome da Mãe */}
+                  <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     Nome da Mãe
                   </label>
@@ -797,10 +802,10 @@ export const NovoEleitor: React.FC = () => {
                     placeholder="Digite o nome da mãe"
                     style={globalStyles.input}
                   />
-                </div>
+                  </div>
 
-                {/* Data de Nascimento */}
-                <div>
+                  {/* Data de Nascimento */}
+                  <div className="w-full md:w-64">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">
                       Nascimento {camposObrigatorios.nascimento && <span className="text-red-500">*</span>}
@@ -849,10 +854,10 @@ export const NovoEleitor: React.FC = () => {
                       {errors.nascimento.type === 'isValid' ? 'Data inválida' : 'Campo obrigatório'}
                     </span>
                   )}
-                </div>
+                  </div>
 
-                {/* Gênero */}
-                <div className="w-full">
+                  {/* Gênero */}
+                  <div className="w-full md:w-64">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Gênero
                   </label>
@@ -870,9 +875,12 @@ export const NovoEleitor: React.FC = () => {
                   {errors.genero && (
                     <span className="text-sm text-red-500">{errors.genero.message}</span>
                   )}
+                  </div>
                 </div>
 
-                <div className="relative md:col-span-1 lg:col-span-2">
+                {/* Linha 3: Categoria e WhatsApp */}
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     Categoria <span className="text-red-500">*</span>
                   </label>
@@ -898,10 +906,10 @@ export const NovoEleitor: React.FC = () => {
                       </button>
                     )}
                   </div>
-                </div>
+                  </div>
 
-                {/* WhatsApp */}
-                <div className="md:col-span-1 lg:col-span-1">
+                  {/* WhatsApp */}
+                  <div className="w-full md:w-64">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     WhatsApp <span className="text-red-500">*</span>
                   </label>
@@ -914,10 +922,11 @@ export const NovoEleitor: React.FC = () => {
                     style={globalStyles.input}
                   />
                   {errors.whatsapp && <span className="text-red-500 text-sm">Campo obrigatório</span>}
+                  </div>
                 </div>
 
-                {/* Quantidade de Adultos e Indicado por na mesma linha */}
-                <div className="md:col-span-2 lg:col-span-3">
+                {/* Linha 4: Qtd. Adultos, Indicado por e Telefone */}
+                <div>
                   <div className="flex flex-col md:flex-row gap-6">
                     {/* Quantidade de Adultos na Residência */}
                     <div className="w-full md:w-[150px] flex-shrink-0">
