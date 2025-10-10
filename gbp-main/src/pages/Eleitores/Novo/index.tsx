@@ -115,8 +115,8 @@ export function NovoEleitor() {
             <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">
               Dados Pessoais
             </h3>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div className="sm:col-span-3">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   CPF*
                 </label>
@@ -140,7 +140,7 @@ export function NovoEleitor() {
                 )}
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Nome*
                 </label>
@@ -154,7 +154,7 @@ export function NovoEleitor() {
                 )}
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Data de Nascimento*
                 </label>
@@ -168,7 +168,7 @@ export function NovoEleitor() {
                 )}
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Gênero
                 </label>
@@ -192,8 +192,8 @@ export function NovoEleitor() {
             <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">
               Contato
             </h3>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div className="sm:col-span-3">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   WhatsApp*
                 </label>
@@ -207,7 +207,7 @@ export function NovoEleitor() {
                 )}
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Telefone
                 </label>
@@ -227,8 +227,8 @@ export function NovoEleitor() {
             <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">
               Endereço
             </h3>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div className="sm:col-span-2">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="md:col-span-2 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   CEP
                 </label>
@@ -239,7 +239,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-4">
+              <div className="md:col-span-2 lg:col-span-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Logradouro
                 </label>
@@ -250,7 +250,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Cidade
                 </label>
@@ -261,7 +261,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Bairro
                 </label>
@@ -272,7 +272,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div className="md:col-span-1 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Número
                 </label>
@@ -283,7 +283,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-4">
+              <div className="md:col-span-1 lg:col-span-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Complemento
                 </label>
@@ -303,8 +303,8 @@ export function NovoEleitor() {
             <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">
               Informações Eleitorais
             </h3>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div className="sm:col-span-2">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 md:grid-cols-3 lg:grid-cols-6">
+              <div className="md:col-span-1 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Título de Eleitor*
                 </label>
@@ -318,7 +318,7 @@ export function NovoEleitor() {
                 )}
               </div>
 
-              <div className="sm:col-span-2">
+              <div className="md:col-span-1 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Zona
                 </label>
@@ -329,7 +329,7 @@ export function NovoEleitor() {
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div className="md:col-span-1 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Seção
                 </label>
@@ -349,8 +349,8 @@ export function NovoEleitor() {
             <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">
               Relacionamentos
             </h3>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div className="sm:col-span-3">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Categoria
                 </label>
@@ -363,7 +363,7 @@ export function NovoEleitor() {
                 </select>
               </div>
 
-              <div className="sm:col-span-3">
+              <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Indicado por
                 </label>

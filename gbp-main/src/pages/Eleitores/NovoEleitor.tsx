@@ -739,7 +739,7 @@ export const NovoEleitor: React.FC = () => {
                   Dados Pessoais
                 </span>
               </h2>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {/* CPF Field */}
                 <div className="col-span-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
@@ -803,7 +803,7 @@ export const NovoEleitor: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">
-                      Data de Nascimento {camposObrigatorios.nascimento && <span className="text-red-500">*</span>}
+                      Nascimento {camposObrigatorios.nascimento && <span className="text-red-500">*</span>}
                     </label>
                     <div className="flex items-center">
                       <input
@@ -872,12 +872,12 @@ export const NovoEleitor: React.FC = () => {
                   )}
                 </div>
 
-                <div className="relative">
+                <div className="relative md:col-span-1 lg:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     Categoria <span className="text-red-500">*</span>
                   </label>
                   <div className="flex space-x-2">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <NestedCategoryDropdown
                         value={watch('categoria_uid')}
                         onChange={(value) => setValue('categoria_uid', value)}
@@ -891,7 +891,7 @@ export const NovoEleitor: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowNovaCategoriaModal(true)}
-                        className="p-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600 h-[44px]"
+                        className="flex-shrink-0 p-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600 h-[44px]"
                         title="Nova Categoria"
                       >
                         <Plus className="h-5 w-5" />
@@ -900,39 +900,8 @@ export const NovoEleitor: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                    Indicado por
-                  </label>
-                  <div className="flex space-x-2">
-                    <select
-                      className="flex-1 appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
-                      disabled={isLoadingIndicados}
-                      {...register('indicado_uid')}
-                      style={{ ...globalStyles.select, WebkitAppearance: 'none', MozAppearance: 'none' }}
-                    >
-                      <option value="">Selecione um indicado...</option>
-                      {indicados?.map((indicado) => (
-                        <option key={indicado.uid} value={indicado.uid}>
-                          {indicado.nome}
-                        </option>
-                      ))}
-                    </select>
-                    {user?.nivel_acesso === 'admin' && (
-                      <button
-                        type="button"
-                        onClick={() => setShowNovoIndicadoModal(true)}
-                        className="p-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600 h-[44px]"
-                        title="Novo Indicado"
-                      >
-                        <Plus className="h-5 w-5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
                 {/* WhatsApp */}
-                <div>
+                <div className="md:col-span-1 lg:col-span-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                     WhatsApp <span className="text-red-500">*</span>
                   </label>
@@ -947,34 +916,71 @@ export const NovoEleitor: React.FC = () => {
                   {errors.whatsapp && <span className="text-red-500 text-sm">Campo obrigatório</span>}
                 </div>
 
-                {/* Quantidade de Adultos na Residência */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                    Qtd. de Adultos na Residência
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Quantos adultos moram na residência?"
-                    {...register('quantidade_adultos_residencia')}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
-                    style={globalStyles.input}
-                  />
-                </div>
+                {/* Quantidade de Adultos e Indicado por na mesma linha */}
+                <div className="md:col-span-2 lg:col-span-3">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    {/* Quantidade de Adultos na Residência */}
+                    <div className="w-full md:w-[150px] flex-shrink-0">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                        Qtd. Adultos
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Qtd"
+                        {...register('quantidade_adultos_residencia')}
+                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                        style={globalStyles.input}
+                      />
+                    </div>
 
-                {/* Telefone */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                    Telefone
-                  </label>
-                  <InputMask
-                    mask="(99) 99999-9999"
-                    maskChar={null}
-                    placeholder="Digite apenas números"
-                    {...register('telefone')}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
-                    style={globalStyles.input}
-                  />
+                    {/* Indicado por */}
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                        Indicado por
+                      </label>
+                      <div className="flex space-x-2">
+                        <select
+                          className="flex-1 appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                          disabled={isLoadingIndicados}
+                          {...register('indicado_uid')}
+                          style={{ ...globalStyles.select, WebkitAppearance: 'none', MozAppearance: 'none' }}
+                        >
+                          <option value="">Selecione um indicado...</option>
+                          {indicados?.map((indicado) => (
+                            <option key={indicado.uid} value={indicado.uid}>
+                              {indicado.nome}
+                            </option>
+                          ))}
+                        </select>
+                        {user?.nivel_acesso === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => setShowNovoIndicadoModal(true)}
+                            className="flex-shrink-0 p-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600 h-[44px]"
+                            title="Novo Indicado"
+                          >
+                            <Plus className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Telefone */}
+                    <div className="w-full md:min-w-[200px] md:max-w-[256px]">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                        Telefone
+                      </label>
+                      <InputMask
+                        mask="(99) 99999-9999"
+                        maskChar={null}
+                        placeholder="Digite apenas números"
+                        {...register('telefone')}
+                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                        style={globalStyles.input}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1001,7 +1007,7 @@ export const NovoEleitor: React.FC = () => {
               </svg>
             </div>
             <div className={`p-6 pt-0 ${showDadosEleitorais ? 'block' : 'hidden'}`}>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {/* Título de Eleitor */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
@@ -1097,7 +1103,7 @@ export const NovoEleitor: React.FC = () => {
               
               {showExtraFields && (
                 <div className="p-6 border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {/* Número do SUS */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
@@ -1194,7 +1200,7 @@ export const NovoEleitor: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {/* CEP */}
                 <div className="col-span-1">
                   <div className="space-y-1">
@@ -1217,14 +1223,13 @@ export const NovoEleitor: React.FC = () => {
                       )}
                     </div>
                     <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                      <span>Não sabe o CEP?</span>
                       <a
                         href="https://buscacepinter.correios.com.br/app/endereco/index.php"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 dark:text-blue-200 hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center space-x-1"
                       >
-                        <span>Busque aqui</span>
+                        <span>Buscar CEP</span>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                           <path
                             fillRule="evenodd"

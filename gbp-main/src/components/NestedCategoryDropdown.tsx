@@ -121,7 +121,7 @@ export const NestedCategoryDropdown: React.FC<NestedCategoryDropdownProps> = ({
                       }`}
                       onClick={() => handleSelect(category)}
                     >
-                      <span className={`text-gray-700 dark:text-gray-300 ${value === category.uid ? 'text-blue-600 dark:text-blue-400' : ''}`}>
+                      <span className={`text-gray-700 dark:text-gray-300 truncate block ${value === category.uid ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                         {category.nome}
                       </span>
                     </div>
@@ -150,7 +150,7 @@ export const NestedCategoryDropdown: React.FC<NestedCategoryDropdownProps> = ({
             <span>Carregando...</span>
           </div>
         ) : (
-          <span className={selectedCategory ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
+          <span className={`truncate block ${selectedCategory ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>
             {selectedCategory ? selectedCategory.nome : placeholder}
           </span>
         )}
