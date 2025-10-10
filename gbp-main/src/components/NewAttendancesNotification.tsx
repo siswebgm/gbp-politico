@@ -302,7 +302,7 @@ export function NewAttendancesNotification() {
 
   return (
     <div className="fixed bottom-0 right-0 left-0 sm:left-auto sm:bottom-4 sm:right-4 z-50 w-full sm:w-auto sm:max-w-md lg:max-w-lg xl:max-w-xl px-2 sm:px-0">
-      <div className="bg-white rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden border border-b-0 sm:border-b border-gray-200 w-full">
+      <div className="bg-white dark:bg-gray-800 rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden border border-b-0 sm:border-b border-gray-200 dark:border-gray-700 w-full">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-3 sm:px-4 py-2 sm:py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center min-w-0 flex-1">
@@ -357,63 +357,63 @@ export function NewAttendancesNotification() {
         </div>
         
         {!isMinimized && (
-          <div className="bg-gray-50 p-2 border-b border-gray-200">
+          <div className="bg-gray-50 dark:bg-gray-700 p-2 border-b border-gray-200 dark:border-gray-600">
             <div className="grid grid-cols-3 gap-3">
               <div 
                 onClick={() => toggleStatusFilter('concluído')}
                 className={`border rounded-md p-1.5 text-center cursor-pointer transition-colors ${
                   statusFilter === 'concluído' 
-                    ? 'bg-green-100 border-green-300 shadow-sm' 
-                    : 'bg-green-50 border-green-100 hover:bg-green-50/80'
+                    ? 'bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 shadow-sm' 
+                    : 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800 hover:bg-green-50/80 dark:hover:bg-green-900/30'
                 }`}
               >
-                <div className="text-green-800 font-bold text-sm sm:text-base">{getStatusCount('concluído')}</div>
-                <div className="text-green-600 text-xs leading-tight mt-0.5">Concluídos</div>
+                <div className="text-green-800 dark:text-green-300 font-bold text-sm sm:text-base">{getStatusCount('concluído')}</div>
+                <div className="text-green-600 dark:text-green-400 text-xs leading-tight mt-0.5">Concluídos</div>
               </div>
               <div 
                 onClick={() => toggleStatusFilter('em andamento')}
                 className={`border rounded-md p-1.5 text-center cursor-pointer transition-colors ${
                   statusFilter === 'em andamento' 
-                    ? 'bg-blue-100 border-blue-300 shadow-sm' 
-                    : 'bg-blue-50 border-blue-100 hover:bg-blue-50/80'
+                    ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 shadow-sm' 
+                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800 hover:bg-blue-50/80 dark:hover:bg-blue-900/30'
                 }`}
               >
-                <div className="text-blue-800 font-bold text-sm sm:text-base">{getStatusCount('em andamento')}</div>
-                <div className="text-blue-600 text-xs leading-tight mt-0.5">Em Andamento</div>
+                <div className="text-blue-800 dark:text-blue-300 font-bold text-sm sm:text-base">{getStatusCount('em andamento')}</div>
+                <div className="text-blue-600 dark:text-blue-400 text-xs leading-tight mt-0.5">Em Andamento</div>
               </div>
               <div 
                 onClick={() => toggleStatusFilter('pendente')}
                 className={`border rounded-md p-1.5 text-center cursor-pointer transition-colors ${
                   statusFilter === 'pendente' 
-                    ? 'bg-yellow-100 border-yellow-300 shadow-sm' 
-                    : 'bg-yellow-50 border-yellow-100 hover:bg-yellow-50/80'
+                    ? 'bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 shadow-sm' 
+                    : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-100 dark:border-yellow-800 hover:bg-yellow-50/80 dark:hover:bg-yellow-900/30'
                 }`}
               >
-                <div className="text-yellow-800 font-bold text-sm sm:text-base">{getStatusCount('pendente')}</div>
-                <div className="text-yellow-600 text-xs leading-tight mt-0.5">Pendentes</div>
+                <div className="text-yellow-800 dark:text-yellow-300 font-bold text-sm sm:text-base">{getStatusCount('pendente')}</div>
+                <div className="text-yellow-600 dark:text-yellow-400 text-xs leading-tight mt-0.5">Pendentes</div>
               </div>
             </div>
           </div>
         )}
         
         {!isMinimized && (
-          <div className="bg-white max-h-[300px] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 max-h-[300px] overflow-y-auto">
             {isLoading ? (
-              <div className="p-4 text-center text-gray-500">Carregando...</div>
+              <div className="p-4 text-center text-gray-500 dark:text-gray-400">Carregando...</div>
             ) : filteredAttendances.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">
+              <div className="p-4 text-center text-gray-500 dark:text-gray-400">
                 <p>Nenhum atendimento hoje</p>
                 <p className="text-xs mt-1">Atualizado às {format(lastUpdate, 'HH:mm')}</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-200">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredAttendances.length === 0 ? (
-                  <div className="p-3 text-center text-gray-500 text-sm">
+                  <div className="p-3 text-center text-gray-500 dark:text-gray-400 text-sm">
                     Nenhum atendimento {statusFilter ? `com status "${statusFilter}"` : 'encontrado'}
                   </div>
                 ) : (
                   filteredAttendances.map((attendance) => (
-                  <li key={attendance.uid} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                  <li key={attendance.uid} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <div className="flex items-start gap-3">
                       <div className={`flex-shrink-0 h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center ${
                         attendance.status?.toLowerCase() === 'concluído' 
@@ -429,10 +429,10 @@ export function NewAttendancesNotification() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0 overflow-hidden">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {attendance.eleitor || 'Atendimento sem nome'}
                         </p>
-                        <p className="text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis mt-1">
                           {format(new Date(attendance.data_atendimento || attendance.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1.5 overflow-hidden">
@@ -457,14 +457,14 @@ export function NewAttendancesNotification() {
                 )))}
               </ul>
             )}
-            <div className="bg-gray-50 px-3 sm:px-4 py-2 sm:py-3 text-right">
+            <div className="bg-gray-50 dark:bg-gray-700 px-3 sm:px-4 py-2 sm:py-3 text-right">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500 whitespace-nowrap">
+                <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   Atualizado {format(lastUpdate, 'HH:mm')}
                 </span>
               <a 
                 href="/app/atendimentos" 
-                className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
               >
                 Ver todos os atendimentos →
               </a>

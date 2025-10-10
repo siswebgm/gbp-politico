@@ -2,7 +2,7 @@ import { Container, Button, IconButton, Tooltip, Dialog } from '@mui/material';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { Filter, FileSpreadsheet, FileText, ArrowLeft } from 'lucide-react';
+import { Filter, FileSpreadsheet, FileText, ArrowLeft, X, Search, Calendar } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect } from 'react';
 import { AttendanceFilters, AttendanceFilters as IAttendanceFilters } from './components/AttendanceFilters';
@@ -206,6 +206,30 @@ export function AttendanceList() {
   const [statusFilter, setStatusFilter] = useState<AtendimentoStatus | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<IAttendanceFilters>({});
+  const [quickSearch, setQuickSearch] = useState('');
+  const [quickPeriod, setQuickPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+
+  // Função para calcular tempo decorrido
+  const calculateElapsedTime = (dataAtendimento: string) => {
+    const agora = new Date();
+    const data = new Date(dataAtendimento);
+    const diffMs = agora.getTime() - data.getTime();
+    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDias === 0) return 'Hoje';
+    if (diffDias === 1) return '1 dia';
+    if (diffDias < 7) return `${diffDias} dias`;
+    if (diffDias < 30) {
+      const semanas = Math.floor(diffDias / 7);
+      return semanas === 1 ? '1 semana' : `${semanas} semanas`;
+    }
+    if (diffDias < 365) {
+      const meses = Math.floor(diffDias / 30);
+      return meses === 1 ? '1 mês' : `${meses} meses`;
+    }
+    const anos = Math.floor(diffDias / 365);
+    return anos === 1 ? '1 ano' : `${anos} anos`;
+  };
 
   // Função para verificar se o texto contém o filtro (case insensitive)
   const matchesText = (text: string | undefined | null, filter: string) => {
@@ -219,21 +243,47 @@ export function AttendanceList() {
     if (!date) return true;
     if (!start && !end) return true;
     
+    // Normalizar datas para comparar apenas dia/mês/ano (ignorando horas)
     const dataAtendimento = new Date(date);
+    dataAtendimento.setHours(0, 0, 0, 0);
+    
     if (start) {
       const dataInicio = new Date(start);
+      dataInicio.setHours(0, 0, 0, 0);
       if (dataAtendimento < dataInicio) return false;
     }
     if (end) {
       const dataFim = new Date(end);
+      dataFim.setHours(23, 59, 59, 999); // Incluir todo o dia final
       if (dataAtendimento > dataFim) return false;
     }
     return true;
   };
 
   const filteredAtendimentos = atendimentos.filter(atendimento => {
+    // Filtro de busca rápida
+    if (quickSearch) {
+      const searchLower = quickSearch.toLowerCase();
+      const matchesSearch = 
+        atendimento.eleitor?.toLowerCase().includes(searchLower) ||
+        atendimento.gbp_eleitores?.nome?.toLowerCase().includes(searchLower) ||
+        atendimento.descricao?.toLowerCase().includes(searchLower) ||
+        atendimento.gbp_categorias?.nome?.toLowerCase().includes(searchLower) ||
+        atendimento.cidade?.toLowerCase().includes(searchLower);
+      if (!matchesSearch) return false;
+    }
+
+    // Filtro de período rápido
+    if (quickPeriod !== 'all' && atendimento.data_atendimento) {
+      const agora = new Date();
+      const data = new Date(atendimento.data_atendimento);
+      const diffDias = Math.floor((agora.getTime() - data.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (quickPeriod === 'today' && diffDias > 0) return false;
+      if (quickPeriod === 'week' && diffDias > 7) return false;
+      if (quickPeriod === 'month' && diffDias > 30) return false;
+    }
     // Filtros de texto - só aplica se o filtro não estiver vazio
-    if (filters.eleitor && !matchesText(atendimento.eleitor || atendimento.gbp_eleitores?.nome, filters.eleitor)) return false;
     if (filters.cidade && !matchesText(atendimento.cidade, filters.cidade)) return false;
     if (filters.bairro && !matchesText(atendimento.bairro, filters.bairro)) return false;
     if (filters.logradouro && !matchesText(atendimento.logradouro, filters.logradouro)) return false;
@@ -261,10 +311,10 @@ export function AttendanceList() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 min-h-screen py-6">
+    <div className="bg-white dark:bg-gray-800 py-6">
       <Container maxWidth={false}>
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+        <div className="space-y-3 sm:space-y-4">
+          <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 <button 
@@ -274,8 +324,11 @@ export function AttendanceList() {
                   <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 </button>
                 <div>
-                  <h1 className="text-2xl font-semibold dark:text-white">Atendimentos</h1>
-                  <p className="text-gray-600 dark:text-gray-400">Gerencie todos os atendimentos em um só lugar</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold dark:text-white">Atendimentos</h1>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="hidden sm:inline">Gerencie todos os atendimentos em um só lugar</span>
+                    <span className="sm:hidden">Gerencie seus atendimentos</span>
+                  </p>
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-2">
@@ -288,116 +341,216 @@ export function AttendanceList() {
                   Filtros
                 </Button>
 
-                <div className="hidden md:flex gap-2">
-                  <Tooltip title={!hasAdminAccess ? "Acesso restrito a administradores" : "Exportar para Excel"}>
-                    <span>
-                      <IconButton 
-                        onClick={handleExportExcel} 
-                        disabled={!hasAdminAccess}
-                        className={!hasAdminAccess ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}
-                      >
-                        <FileSpreadsheet className={`w-5 h-5 ${hasAdminAccess ? 'text-green-600' : 'text-gray-400'}`} />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title={!hasAdminAccess ? "Acesso restrito a administradores" : "Exportar para PDF"}>
-                    <span>
-                      <IconButton 
-                        onClick={handleExportPDF} 
-                        disabled={!hasAdminAccess}
-                        className={!hasAdminAccess ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-700'}
-                      >
-                        <FileText className={`w-5 h-5 ${hasAdminAccess ? 'text-red-600' : 'text-gray-400'}`} />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </div>
+                {hasAdminAccess && (
+                  <div className="hidden md:flex gap-2">
+                    <Tooltip title="Exportar para Excel">
+                      <span>
+                        <IconButton 
+                          onClick={handleExportExcel} 
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Exportar para PDF">
+                      <span>
+                        <IconButton 
+                          onClick={handleExportPDF} 
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <FileText className="w-5 h-5 text-red-600" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 cursor-pointer">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 cursor-pointer">
           <div 
             onClick={() => setStatusFilter('all')} 
-            className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : ''}`}
           >
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total</p>
-                <p className="text-2xl font-semibold mt-2">{statusCounts.total}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Total</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.total}</p>
               </div>
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="flex-shrink-0 ml-1 sm:ml-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: '100%' }} />
+            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
+              <div className="bg-blue-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: '100%' }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Pendente')} 
-            className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Pendente' ? 'ring-2 ring-yellow-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Pendente' ? 'ring-2 ring-yellow-500' : ''}`}
           >
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pendentes</p>
-                <p className="text-2xl font-semibold mt-2">{statusCounts.pendentes}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Pendentes</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.pendentes}</p>
               </div>
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              <div className="flex-shrink-0 ml-1 sm:ml-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-yellow-600 dark:text-yellow-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div className="bg-yellow-600 h-2 rounded-full" style={{ width: `${(statusCounts.pendentes / statusCounts.total) * 100}%` }} />
+            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
+              <div className="bg-yellow-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.pendentes / statusCounts.total) * 100}%` }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Em Andamento')} 
-            className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Em Andamento' ? 'ring-2 ring-blue-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Em Andamento' ? 'ring-2 ring-blue-500' : ''}`}
           >
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Em Andamento</p>
-                <p className="text-2xl font-semibold mt-2">{statusCounts.emAndamento}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Em Andamento</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.emAndamento}</p>
               </div>
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="flex-shrink-0 ml-1 sm:ml-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${(statusCounts.emAndamento / statusCounts.total) * 100}%` }} />
+            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
+              <div className="bg-blue-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.emAndamento / statusCounts.total) * 100}%` }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Concluído')} 
-            className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Concluído' ? 'ring-2 ring-green-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Concluído' ? 'ring-2 ring-green-500' : ''}`}
           >
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Concluídos</p>
-                <p className="text-2xl font-semibold mt-2">{statusCounts.concluidos}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Concluídos</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.concluidos}</p>
               </div>
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+              <div className="flex-shrink-0 ml-1 sm:ml-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-green-600 dark:text-green-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div className="bg-green-600 h-2 rounded-full" style={{ width: `${(statusCounts.concluidos / statusCounts.total) * 100}%` }} />
+            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
+              <div className="bg-green-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.concluidos / statusCounts.total) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Filtros Rápidos */}
+        <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 space-y-3 sm:space-y-4">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            {/* Busca Rápida */}
+            <div className="w-full">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por eleitor, categoria, cidade..."
+                  value={quickSearch}
+                  onChange={(e) => setQuickSearch(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {quickSearch && (
+                  <button
+                    onClick={() => setQuickSearch('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filtro de Período */}
+            <div className="grid grid-cols-2 sm:flex gap-2">
+              <button
+                onClick={() => setQuickPeriod('all')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                  quickPeriod === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setQuickPeriod('today')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                  quickPeriod === 'today'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Hoje
+              </button>
+              <button
+                onClick={() => setQuickPeriod('week')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                  quickPeriod === 'week'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Últimos 7 dias
+              </button>
+              <button
+                onClick={() => setQuickPeriod('month')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                  quickPeriod === 'month'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Últimos 30 dias
+              </button>
             </div>
           </div>
 
-
+          {/* Indicador de Filtros Ativos */}
+          {(quickSearch || quickPeriod !== 'all' || Object.keys(filters).length > 0) && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600 dark:text-gray-400">Filtros ativos:</span>
+              {quickSearch && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
+                  Busca: "{quickSearch}"
+                  <button onClick={() => setQuickSearch('')} className="hover:text-blue-900 dark:hover:text-blue-100">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {quickPeriod !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
+                  Período: {quickPeriod === 'today' ? 'Hoje' : quickPeriod === 'week' ? '7 dias' : '30 dias'}
+                  <button onClick={() => setQuickPeriod('all')} className="hover:text-blue-900 dark:hover:text-blue-100">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {Object.keys(filters).length > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
+                  Filtros avançados: {Object.keys(filters).length}
+                  <button onClick={() => setFilters({})} className="hover:text-blue-900 dark:hover:text-blue-100">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
           <div className={`transition-all duration-200 overflow-hidden ${showFilters ? 'max-h-[1000px] opacity-100 mb-4' : 'max-h-0 opacity-0'}`}>
@@ -409,9 +562,24 @@ export function AttendanceList() {
               />
             </div>
           </div>
-          <AttendanceTable atendimentos={filteredAtendimentos} isLoading={isLoading} />
+          <AttendanceTable 
+            atendimentos={filteredAtendimentos} 
+            isLoading={isLoading} 
+            calculateElapsedTime={calculateElapsedTime}
+          />
         </div>
       </Container>
+
+      {/* Botão flutuante de filtros para mobile */}
+      <div className="fixed bottom-6 right-6 md:hidden z-50">
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="h-14 w-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all duration-200 flex items-center justify-center"
+          aria-label="Filtros"
+        >
+          <Filter className="h-6 w-6" />
+        </button>
+      </div>
     </div>
   );
 }

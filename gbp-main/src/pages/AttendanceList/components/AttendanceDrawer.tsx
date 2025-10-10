@@ -144,6 +144,9 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
   const [selectedCategory, setSelectedCategory] = useState(initialAtendimento?.categoria_uid || '');
   const [descriptionText, setDescriptionText] = useState(initialAtendimento?.descricao || '');
 
+  // Detect if iOS
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
   useEffect(() => {
     if (!user || !company) {
       console.warn('Usuário ou empresa não encontrados');
@@ -639,18 +642,18 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-full justify-end">
-        <div className="w-screen max-w-md">
-          <div className="flex h-full flex-col divide-y divide-gray-200 bg-white shadow-xl">
+    <div className="fixed inset-0 z-[9999] overflow-y-auto">
+      <div className="flex min-h-full justify-end" onClick={onClose}>
+        <div className="w-screen max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className={`flex h-full flex-col divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800 shadow-xl sm:pt-0 ${isIOS ? 'pt-16' : 'pt-0'}`}>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-scroll py-6">
-              <div className="px-4 sm:px-6">
-                <div className="flex items-start justify-between">
-                  <h2 className="text-lg font-medium text-gray-900">Detalhes do Atendimento</h2>
-                  <div className="ml-3 flex h-7 items-center">
+              <div className={`px-4 sm:px-6 sm:pt-0 ${isIOS ? 'pt-4' : 'pt-0'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white flex-1 min-w-0 truncate">Detalhes do Atendimento</h2>
+                  <div className="flex-shrink-0">
                     <button
                       type="button"
-                      className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="rounded-md bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       onClick={onClose}
                     >
                       <span className="sr-only">Fechar</span>
@@ -662,12 +665,12 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
               <div className="relative mt-6 flex-1 px-4 sm:px-6">
                 <div className="space-y-6">
                   {/* Informações do atendimento */}
-                  <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="px-6 py-5">
                       {/* Nome do eleitor em destaque */}
                       <div className="mb-6">
-                        <span className="block text-sm font-medium text-gray-500 mb-1">Eleitor</span>
-                        <h4 className="text-xl font-bold text-gray-900">
+                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Eleitor</span>
+                        <h4 className="text-xl font-bold text-gray-900 dark:text-white">
                           {atendimento.gbp_eleitores?.nome || '-'}
                         </h4>
                       </div>
@@ -675,7 +678,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                       {/* Categoria */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="block text-base font-medium text-gray-700">Categoria</span>
+                          <span className="block text-base font-medium text-gray-700 dark:text-gray-200">Categoria</span>
                           {!editingCategory && (
                             <button
                               onClick={() => {
@@ -695,7 +698,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             <select
                               value={selectedCategory}
                               onChange={(e) => setSelectedCategory(e.target.value)}
-                              className="block w-full rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 pl-2 pr-10 text-gray-900 bg-white shadow-sm"
+                              className="block w-full rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 pl-2 pr-10 text-gray-900 dark:text-white bg-white dark:bg-gray-700 shadow-sm"
                               style={{ fontSize: '1rem' }}
                             >
                               <option value="">Selecione uma categoria</option>
@@ -708,7 +711,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             <div className="mt-3 flex justify-end space-x-2">
                               <button
                                 onClick={() => setEditingCategory(false)}
-                                className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300"
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300"
                               >
                                 <XCircle className="h-4 w-4" />
                                 <span>Cancelar</span>
@@ -723,8 +726,8 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-gray-50 rounded-lg px-4 py-3">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 truncate max-w-[200px]">
+                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-4 py-3">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 truncate max-w-[200px]">
                               {atendimento.categoria?.nome || '-'}
                             </span>
                           </div>
@@ -733,33 +736,33 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
 
                       {/* Status */}
                       <div className="mb-4">
-                        <span className="block text-sm font-medium text-gray-500">Status</span>
-                        <span className={`mt-1 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusConfig[atendimento.status as keyof typeof statusConfig]?.color || 'bg-gray-100 text-gray-800'}`}>
+                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400">Status</span>
+                        <span className={`mt-1 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusConfig[atendimento.status as keyof typeof statusConfig]?.color || 'bg-gray-100 text-gray-800 dark:text-gray-100'}`}>
                           {atendimento.status || '-'}
                         </span>
                       </div>
 
                       {/* Data e Hora */}
                       <div className="mb-4">
-                        <span className="block text-sm font-medium text-gray-500">Data e Hora</span>
-                        <span className="mt-1 inline-flex items-center text-base font-semibold text-gray-900 whitespace-nowrap">
-                          <Calendar className="mr-2 h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400">Data e Hora</span>
+                        <span className="mt-1 inline-flex items-center text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                          <Calendar className="mr-2 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                           {format(new Date(atendimento.data_atendimento), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                         </span>
                       </div>
 
                       {/* Responsável */}
                       <div className="mb-4">
-                        <span className="block text-sm font-medium text-gray-500">Responsável</span>
-                        <span className="mt-1 inline-flex items-center text-sm text-gray-900">
+                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400">Responsável</span>
+                        <span className="mt-1 inline-flex items-center text-sm text-gray-900 dark:text-white">
                           {atendimento.gbp_usuarios?.nome || 'N/A'}
                         </span>
                       </div>
 
                       {/* Descrição */}
-                      <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="block text-base font-medium text-gray-700">Descrição</span>
+                          <span className="block text-base font-medium text-gray-700 dark:text-gray-200">Descrição</span>
                           {!editingDescription && (
                             <button
                               onClick={() => {
@@ -779,7 +782,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             <textarea
                               value={descriptionText}
                               onChange={(e) => setDescriptionText(e.target.value)}
-                              className="block w-full resize-none border border-gray-300 bg-white py-2 px-4 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg sm:text-sm sm:leading-6"
+                              className="block w-full resize-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2 px-4 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg sm:text-sm sm:leading-6"
                               rows={4}
                               placeholder="Digite a descrição do atendimento..."
                               style={{ resize: 'vertical' }}
@@ -790,7 +793,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                                   setEditingDescription(false);
                                   setDescriptionText(atendimento.descricao);
                                 }}
-                                className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300"
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300"
                               >
                                 <XCircle className="h-4 w-4" />
                                 <span>Cancelar</span>
@@ -805,8 +808,8 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-gray-50 rounded-lg px-4 py-3 relative group">
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-4 py-3 relative group">
+                            <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words">
                               {atendimento.descricao || 'Nenhuma descrição fornecida.'}
                             </p>
                             <div className="absolute inset-0 bg-gray-900/0 group-hover:bg-gray-900/5 transition-colors rounded-lg" />
@@ -817,14 +820,14 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                   </div>
 
                   {/* Observações */}
-                  <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="px-6 py-5">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
-                          <MessageSquare className="h-5 w-5 text-gray-400" />
-                          <h3 className="text-lg font-medium text-gray-900">Observações</h3>
+                          <MessageSquare className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Observações</h3>
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
                           {observations.filter(obs => !obs.lembrete).length} {observations.filter(obs => !obs.lembrete).length === 1 ? 'observação' : 'observações'}
                         </div>
                       </div>
@@ -840,11 +843,11 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                                   name="observacao"
                                   value={newObservation}
                                   onChange={(e) => setNewObservation(e.target.value)}
-                                  className="block w-full resize-none border border-gray-300 bg-white py-2 pl-14 pr-12 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg sm:text-sm sm:leading-6"
+                                  className="block w-full resize-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2 pl-14 pr-12 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg sm:text-sm sm:leading-6"
                                   placeholder="Digite uma observação..."
                                 />
                                 <div className="absolute left-0 top-0 bottom-0 flex w-12 items-center justify-center">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
                                     <MessageSquare className="h-4 w-4" />
                                   </div>
                                 </div>
@@ -868,10 +871,9 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                                 key={observation.uid}
                                 className="group relative flex gap-x-4"
                               >
-                                <div className="flex-auto rounded-md p-3 ring-1 ring-inset ring-gray-200">
+                                <div className="flex-auto rounded-md p-3 ring-1 ring-inset ring-gray-200 dark:ring-gray-700 dark:bg-gray-700/50">
                                   <div className="flex justify-between gap-x-4">
-                                    <div className="py-0.5 text-xs leading-5 text-gray-500">
-                                      <span className="font-medium text-gray-900">
+                                    <div className="py-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400"><span className="font-medium text-gray-900 dark:text-white">
                                         {observation.responsavel_usuario?.nome || 'Usuário'}
                                       </span>{' '}
                                       comentou
@@ -887,12 +889,12 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                                     </button>
                                   </div>
                                   <div className="flex justify-between items-start mt-2">
-                                    <p className="text-sm leading-6 text-gray-500 flex-1">
+                                    <p className="text-sm leading-6 text-gray-500 dark:text-gray-300 flex-1">
                                       {observation.observacao}
                                     </p>
                                     <time
                                       dateTime={observation.created_at}
-                                      className="text-xs leading-5 text-gray-500 ml-4 whitespace-nowrap"
+                                      className="text-xs leading-5 text-gray-500 dark:text-gray-400 ml-4 whitespace-nowrap"
                                     >
                                       {format(new Date(observation.created_at), "dd/MM/yyyy 'às' HH:mm", {
                                         locale: ptBR,
@@ -904,7 +906,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                             ))}
 
                             {observations.length === 0 && (
-                              <p className="text-center text-sm text-gray-500 py-4">
+                              <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">
                                 Nenhuma observação registrada
                               </p>
                             )}
@@ -915,12 +917,12 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                   </div>
 
                   {/* Lembretes */}
-                  <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="px-6 py-5">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
                           <Bell className="h-5 w-5 text-gray-400" />
-                          <h3 className="text-lg font-medium text-gray-900">Lembretes</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Lembretes</h3>
                         </div>
                         <button
                           type="button"
@@ -945,49 +947,49 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showReminderForm ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
                         <div className="space-y-4 bg-gray-50/50 rounded-lg p-4 border border-gray-100">
                           <div>
-                            <label htmlFor="titulo" className="block text-sm font-medium text-gray-600">
+                            <label htmlFor="titulo" className="block text-sm font-medium text-gray-600 dark:text-gray-300">
                               Título
                             </label>
                             <input
                               type="text"
                               id="titulo"
-                              className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
+                              className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
                               placeholder="Ex: Retornar ligação"
                             />
                           </div>
 
                           <div>
-                            <label htmlFor="descricao" className="block text-sm font-medium text-gray-600">
+                            <label htmlFor="descricao" className="block text-sm font-medium text-gray-600 dark:text-gray-300">
                               Descrição
                             </label>
                             <textarea
                               id="descricao"
                               rows={2}
-                              className="mt-1.5 block w-full rounded-lg border-gray-200 bg-white px-3.5 py-2.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm resize-none"
+                              className="mt-1.5 block w-full rounded-lg border-gray-200 bg-white px-3.5 py-2.5 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm resize-none"
                               placeholder="Detalhes do lembrete..."
                             />
                           </div>
 
                           <div className="flex gap-3">
                             <div className="flex-1">
-                              <label htmlFor="data_lembrete" className="block text-sm font-medium text-gray-600">
+                              <label htmlFor="data_lembrete" className="block text-sm font-medium text-gray-600 dark:text-gray-300">
                                 Data
                               </label>
                               <input
                                 type="date"
                                 id="data_lembrete"
-                                className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
+                                className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
                                 min={format(new Date(), 'yyyy-MM-dd')}
                               />
                             </div>
                             <div className="flex-1">
-                              <label htmlFor="hora_lembrete" className="block text-sm font-medium text-gray-600">
+                              <label htmlFor="hora_lembrete" className="block text-sm font-medium text-gray-600 dark:text-gray-300">
                                 Hora
                               </label>
                               <input
                                 type="time"
                                 id="hora_lembrete"
-                                className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
+                                className="mt-1.5 block w-full h-11 rounded-lg border-gray-200 bg-white px-3.5 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:text-sm"
                               />
                             </div>
                           </div>
@@ -1076,7 +1078,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                         })}
 
                         {reminders.length === 0 && (
-                          <p className="text-center text-sm text-gray-500 py-4">
+                          <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">
                             Nenhum lembrete registrado
                           </p>
                         )}
@@ -1114,7 +1116,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                   </Dialog.Title>
 
                   {/* Descrição */}
-                  <Dialog.Description className="text-sm text-gray-500 mb-6">
+                  <Dialog.Description className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                     Tem certeza que deseja excluir {itemToDelete?.type === 'observation' ? 'esta observação' : 'este lembrete'}? 
                     Esta ação não pode ser desfeita.
                   </Dialog.Description>
@@ -1157,3 +1159,27 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

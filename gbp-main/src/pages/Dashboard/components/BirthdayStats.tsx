@@ -33,7 +33,7 @@ export function BirthdayStats({ aniversariantes }: BirthdayStatsProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 mt-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
       <h3 className="text-lg font-medium mb-4">Status das Mensagens</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">

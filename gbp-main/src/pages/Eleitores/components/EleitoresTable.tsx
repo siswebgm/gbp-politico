@@ -1,4 +1,4 @@
-import { Eye, Trash2, ChevronDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { Eye, Trash2, ChevronDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, MoreVertical } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { DeleteConfirmationDialog } from '../../../components/DeleteConfirmationDialog';
 import { useEleitores } from '../../../hooks/useEleitores';
@@ -52,6 +52,7 @@ export function EleitoresTable({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [eleitorToDelete, setEleitorToDelete] = useState<Eleitor | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const { softDeleteEleitor } = useEleitores({});
   const { isAdmin } = usePermissions();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -76,13 +77,18 @@ export function EleitoresTable({
       ) {
         setIsMenuOpen(false);
       }
+      // Close dropdown menu when clicking outside
+      const target = event.target as HTMLElement;
+      if (openMenuId && !target.closest('.relative')) {
+        setOpenMenuId(null);
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [openMenuId]);
 
   const handleDelete = async () => {
     if (eleitorToDelete?.uid) {
@@ -123,7 +129,7 @@ export function EleitoresTable({
               <div
                 key={eleitor.id}
                 onClick={() => onRowClick(eleitor)}
-                className="bg-white rounded-lg shadow-sm p-4 cursor-pointer hover:bg-gray-50 border border-gray-100"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-100 dark:border-gray-700"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -135,36 +141,54 @@ export function EleitoresTable({
                       onClick={(e) => e.stopPropagation()}
                     />
                     <div className="min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate">
+                      <h3 className="font-medium text-gray-900 dark:text-white truncate">
                         {eleitor.nome || 'Não'}
                       </h3>
                       {eleitor.cpf && (
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                           CPF: {eleitor.cpf || 'Não'}
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 relative">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRowClick(eleitor);
+                        setOpenMenuId(openMenuId === eleitor.uid ? null : eleitor.uid);
                       }}
-                      className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors"
                     >
-                      <Eye className="h-5 w-5 text-gray-400" />
+                      <MoreVertical className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                     </button>
-                    {isAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(eleitor);
-                        }}
-                        className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
-                      >
-                        <Trash2 className="h-5 w-5 text-gray-400" />
-                      </button>
+                    
+                    {openMenuId === eleitor.uid && (
+                      <div className="absolute right-0 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(null);
+                            onRowClick(eleitor);
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg transition-colors"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Visualizar
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(null);
+                              handleDeleteClick(eleitor);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Deletar
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -172,7 +196,7 @@ export function EleitoresTable({
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-500">WhatsApp</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">WhatsApp</span>
                       {eleitor.whatsapp && (
                         <a 
                           href={`https://wa.me/${eleitor.whatsapp.replace(/\D/g, '')}`}
@@ -187,16 +211,16 @@ export function EleitoresTable({
                         </a>
                       )}
                     </div>
-                    <span className="text-sm text-gray-900 mt-1">
+                    <span className="text-sm text-gray-900 dark:text-gray-200 mt-1">
                       {eleitor.whatsapp || 'Não'}
                     </span>
                   </div>
                   
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-500">Localização</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Localização</span>
                     </div>
-                    <span className="text-sm text-gray-900 mt-1">
+                    <span className="text-sm text-gray-900 dark:text-gray-200 mt-1">
                       {eleitor.bairro || 'Não'}
                       {eleitor.cidade ? `, ${eleitor.cidade}` : ''}
                     </span>
@@ -215,27 +239,30 @@ export function EleitoresTable({
                 cancelText="Cancelar"
               />
             )}
-            <div className="sticky bottom-0 py-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+            <div className="py-4 pb-20 sm:pb-8 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 2rem))' }}>
               <div className="flex justify-center px-4">
-                <nav className="flex items-center gap-1" aria-label="Paginação">
+                <nav className="flex items-center gap-3" aria-label="Paginação">
                   <button
                     onClick={() => onPageChange?.(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-gray-500 border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors"
+                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <span className="sr-only">Página anterior</span>
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-6 w-6" />
                   </button>
-                  <div className="inline-flex items-center justify-center min-w-[3rem] px-3 h-10 text-sm font-medium bg-primary-50 text-primary-600 border border-primary-200 rounded-lg dark:bg-primary-900/20 dark:text-primary-400 dark:border-primary-800">
-                    {currentPage}
+                  <div className="inline-flex items-center justify-center min-w-[3rem] px-3 h-10 text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <span className="font-normal">Pág</span>
+                    <span className="mx-1.5 font-semibold text-gray-700 dark:text-gray-300">{currentPage}</span>
+                    <span className="font-normal">/</span>
+                    <span className="ml-1.5 font-normal">{totalPages}</span>
                   </div>
                   <button
                     onClick={() => onPageChange?.(currentPage + 1)}
                     disabled={currentPage >= totalPages}
-                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-gray-500 border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors"
+                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <span className="sr-only">Próxima página</span>
-                    <ChevronRight className="h-5 w-5" />
+                    <ChevronRight className="h-6 w-6" />
                   </button>
                 </nav>
               </div>
@@ -382,7 +409,7 @@ export function EleitoresTable({
               <th scope="col" className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 <div className="px-4">Cidade</div>
               </th>
-              <th scope="col" className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th scope="col" className="py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 <div className="px-4">Ações</div>
               </th>
             </tr>
@@ -435,27 +462,45 @@ export function EleitoresTable({
                     <div className="text-gray-900 dark:text-white px-4">{eleitor.cidade || 'Não'}</div>
                   </td>
                   <td className="py-4">
-                    <div className="flex items-center gap-2 px-4">
+                    <div className="flex items-center justify-center px-4 relative">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRowClick(eleitor);
+                          setOpenMenuId(openMenuId === eleitor.uid ? null : eleitor.uid);
                         }}
                         className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                       >
-                        <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                        <MoreVertical className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                       </button>
-                      {isAdmin && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEleitorToDelete(eleitor);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                        </button>
+                      
+                      {openMenuId === eleitor.uid && (
+                        <div className="absolute right-8 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(null);
+                              onRowClick(eleitor);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg transition-colors"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Visualizar
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(null);
+                                setEleitorToDelete(eleitor);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Deletar
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -465,13 +510,13 @@ export function EleitoresTable({
           </tbody>
         </table>
       </div>
-      <div className="mt-auto py-4 sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex justify-center">
+      <div className="mt-auto py-4 pb-16 sm:pb-4 sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-center mb-4 sm:mb-0">
           <nav className="flex items-center gap-2" aria-label="Paginação">
             <button
               onClick={() => onPageChange && onPageChange(1)}
               disabled={currentPage === 1}
-              className="hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-gray-500 border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors shadow-sm hover:text-primary-600 dark:hover:text-primary-400"
+              className="hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-lg bg-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <span className="sr-only">Primeira página</span>
               <ChevronsLeft className="h-4 w-4" />
@@ -479,21 +524,21 @@ export function EleitoresTable({
             <button
               onClick={() => onPageChange?.(currentPage - 1)}
               disabled={currentPage === 1 || isPaginationDisabled}
-              className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:z-20 focus:outline-offset-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <span className="sr-only">Página anterior</span>
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="inline-flex items-center justify-center min-w-[3rem] px-4 h-10 text-sm font-medium bg-primary-50 text-primary-600 border border-primary-200 rounded-lg dark:bg-primary-900/20 dark:text-primary-400 dark:border-primary-800 shadow-sm">
-              <span className="font-normal mr-1">Página</span> 
-              <span className="font-bold">{currentPage}</span>
-              <span className="mx-1 font-normal">de</span>
-              <span className="font-bold">{totalPages}</span>
+            <div className="inline-flex items-center justify-center min-w-[3rem] px-3 h-10 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <span className="font-normal">Pág</span>
+              <span className="mx-1.5 font-semibold text-gray-700 dark:text-gray-300">{currentPage}</span>
+              <span className="font-normal">/</span>
+              <span className="ml-1.5 font-normal">{totalPages}</span>
             </div>
             <button
               onClick={() => onPageChange?.(currentPage + 1)}
               disabled={currentPage === totalPages || isPaginationDisabled}
-              className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:z-20 focus:outline-offset-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <span className="sr-only">Próxima página</span>
               <ChevronRight className="h-4 w-4" />
@@ -501,7 +546,7 @@ export function EleitoresTable({
             <button
               onClick={() => onPageChange && onPageChange(totalPages)}
               disabled={currentPage === totalPages || isPaginationDisabled}
-              className="hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-gray-500 border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors shadow-sm hover:text-primary-600 dark:hover:text-primary-400"
+              className="hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-lg bg-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <span className="sr-only">Última página</span>
               <ChevronsRight className="h-4 w-4" />

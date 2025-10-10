@@ -709,7 +709,7 @@ export const NovoEleitor: React.FC = () => {
 
   return (
     <>
-      <div className="min-h-full bg-white dark:bg-gray-900">
+      <div className="min-h-full bg-white dark:bg-gray-900 overflow-x-hidden">
         {/* Header */}
         <header className="bg-white dark:bg-gray-800 shadow">
           <div className="mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -730,7 +730,7 @@ export const NovoEleitor: React.FC = () => {
         </header>
 
         {/* Formulário */}
-        <form onSubmit={handleSubmit(onSubmit)} className="mx-auto px-4 py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="mx-auto max-w-7xl px-4 py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
           {/* Dados Pessoais */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm rounded-lg overflow-hidden">
             <div className="p-6">
@@ -858,7 +858,8 @@ export const NovoEleitor: React.FC = () => {
                   </label>
                   <select
                     {...register('genero')}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                    className="w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                    style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                   >
                     <option value="">Selecione o gênero</option>
                     <option value="Masculino">Masculino</option>
@@ -905,10 +906,10 @@ export const NovoEleitor: React.FC = () => {
                   </label>
                   <div className="flex space-x-2">
                     <select
-                      className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                      className="flex-1 appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
                       disabled={isLoadingIndicados}
                       {...register('indicado_uid')}
-                      style={globalStyles.select}
+                      style={{ ...globalStyles.select, WebkitAppearance: 'none', MozAppearance: 'none' }}
                     >
                       <option value="">Selecione um indicado...</option>
                       {indicados?.map((indicado) => (
@@ -1146,7 +1147,8 @@ export const NovoEleitor: React.FC = () => {
                       </label>
                       <select
                         {...register('confiabilidade_do_voto')}
-                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                        className="w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                        style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                       >
                         <option value="">Selecione a confiabilidade</option>
                         <option value="frio">🔵 Frio 🧊 – Pouco engajado, dificilmente votará</option>
@@ -1309,7 +1311,8 @@ export const NovoEleitor: React.FC = () => {
                       register('regiao_bairro').onChange(e); // Mantém o comportamento padrão do register
                       handleRegiaoChange(e); // Adiciona nossa lógica personalizada
                     }}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                    className="w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                    style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                   >
                     <option value="">Selecione a região</option>
                     <option value="Alto">Alto</option>
@@ -1398,7 +1401,8 @@ export const NovoEleitor: React.FC = () => {
                         setCategoriaAtendimento(e.target.value);
                         setAtendimentoErrors(prev => ({ ...prev, categoria: '' }));
                       }}
-                      className={`mt-1 block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${atendimentoErrors.categoria ? 'border-red-500' : ''}`}
+                      className={`mt-1 block w-full appearance-none pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${atendimentoErrors.categoria ? 'border-red-500' : ''}`}
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                       disabled={true} // Campo desabilitado pois será sincronizado automaticamente
                     >
                       <option value="">Selecione a categoria</option>
@@ -1442,9 +1446,10 @@ export const NovoEleitor: React.FC = () => {
                         setStatusAtendimento(e.target.value);
                         setAtendimentoErrors(prev => ({ ...prev, status: '' }));
                       }}
-                      className={`mt-1 block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                      className={`mt-1 block w-full appearance-none pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
                         atendimentoErrors.status ? 'border-red-500' : ''
                       }`}
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                     >
                       <option value="">Selecione o status</option>
                       <option value="Pendente">Pendente</option>
@@ -1462,7 +1467,7 @@ export const NovoEleitor: React.FC = () => {
           </div>
 
           {/* Actions */}
-          <div className="mt-6 flex justify-end space-x-3">
+          <div className="mt-6 mb-8 flex flex-row justify-end gap-3 px-4 sm:px-0">
             <button
               type="button"
               onClick={() => navigate('/app/eleitores')}
@@ -1476,7 +1481,7 @@ export const NovoEleitor: React.FC = () => {
               className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
-                <div className="flex items-center">
+                <div className="flex items-center justify-center">
                   <Loader2 className="animate-spin h-4 w-4 mr-2" />
                   Salvando...
                 </div>

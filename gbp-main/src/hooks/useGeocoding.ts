@@ -15,19 +15,29 @@ export function useGeocoding() {
     setError(null);
 
     try {
-      // Usando Nominatim API (OpenStreetMap)
+      // Usando Nominatim API (OpenStreetMap) com timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 segundos
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
           address
         )}&format=json&limit=1&addressdetails=1`,
         {
           headers: {
+            'Accept': 'application/json',
             'Accept-Language': 'pt-BR',
-            // Importante adicionar um User-Agent conforme as diretrizes do Nominatim
             'User-Agent': 'GBPolitico/1.0'
-          }
+          },
+          signal: controller.signal
         }
       );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -58,15 +68,26 @@ export function useGeocoding() {
     setError(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 segundos
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
         {
           headers: {
+            'Accept': 'application/json',
             'Accept-Language': 'pt-BR',
             'User-Agent': 'GBPolitico/1.0'
-          }
+          },
+          signal: controller.signal
         }
       );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
 

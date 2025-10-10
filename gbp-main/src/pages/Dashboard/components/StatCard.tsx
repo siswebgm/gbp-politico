@@ -41,7 +41,7 @@ export function StatCard({
   return (
     <div className="relative">
       <div 
-        className="bg-white rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow h-[90px]"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow h-[90px]"
         onClick={() => setIsDetailsOpen(!isDetailsOpen)}
       >
         <div className="flex items-center justify-between">
@@ -50,12 +50,12 @@ export function StatCard({
               <Icon className={`h-6 w-6 ${color}`} />
             </div>
             <div className="ml-3">
-              <p className="text-sm font-semibold text-gray-800 whitespace-nowrap">{title}</p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">{title}</p>
               <div className="flex items-baseline">
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {value.toLocaleString('pt-BR')}
                 </p>
-                <p className="ml-1 text-sm font-medium text-gray-600">
+                <p className="ml-1 text-sm font-medium text-gray-600 dark:text-gray-400">
                   /{total}
                 </p>
               </div>
@@ -63,7 +63,7 @@ export function StatCard({
           </div>
           <div className="text-right">
             <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              stats.crescimento >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              stats.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
             }`}>
               {stats.crescimento >= 0 ? '+' : ''}{stats.crescimento.toFixed(1)}%
             </div>
@@ -72,9 +72,9 @@ export function StatCard({
       </div>
 
       {isDetailsOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg z-10 p-4">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg z-10 p-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
               {title}
             </h3>
             <button
@@ -88,7 +88,7 @@ export function StatCard({
             </button>
           </div>
 
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Análise detalhada dos últimos {selectedPeriod} dias
           </p>
 
@@ -102,8 +102,8 @@ export function StatCard({
                 }}
                 className={`px-3 py-1 text-sm rounded-md ${
                   selectedPeriod === period.value
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
                 {period.label}
@@ -140,29 +140,29 @@ export function StatCard({
             )}
 
             <div className="space-y-4">
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-blue-900">Total no Período</h4>
-                <p className="text-2xl font-bold text-blue-700">{stats.total}</p>
+              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-blue-900 dark:text-blue-200">Total no Período</h4>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{stats.total}</p>
               </div>
 
-              <div className="bg-green-50 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-green-900">Crescimento</h4>
-                <p className={`text-2xl font-bold ${stats.crescimento >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-green-900 dark:text-green-200">Crescimento</h4>
+                <p className={`text-2xl font-bold ${stats.crescimento >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
                   {stats.crescimento >= 0 ? '+' : ''}{stats.crescimento.toFixed(1)}%
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg p-4 border border-gray-100">
-                <h4 className="text-sm font-medium text-gray-900 mb-4">Distribuição por Dia</h4>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Distribuição por Dia</h4>
                 {Object.entries(stats.distribuicaoPorDia).map(([dia, valor]) => (
                   <div key={dia} className="mb-3">
                     <div className="flex justify-between items-center text-sm mb-1.5">
-                      <span className="font-medium text-gray-700">{dia}</span>
-                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">{dia}</span>
+                      <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
                         {valor} registros
                       </span>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
+                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3">
                       <div
                         className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"
                         style={{
@@ -175,8 +175,8 @@ export function StatCard({
                 ))}
               </div>
 
-              <div className="bg-white rounded-lg p-4 border border-gray-100">
-                <h4 className="text-sm font-medium text-gray-900 mb-4">Distribuição por Horário</h4>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Distribuição por Horário</h4>
                 {Object.entries(stats.distribuicaoPorHorario).map(([horario, valor], index) => {
                   const colors = {
                     'Manhã (6h-12h)': 'from-yellow-500 to-yellow-600',
@@ -191,14 +191,14 @@ export function StatCard({
                   return (
                     <div key={horario} className="mb-3">
                       <div className="flex justify-between items-center text-sm mb-1.5">
-                        <span className="font-medium text-gray-700">{horario}</span>
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{horario}</span>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${bgColors[horario as keyof typeof bgColors]}`}>
                             {valor} registros
                           </span>
                         </div>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-3">
+                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3">
                         <div
                           className={`h-3 rounded-full bg-gradient-to-r ${colors[horario as keyof typeof colors]}`}
                           style={{

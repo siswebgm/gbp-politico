@@ -329,7 +329,7 @@ export default function AgendaPage() {
   }, [selectedEventId, activeTab]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           <div className="pb-6">

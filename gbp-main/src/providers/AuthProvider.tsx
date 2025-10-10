@@ -120,7 +120,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           foto,
           notification_token,
           notification_status,
-          notification_updated_at
+          notification_updated_at,
+          adm_empresa
         `)
         .eq('uid', uid)
         .single();

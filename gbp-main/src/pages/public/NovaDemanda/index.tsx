@@ -41,6 +41,8 @@ type FormData = {
   boletim_ocorrencia: string;
   link_da_demanda: string;
   aceite_termos: boolean;
+  latitude?: string;
+  longitude?: string;
 };
 
 export function NovaDemanda() {
@@ -56,6 +58,40 @@ export function NovaDemanda() {
   const [boletimFile, setBoletimFile] = useState<File | null>(null);
   // Removido setErrors não utilizado
   const [temEnderecoRequerente, setTemEnderecoRequerente] = useState(false);
+  
+  // FORÇA scroll na página pública e previne reload
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+    
+    // Adiciona classe para permitir scroll
+    body.classList.add('public-page-scroll');
+    
+    // Força estilos diretamente
+    html.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important; overscroll-behavior: none !important;';
+    body.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: none !important;';
+    
+    // Previne pull-to-refresh e outros gestos que causam reload
+    const preventPullToRefresh = (e: TouchEvent) => {
+      const element = e.target as HTMLElement;
+      // Permite scroll normal mas previne refresh
+      if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
+        return; // Permite comportamento normal em inputs
+      }
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      if (scrollTop === 0 && e.touches[0].clientY > 0) {
+        // Está no topo e puxando para baixo
+        e.preventDefault();
+      }
+    };
+    
+    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
+    
+    return () => {
+      body.classList.remove('public-page-scroll');
+      document.removeEventListener('touchmove', preventPullToRefresh);
+    };
+  }, []);
   
   // Buscar dados da empresa
   useEffect(() => {
@@ -185,7 +221,7 @@ export function NovaDemanda() {
   });
   
   // Estado para controlar se o endereço da demanda é o mesmo do requerente
-  const [usarEnderecoRequerente, setUsarEnderecoRequerente] = useState<boolean>(true);
+  const [usarEnderecoRequerente, setUsarEnderecoRequerente] = useState<boolean>(false);
 
   // Funções de formatação
   const formatPhone = (value: string): string => {
@@ -299,27 +335,15 @@ export function NovaDemanda() {
         
         setTemEnderecoRequerente(!!temEnderecoValido);
         
+        // Carrega apenas os dados pessoais, NÃO carrega o endereço
         setFormData(prev => ({
           ...prev,
           requerente_nome: requerente.nome || '',
           requerente_whatsapp: requerente.whatsapp || '',
-          genero: requerente.genero || '',
-          cep: requerente.cep || '',
-          logradouro: requerente.logradouro || '',
-          numero: requerente.numero || '',
-          bairro: requerente.bairro || '',
-          cidade: requerente.cidade || '',
-          uf: requerente.uf || '',
-          referencia: requerente.referencia || ''
+          genero: requerente.genero || ''
         }));
         
-        // Se tiver CEP, busca o endereço
-        if (requerente.cep) {
-          buscarEndereco(requerente.cep);
-        }
-        
-        // Marca para usar o endereço do requerente por padrão se tiver endereço válido
-        setUsarEnderecoRequerente(temEnderecoValido);
+        // NÃO carrega o endereço automaticamente - usuário deve clicar no botão
       } else {
         // Se não encontrou o requerente, reseta o estado
         setTemEnderecoRequerente(false);
@@ -393,34 +417,46 @@ export function NovaDemanda() {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    const newFiles = Array.from(e.target.files);
-    const totalFiles = files.length + newFiles.length;
-    
-    if (totalFiles > 2) {
-      toast.warning('Máximo de 2 imagens permitidas');
-      e.target.value = ''; // Limpa o input
-      return;
+    try {
+      if (!e.target.files || e.target.files.length === 0) {
+        return;
+      }
+      
+      const newFiles = Array.from(e.target.files);
+      const totalFiles = files.length + newFiles.length;
+      
+      if (totalFiles > 2) {
+        toast.warning('Máximo de 2 imagens permitidas');
+        e.target.value = '';
+        return;
+      }
+      
+      // Verifica se os arquivos são imagens
+      const validFiles = newFiles.filter(file => file.type.startsWith('image/'));
+      
+      if (validFiles.length === 0) {
+        toast.warning('Por favor, selecione apenas arquivos de imagem');
+        e.target.value = '';
+        return;
+      }
+      
+      // Limita ao máximo de 2 imagens
+      const filesToAdd = validFiles.slice(0, 2 - files.length);
+      
+      setFiles(prev => [...prev, ...filesToAdd]);
+      
+      // Criar URLs de visualização
+      const urls = filesToAdd.map(file => URL.createObjectURL(file));
+      setPreviewUrls(prev => [...prev, ...urls]);
+      
+      toast.success(`${filesToAdd.length} imagem(ns) adicionada(s)`);
+      
+      // Limpa o input para permitir selecionar o mesmo arquivo novamente
+      e.target.value = '';
+    } catch (error) {
+      console.error('Erro no handleFileChange:', error);
+      toast.error('Erro ao processar as imagens');
     }
-    
-    // Verifica se os arquivos são imagens
-    const validFiles = newFiles.filter(file => file.type.startsWith('image/'));
-    
-    if (validFiles.length === 0) {
-      toast.warning('Por favor, selecione apenas arquivos de imagem');
-      e.target.value = ''; // Limpa o input
-      return;
-    }
-    
-    // Limita ao máximo de 2 imagens
-    const filesToAdd = validFiles.slice(0, 2 - files.length);
-    
-    setFiles(prev => [...prev, ...filesToAdd]);
-    
-    // Criar URLs de visualização
-    const urls = filesToAdd.map(file => URL.createObjectURL(file));
-    setPreviewUrls(prev => [...prev, ...urls]);
   };
 
   const handleBoletimChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -617,6 +653,10 @@ export function NovaDemanda() {
         cep: endereco.cep || '00000-000',
         numero: endereco.numero || '',
         referencia: endereco.referencia || '',
+        
+        // Coordenadas GPS (se disponível)
+        latitude: formData.latitude,
+        longitude: formData.longitude,
         
         // Outros campos
         boletim_ocorrencia: formData.boletim_ocorrencia || 'não',
@@ -898,7 +938,7 @@ export function NovaDemanda() {
                     required
                     value={formData.genero}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                   >
                     <option value="">Selecione...</option>
                     <option value="masculino">Masculino</option>
@@ -913,43 +953,225 @@ export function NovaDemanda() {
 
             {/* Endereço */}
             <div className="border-b border-gray-200 pb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Endereço do Problema</h3>
-                {temEnderecoRequerente && (
-                  <div className="flex items-center">
-                    <input
-                      id="usarEnderecoRequerente"
-                      name="usarEnderecoRequerente"
-                      type="checkbox"
-                      checked={usarEnderecoRequerente}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        setUsarEnderecoRequerente(isChecked);
+              <div className="mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Endereço do Problema</h3>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      if (!formData.requerente_cpf) {
+                        toast.error('Por favor, informe o CPF primeiro');
+                        return;
+                      }
+                      
+                      try {
+                        const { data: requerente, error } = await supabase
+                          .from('gbp_requerentes_demanda_rua')
+                          .select('*')
+                          .eq('cpf', formData.requerente_cpf.replace(/\D/g, ''))
+                          .eq('empresa_uid', empresa_uid)
+                          .single();
                         
-                        // Se estiver desmarcando o checkbox, limpa os campos de endereço
-                        if (!isChecked) {
+                        if (error) {
+                          toast.error('CPF não encontrado no cadastro');
+                          return;
+                        }
+                        
+                        if (requerente) {
                           setFormData(prev => ({
                             ...prev,
-                            logradouro: '',
-                            numero: '',
-                            bairro: '',
-                            cidade: '',
-                            uf: '',
-                            cep: '',
-                            referencia: ''
+                            cep: requerente.cep || '',
+                            logradouro: requerente.logradouro || '',
+                            numero: requerente.numero || '',
+                            bairro: requerente.bairro || '',
+                            cidade: requerente.cidade || '',
+                            uf: requerente.uf || '',
+                            referencia: requerente.referencia || ''
                           }));
+                          toast.success('Endereço do cadastro carregado!');
                         }
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <label htmlFor="usarEnderecoRequerente" className="ml-2 block text-sm text-gray-700">
-                      Usar mesmo endereço do requerente
-                    </label>
-                  </div>
-                )}
+                      } catch (error) {
+                        console.error('Erro ao buscar endereço:', error);
+                        toast.error('Erro ao buscar endereço do cadastro');
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 border border-primary-600 text-sm font-medium rounded-md text-primary-600 bg-white hover:bg-primary-50"
+                  >
+                    Usar Endereço do Cadastro
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (navigator.geolocation) {
+                        toast.info('Obtendo sua localização...');
+                        
+                        navigator.geolocation.getCurrentPosition(
+                          async (position) => {
+                            try {
+                              const { latitude, longitude, accuracy } = position.coords;
+                              
+                              console.log('📍 Localização obtida:', {
+                                latitude,
+                                longitude,
+                                accuracy: `${accuracy.toFixed(2)} metros`,
+                                timestamp: new Date(position.timestamp).toLocaleString()
+                              });
+                              
+                              toast.info(`Buscando endereço...`);
+                              
+                              // Usando BigDataCloud API (gratuita, sem CORS, sem API key necessária)
+                              const response = await fetch(
+                                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=pt`
+                              );
+                              
+                              if (!response.ok) {
+                                throw new Error('Erro ao buscar endereço');
+                              }
+                              
+                              const data = await response.json();
+                              
+                              console.log('🗺️ Dados completos do endereço:', JSON.stringify(data, null, 2));
+                              
+                              // Extrai dados do endereço usando a estrutura correta da BigDataCloud
+                              // localityInfo.administrative tem níveis de 0 (país) até 8+ (rua)
+                              
+                              // Rua/Logradouro - geralmente nos níveis mais específicos (8, 7, 6)
+                              const rua = data.localityInfo?.administrative?.[8]?.name || 
+                                         data.localityInfo?.administrative?.[7]?.name || 
+                                         data.localityInfo?.administrative?.[6]?.name ||
+                                         data.locality || '';
+                              
+                              // Bairro - geralmente nível 5 ou 4 (não pegar nível 3 que é região metropolitana)
+                              const bairro = data.localityInfo?.administrative?.[5]?.name || 
+                                            data.localityInfo?.administrative?.[4]?.name || 
+                                            data.locality || '';
+                              
+                              // Cidade - geralmente nível 2 ou 3
+                              const cidade = data.city || 
+                                           data.localityInfo?.administrative?.[2]?.name || 
+                                           data.locality || '';
+                              
+                              // Estado - código de 2 letras
+                              const estado = data.principalSubdivisionCode?.replace('BR-', '').substring(0, 2) || '';
+                              
+                              console.log('✅ Dados extraídos:', { rua, bairro, cidade, estado });
+                              
+                              // Preenche o formulário com os dados obtidos
+                              setFormData(prev => ({
+                                ...prev,
+                                latitude: latitude.toString(),
+                                longitude: longitude.toString(),
+                                logradouro: rua,
+                                bairro: bairro,
+                                cidade: cidade,
+                                uf: estado,
+                                cep: data.postcode || '',
+                                referencia: prev.referencia
+                              }));
+                              
+                              toast.success('Localização e endereço carregados!');
+                              toast.info('Verifique e complete os campos conforme necessário.');
+                            } catch (error) {
+                              console.error('❌ Erro ao buscar endereço:', error);
+                              
+                              // Se falhar, ao menos salva as coordenadas
+                              const { latitude, longitude } = position.coords;
+                              setFormData(prev => ({
+                                ...prev,
+                                latitude: latitude.toString(),
+                                longitude: longitude.toString()
+                              }));
+                              
+                              toast.warning('Localização GPS obtida! Preencha o endereço manualmente.');
+                            }
+                          },
+                          (error) => {
+                            console.log('Erro ao obter localização:', error);
+                            if (error.code === 1) {
+                              toast.error('Permissão de localização negada.');
+                            } else if (error.code === 2) {
+                              toast.error('Localização indisponível.');
+                            } else if (error.code === 3) {
+                              toast.error('Tempo esgotado ao obter localização.');
+                            } else {
+                              toast.error('Erro ao obter localização.');
+                            }
+                          },
+                          {
+                            enableHighAccuracy: true,
+                            timeout: 5000,
+                            maximumAge: 0
+                          }
+                        );
+                      } else {
+                        toast.error('Geolocalização não é suportada pelo seu navegador');
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                  >
+                    Minha Localização
+                  </button>
+                </div>
               </div>
-              <div className={`grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6 ${usarEnderecoRequerente ? 'opacity-50' : ''}`}>
-                <div className="sm:col-span-2">
+              <div className="hidden">
+                <div className="flex items-center">
+                  <input id="usarEnderecoRequerente"
+                        name="usarEnderecoRequerente"
+                        type="checkbox"
+                        checked={usarEnderecoRequerente}
+                        onChange={async (e) => {
+                          const isChecked = e.target.checked;
+                          setUsarEnderecoRequerente(isChecked);
+                          
+                          
+                          if (isChecked && formData.requerente_cpf) {
+                            // Buscar dados do requerente no banco
+                            try {
+                              const { data: requerente } = await supabase
+                                .from('gbp_requerentes_demanda_rua')
+                                .select('*')
+                                .eq('cpf', formData.requerente_cpf.replace(/\D/g, ''))
+                                .eq('empresa_uid', empresa_uid)
+                                .single();
+                              
+                              if (requerente) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  cep: requerente.cep || '',
+                                  logradouro: requerente.logradouro || '',
+                                  numero: requerente.numero || '',
+                                  bairro: requerente.bairro || '',
+                                  cidade: requerente.cidade || '',
+                                  uf: requerente.uf || '',
+                                  referencia: requerente.referencia || ''
+                                }));
+                              }
+                            } catch (error) {
+                              console.error('Erro ao buscar endereço do requerente:', error);
+                            }
+                          } else if (!isChecked) {
+                            // Limpa os campos quando desmarcar
+                            setFormData(prev => ({
+                              ...prev,
+                              logradouro: '',
+                              numero: '',
+                              bairro: '',
+                              cidade: '',
+                              uf: '',
+                              cep: '',
+                              referencia: ''
+                            }));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <label htmlFor="usarEnderecoRequerente" className="ml-2 block text-sm text-gray-700">
+                        Usar mesmo endereço do cadastro
+                      </label>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-12">
+                <div className="sm:col-span-4">
                   <label htmlFor="cep" className="block text-sm font-medium text-gray-700">
                     CEP *
                   </label>
@@ -968,15 +1190,14 @@ export function NovaDemanda() {
                           buscarEnderecoPorCep(cepLimpo);
                         }
                       }}
-                      disabled={usarEnderecoRequerente}
-                      className={`flex-1 min-w-0 block w-full px-3 py-2 rounded-md border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} border-gray-300 shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                      className={`flex-1 min-w-0 block w-full px-3 py-2 rounded-md border bg-white border-gray-300 shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
                       maxLength={9}
                       placeholder="00000-000"
                     />
                   </div>
                 </div>
 
-                <div className="sm:col-span-4">
+                <div className="sm:col-span-6">
                   <label htmlFor="logradouro" className="block text-sm font-medium text-gray-700">
                     Logradouro *
                   </label>
@@ -987,77 +1208,38 @@ export function NovaDemanda() {
                     required
                     value={formData.logradouro}
                     onChange={handleInputChange}
-                    disabled={usarEnderecoRequerente}
-                    className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className={`mt-1 block w-full px-3 py-2 rounded-md border bg-white border-gray-300 shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    placeholder="Nome da rua"
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 sm:col-span-6">
-                  <div className="col-span-1">
-                    <label htmlFor="numero" className="block text-sm font-medium text-gray-700">
-                      Nº *
-                    </label>
-                    <input
-                      type="text"
-                      name="numero"
-                      id="numero"
-                      value={formData.numero}
-                      onChange={handleInputChange}
-                      disabled={usarEnderecoRequerente}
-                      className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
-                    />
-                  </div>
-
-                  <div className="col-span-2">
-                    <label htmlFor="bairro" className="block text-sm font-medium text-gray-700">
-                      Bairro *
-                    </label>
-                    <input
-                      type="text"
-                      name="bairro"
-                      id="bairro"
-                      required
-                      value={formData.bairro}
-                      onChange={handleInputChange}
-                      disabled={usarEnderecoRequerente}
-                      className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
-                    />
-                  </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="numero" className="block text-sm font-medium text-gray-700">
+                    Nº *
+                  </label>
+                  <input
+                    type="text"
+                    name="numero"
+                    id="numero"
+                    value={formData.numero}
+                    onChange={handleInputChange}
+                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                  />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 sm:col-span-6">
-                  <div className="col-span-2">
-                    <label htmlFor="cidade" className="block text-sm font-medium text-gray-700">
-                      Cidade *
-                    </label>
-                    <input
-                      type="text"
-                      name="cidade"
-                      id="cidade"
-                      required
-                      value={formData.cidade}
-                      onChange={handleInputChange}
-                      disabled={usarEnderecoRequerente}
-                      className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
-                    />
-                  </div>
-
-                  <div className="col-span-1">
-                    <label htmlFor="uf" className="block text-sm font-medium text-gray-700">
-                      UF *
-                    </label>
-                    <input
-                      type="text"
-                      name="uf"
-                      id="uf"
-                      required
-                      maxLength={2}
-                      value={formData.uf}
-                      onChange={handleInputChange}
-                      disabled={usarEnderecoRequerente}
-                      className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm uppercase`}
-                    />
-                  </div>
+                <div className="sm:col-span-6">
+                  <label htmlFor="bairro" className="block text-sm font-medium text-gray-700">
+                    Bairro *
+                  </label>
+                  <input
+                    type="text"
+                    name="bairro"
+                    id="bairro"
+                    required
+                    value={formData.bairro}
+                    onChange={handleInputChange}
+                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                  />
                 </div>
 
                 <div className="sm:col-span-6">
@@ -1070,16 +1252,46 @@ export function NovaDemanda() {
                     id="referencia"
                     value={formData.referencia}
                     onChange={handleInputChange}
-                    disabled={usarEnderecoRequerente}
-                    className={`mt-1 block w-full border ${usarEnderecoRequerente ? 'bg-gray-100' : 'bg-white'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
                     placeholder="Ex: Próximo ao mercado, em frente à praça, etc."
+                  />
+                </div>
+
+                <div className="sm:col-span-8">
+                  <label htmlFor="cidade" className="block text-sm font-medium text-gray-700">
+                    Cidade *
+                  </label>
+                  <input
+                    type="text"
+                    name="cidade"
+                    id="cidade"
+                    required
+                    value={formData.cidade}
+                    onChange={handleInputChange}
+                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                  />
+                </div>
+
+                <div className="sm:col-span-4">
+                  <label htmlFor="uf" className="block text-sm font-medium text-gray-700">
+                    UF *
+                  </label>
+                  <input
+                    type="text"
+                    name="uf"
+                    id="uf"
+                    required
+                    maxLength={2}
+                    value={formData.uf}
+                    onChange={handleInputChange}
+                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm uppercase`}
                   />
                 </div>
               </div>
             </div>
 
             {/* Detalhes da Demanda */}
-            <div className="border-b border-gray-200 pb-6">
+            <div className="border-b border-gray-200 pb-6 mt-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Detalhes da Demanda</h3>
               
               <div className="grid grid-cols-1 gap-y-4 gap-x-6 sm:grid-cols-6">
@@ -1094,7 +1306,7 @@ export function NovaDemanda() {
                     value={formData.tipo_de_demanda}
                     onChange={handleInputChange}
                     disabled={loadingTipos}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                   >
                     <option value="">
                       {loadingTipos ? 'Carregando tipos...' : 'Selecione o tipo de demanda...'}
@@ -1146,7 +1358,7 @@ export function NovaDemanda() {
                     required
                     value={formData.nivel_de_urgencia}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                   >
                     <option value="baixa">Baixa</option>
                     <option value="média">Média</option>
@@ -1164,7 +1376,7 @@ export function NovaDemanda() {
                     required
                     value={formData.boletim_ocorrencia}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
                   >
                     <option value="não">Não</option>
                     <option value="sim">Sim</option>
@@ -1202,7 +1414,7 @@ export function NovaDemanda() {
                         </div>
                       ) : (
                         <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                          <div className="space-y-1 text-center">
+                          <div className="space-y-3 text-center w-full">
                             <svg
                               className="mx-auto h-12 w-12 text-gray-400"
                               stroke="currentColor"
@@ -1217,10 +1429,10 @@ export function NovaDemanda() {
                                 strokeLinejoin="round"
                               />
                             </svg>
-                            <div className="flex text-sm text-gray-600">
+                            <div className="flex flex-row gap-2 justify-center items-center">
                               <label
                                 htmlFor="boletim_arquivo"
-                                className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary-500"
+                                className="cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50"
                               >
                                 <span>Enviar arquivo</span>
                                 <input
@@ -1232,7 +1444,7 @@ export function NovaDemanda() {
                                   onChange={handleBoletimChange}
                                 />
                               </label>
-                              <p className="pl-1">ou arraste e solte</p>
+                              
                             </div>
                             <p className="text-xs text-gray-500">PDF, JPG ou PNG (máx. 5MB)</p>
                           </div>
@@ -1275,66 +1487,84 @@ export function NovaDemanda() {
                     />
                   </div>
                 </div>
-
-                <div className="sm:col-span-6">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Fotos do Problema <span className="text-red-500">*</span>
-                    <span className="text-xs font-normal text-gray-500 ml-1">
-                      (Mín. 1, Máx. 2 imagens)
-                    </span>
-                  </label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                    <div className="space-y-1 text-center">
-                      <div className="flex text-sm text-gray-600">
-                        <label
-                          htmlFor="file-upload"
-                          className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary-500"
-                        >
-                          <span>Enviar arquivos</span>
-                          <input
-                            id="file-upload"
-                            name="file-upload"
-                            type="file"
-                            className="sr-only"
-                            multiple
-                            accept="image/*"
-                            capture="environment"
-                            onChange={handleFileChange}
-                          />
-                        </label>
-                        <p className="pl-1">ou arraste e solte</p>
-                      </div>
-                      <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
-                    </div>
-                  </div>
-
-                  {/* Pré-visualização das imagens */}
-                  {previewUrls.length > 0 && (
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {previewUrls.map((url, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={url}
-                            alt={`Pré-visualização ${index + 1}`}
-                            className="h-24 w-full object-cover rounded-md"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeFile(index)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
 
+            {/* Fotos do Problema */}
+            <div className="border-b border-gray-200 pb-6 mt-6">
+              <label className="block text-lg font-medium text-gray-900 mb-4">
+                Fotos do Problema <span className="text-red-500">*</span>
+                <span className="text-xs font-normal text-gray-500 ml-1">
+                  (Mín. 1, Máx. 2 imagens)
+                </span>
+              </label>
+              
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                <div className="space-y-3 text-center w-full">
+                  <div className="flex flex-row gap-2 justify-center items-center">
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer bg-primary-600 text-white px-6 py-3 rounded-md font-medium hover:bg-primary-700 transition-colors whitespace-nowrap"
+                    >
+                      <span>Escolher da Galeria</span>
+                      <input
+                        id="file-upload"
+                        name="file-upload"
+                        type="file"
+                        className="sr-only"
+                        multiple
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </label>
+                    <label
+                      htmlFor="camera-upload"
+                      className="md:hidden cursor-pointer bg-primary-600 text-white px-6 py-3 rounded-md font-medium hover:bg-primary-700 transition-colors whitespace-nowrap"
+                    >
+                      <span>Tirar Foto</span>
+                      <input
+                        id="camera-upload"
+                        name="camera-upload"
+                        type="file"
+                        className="sr-only"
+                        multiple
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFileChange}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                </div>
+              </div>
+
+              {/* Pré-visualização das imagens */}
+              {previewUrls.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {previewUrls.map((url, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={url}
+                        alt={`Pré-visualização ${index + 1}`}
+                        className="h-24 w-full object-cover rounded-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Termos de uso */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="mt-6">
               <div className="flex items-start">
                 <div className="flex items-center h-5">
                   <input

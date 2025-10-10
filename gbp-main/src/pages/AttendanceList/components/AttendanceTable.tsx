@@ -46,9 +46,10 @@ const statusConfig = {
 interface AttendanceTableProps {
   atendimentos: any[];
   isLoading?: boolean;
+  calculateElapsedTime?: (dataAtendimento: string) => string;
 }
 
-export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceTableProps) {
+export function AttendanceTable({ atendimentos, isLoading = false, calculateElapsedTime }: AttendanceTableProps) {
   const navigate = useNavigate();
   const company = useCompanyStore((state) => state.company);
   const { updateAtendimentoStatus } = useAtendimentos();
@@ -252,6 +253,15 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
     });
   };
 
+  // Função para contar quantos atendimentos um eleitor tem
+  const getEleitorAtendimentosCount = (eleitorName: string): number => {
+    if (!eleitorName) return 0;
+    return atendimentos.filter(atd => {
+      const name = atd.eleitor || atd.gbp_eleitores?.nome;
+      return name?.toLowerCase() === eleitorName.toLowerCase();
+    }).length;
+  };
+
   const formatName = (fullName: string | null | undefined): string => {
     if (!fullName || fullName.trim() === '') return '-';
     
@@ -320,9 +330,29 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
 
   return (
     <>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-visible">
+        {/* Header com contagem total */}
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                <span className="sm:hidden">Lista</span>
+                <span className="hidden sm:inline">Lista de Atendimentos</span>
+              </h3>
+              <span className="inline-flex items-center px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 whitespace-nowrap">
+                {atendimentos.length} {atendimentos.length === 1 ? 'atendimento' : 'atendimentos'}
+              </span>
+            </div>
+            {atendimentos.length > itemsPerPage && (
+              <span className="hidden sm:inline text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {startIndex + 1}-{Math.min(endIndex, atendimentos.length)} de {atendimentos.length}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* View para Desktop */}
-        <div className="hidden md:block overflow-x-auto">
+        <div className={`hidden md:block overflow-x-auto overflow-y-visible ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
@@ -334,6 +364,9 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
                 </th>
                 <th scope="col" className="w-1/6 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Tempo
                 </th>
                 <th scope="col" className="w-20 relative px-6 py-3">
                   <span className="sr-only">Ações</span>
@@ -350,17 +383,30 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
                     className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (atendimento.eleitor_uid) {
-                            navigate(`/app/eleitores/${atendimento.eleitor_uid}`);
-                          }
-                        }}
-                        className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer min-w-[100px]"
-                        title={getEleitorName(atendimento)}
-                      >
-                        {formatName(getEleitorName(atendimento))}
+                      <div className="flex items-center gap-2">
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (atendimento.eleitor_uid) {
+                              navigate(`/app/eleitores/${atendimento.eleitor_uid}`);
+                            }
+                          }}
+                          className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer min-w-[100px]"
+                          title={getEleitorName(atendimento)}
+                        >
+                          {formatName(getEleitorName(atendimento))}
+                        </div>
+                        {(() => {
+                          const count = getEleitorAtendimentosCount(getEleitorName(atendimento));
+                          return (
+                            <span 
+                              className="inline-flex items-center justify-center min-w-[24px] h-5 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                              title={`${count} atendimento${count !== 1 ? 's' : ''}`}
+                            >
+                              {count}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -414,52 +460,62 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="relative inline-block text-left">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {atendimento.data_atendimento && calculateElapsedTime 
+                            ? calculateElapsedTime(atendimento.data_atendimento)
+                            : '-'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium overflow-visible">
+                      <div className="relative inline-block">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenActionMenu(openActionMenu === atendimento.uid ? null : atendimento.uid);
                           }}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 inline-flex items-center justify-center transition-colors duration-200"
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                         >
-                          <MoreVertical className="w-5 h-5" />
+                          <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </button>
-                        
+
                         {openActionMenu === atendimento.uid && (
-                          <div className="absolute right-0 z-10 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
-                            <div className="py-1">
-                              <button
-                                onClick={(e) => {
-                                  handlePrint(e, atendimento);
-                                  setOpenActionMenu(null);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
-                              >
-                                <Printer className="w-4 h-4" />
-                                <span>Imprimir</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  handleShare(e, atendimento);
-                                  setOpenActionMenu(null);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
-                              >
-                                <Share2 className="w-4 h-4" />
-                                <span>Compartilhar</span>
-                              </button>
+                          <div className="absolute right-0 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                            <button
+                              onClick={(e) => {
+                                handlePrint(e, atendimento);
+                                setOpenActionMenu(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
+                            >
+                              <Printer className="w-4 h-4" />
+                              <span>Imprimir</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                handleShare(e, atendimento);
+                                setOpenActionMenu(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                            >
+                              <Share2 className="w-4 h-4" />
+                              <span>Compartilhar</span>
+                            </button>
+                            {user?.nivel_acesso === 'admin' && (
                               <button
                                 onClick={(e) => {
                                   handleDelete(e, atendimento);
                                   setOpenActionMenu(null);
                                 }}
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-b-lg"
                               >
                                 <Trash2 className="w-4 h-4" />
                                 <span>Excluir</span>
                               </button>
-                            </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -472,8 +528,8 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
         </div>
 
         {/* View para Mobile */}
-        <div className="md:hidden">
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+        <div className={`md:hidden overflow-visible ${atendimentos.length <= 3 ? 'min-h-[300px]' : ''}`}>
+          <div className={`divide-y divide-gray-200 dark:divide-gray-700 overflow-visible ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
             {currentItems.map((atendimento) => {
               const StatusIcon = statusConfig[atendimento.status as AtendimentoStatus]?.icon || AlertCircle;
               return (
@@ -483,8 +539,21 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
                   onClick={() => handleRowClick(atendimento)}
                 >
                   <div className="flex justify-between items-start">
-                    <div className="text-base font-medium text-gray-900 dark:text-white">
-                      {formatName(getEleitorName(atendimento))}
+                    <div className="flex items-center gap-2">
+                      <div className="text-base font-medium text-gray-900 dark:text-white">
+                        {formatName(getEleitorName(atendimento))}
+                      </div>
+                      {(() => {
+                        const count = getEleitorAtendimentosCount(getEleitorName(atendimento));
+                        return (
+                          <span 
+                            className="inline-flex items-center justify-center min-w-[24px] h-5 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                            title={`${count} atendimento${count !== 1 ? 's' : ''}`}
+                          >
+                            {count}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="relative">
                       <button
@@ -532,55 +601,61 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
                       )}
                     </div>
                   </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                  <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
                     <p><span className="font-medium">Categoria:</span> {atendimento.gbp_categorias?.nome || 'N/A'}</p>
+                    {atendimento.data_atendimento && calculateElapsedTime && (
+                      <p className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span className="font-medium">Há:</span> {calculateElapsedTime(atendimento.data_atendimento)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex justify-end">
-                    <div className="relative inline-block text-left">
+                    <div className="relative">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenActionMenu(openActionMenu === atendimento.uid ? null : atendimento.uid);
                         }}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 inline-flex items-center justify-center transition-colors duration-200"
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                       >
-                        <MoreVertical className="h-5 w-5" />
+                        <MoreVertical className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                       </button>
-                      
+
                       {openActionMenu === atendimento.uid && (
-                        <div className="absolute right-0 z-10 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
-                          <div className="py-1">
-                            <button
-                              onClick={(e) => {
-                                handlePrint(e, atendimento);
-                                setOpenActionMenu(null);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
-                            >
-                              <Printer className="w-4 h-4" />
-                              <span>Imprimir</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                handleShare(e, atendimento);
-                                setOpenActionMenu(null);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
-                            >
-                              <Share2 className="w-4 h-4" />
-                              <span>Compartilhar</span>
-                            </button>
+                        <div className="absolute right-0 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                          <button
+                            onClick={(e) => {
+                              handlePrint(e, atendimento);
+                              setOpenActionMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span>Imprimir</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              handleShare(e, atendimento);
+                              setOpenActionMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                          >
+                            <Share2 className="w-4 h-4" />
+                            <span>Compartilhar</span>
+                          </button>
+                          {user?.nivel_acesso === 'admin' && (
                             <button
                               onClick={(e) => {
                                 handleDelete(e, atendimento);
                                 setOpenActionMenu(null);
                               }}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-b-lg"
                             >
                               <Trash2 className="w-4 h-4" />
                               <span>Excluir</span>
                             </button>
-                          </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -776,3 +851,11 @@ export function AttendanceTable({ atendimentos, isLoading = false }: AttendanceT
     </>
   );
 }
+
+
+
+
+
+
+
+  MoreVertical

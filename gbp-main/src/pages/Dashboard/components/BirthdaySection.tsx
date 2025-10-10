@@ -106,19 +106,19 @@ export function BirthdaySection({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-3 sm:gap-2">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <Gift className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-medium">
+              <h2 className="text-lg font-medium dark:text-white">
                 Aniversariantes
-                <span className="ml-2 text-sm text-gray-500">
+                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                   ({aniversariantes.length})
                 </span>
               </h2>
             </div>
-            <p className="text-sm text-gray-600 sm:block hidden">
+            <p className="text-sm text-gray-600 dark:text-gray-400 sm:block hidden">
               Status do envio de mensagens
             </p>
           </div>
@@ -129,7 +129,7 @@ export function BirthdaySection({
               className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md ${
                 periodoSelecionado === 'dia'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               Hoje
@@ -139,7 +139,7 @@ export function BirthdaySection({
               className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md ${
                 periodoSelecionado === 'semana'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               Semana
@@ -149,7 +149,7 @@ export function BirthdaySection({
               className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md ${
                 periodoSelecionado === 'mes'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               Mês
@@ -157,9 +157,9 @@ export function BirthdaySection({
           </div>
         </div>
 
-        <div className="px-4 py-2 border-t border-b border-gray-200 bg-gray-50">
+        <div className="px-4 py-2 border-t border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
           <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
                 <span>
@@ -179,7 +179,7 @@ export function BirthdaySection({
                 </span>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500 border-l border-gray-200 pl-4">
+            <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 border-l border-gray-200 dark:border-gray-600 pl-4">
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                 <span>{porcentagens.entregues}%</span>
@@ -207,15 +207,15 @@ export function BirthdaySection({
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
+                  <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">
                       <span className="hidden sm:inline">Nascimento</span>
                       <span className="sm:hidden">Data</span>
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Nome</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">WhatsApp</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">Nome</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">WhatsApp</th>
                     <th 
-                      className="px-4 py-3 text-left text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 select-none"
+                      className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none"
                       onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                       title="Clique para ordenar"
                     >
@@ -228,23 +228,23 @@ export function BirthdaySection({
                         />
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Ações</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {paginatedData.map((pessoa) => (
                     <tr 
                       key={pessoa.uid}
                       className={`${
                         pessoa.mensagem_entregue?.toLowerCase() === 'sim'
-                          ? 'bg-green-50 hover:bg-green-100'
-                          : 'bg-red-50 hover:bg-red-100'
+                          ? 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30'
+                          : 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
                       } transition-colors`}
                     >
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm whitespace-nowrap dark:text-gray-300">
                         {formatDate(pessoa.nascimento)}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium">
+                      <td className="px-4 py-3 text-sm font-medium dark:text-gray-200">
                         <Link
                           to={`/app/eleitores/${pessoa.eleitor_uid}`}
                           className={`truncate max-w-[150px] sm:max-w-none hover:underline ${
@@ -256,7 +256,7 @@ export function BirthdaySection({
                           {formatNome(pessoa.eleitor_nome)}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm dark:text-gray-300">
                         {pessoa.eleitor_whatsapp ? (
                           <a
                             href={formatWhatsAppLink(pessoa.eleitor_whatsapp)}
@@ -274,7 +274,7 @@ export function BirthdaySection({
                           '-'
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm dark:text-gray-300">
                         <div className="flex items-center gap-2">
                           <div className={`w-2.5 h-2.5 rounded-full ${
                             pessoa.mensagem_entregue?.toLowerCase() === 'sim'
@@ -283,8 +283,8 @@ export function BirthdaySection({
                           }`}></div>
                           <span className={`${
                             pessoa.mensagem_entregue?.toLowerCase() === 'sim'
-                              ? 'text-green-700'
-                              : 'text-red-700'
+                              ? 'text-green-700 dark:text-green-400'
+                              : 'text-red-700 dark:text-red-400'
                           }`}>
                             {pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                               ? 'Sim'
@@ -292,7 +292,7 @@ export function BirthdaySection({
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm dark:text-gray-300">
                         <button
                           type="button"
                           onClick={() => {}}
@@ -312,9 +312,9 @@ export function BirthdaySection({
             </div>
 
             {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-gray-200 gap-2">
+              <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 gap-2">
                 <div className="flex items-center gap-2 order-2 sm:order-1">
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
                     Página {currentPage} de {totalPages}
                   </span>
                 </div>
@@ -322,14 +322,14 @@ export function BirthdaySection({
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50"
+                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-300"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50"
+                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-300"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>

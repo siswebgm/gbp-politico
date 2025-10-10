@@ -95,7 +95,7 @@ export function NovoEleitor() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/eleitores')}
@@ -127,7 +127,7 @@ export function NovoEleitor() {
                     onChange={handleCpfChange}
                     placeholder="000.000.000-00"
                     maxLength={14}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   />
                   {isCheckingCpf && (
                     <div className="absolute right-3 top-3">
@@ -147,7 +147,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('nome')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
                 {errors.nome && (
                   <p className="mt-1 text-sm text-red-600">{errors.nome.message}</p>
@@ -161,7 +161,7 @@ export function NovoEleitor() {
                 <input
                   type="date"
                   {...register('data_nascimento')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
                 {errors.data_nascimento && (
                   <p className="mt-1 text-sm text-red-600">{errors.data_nascimento.message}</p>
@@ -174,7 +174,7 @@ export function NovoEleitor() {
                 </label>
                 <select
                   {...register('genero')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                   <option value="">Selecione...</option>
                   <option value="MASCULINO">Masculino</option>
@@ -200,7 +200,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('whatsapp')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
                 {errors.whatsapp && (
                   <p className="mt-1 text-sm text-red-600">{errors.whatsapp.message}</p>
@@ -214,7 +214,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('telefone')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
             </div>
@@ -235,7 +235,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('cep')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -246,7 +246,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('logradouro')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -257,7 +257,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('cidade')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -268,7 +268,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('bairro')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -279,7 +279,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('numero')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -290,7 +290,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('complemento')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
             </div>
@@ -311,7 +311,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('titulo_eleitor')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
                 {errors.titulo_eleitor && (
                   <p className="mt-1 text-sm text-red-600">{errors.titulo_eleitor.message}</p>
@@ -325,7 +325,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('zona')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
 
@@ -336,7 +336,7 @@ export function NovoEleitor() {
                 <input
                   type="text"
                   {...register('secao')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
             </div>
@@ -356,7 +356,7 @@ export function NovoEleitor() {
                 </label>
                 <select
                   {...register('categoria_id')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                   <option value="">Selecione...</option>
                   {/* TODO: Adicionar categorias do banco */}
@@ -369,7 +369,7 @@ export function NovoEleitor() {
                 </label>
                 <select
                   {...register('indicacao')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   disabled={isLoadingIndicados}
                 >
                   <option value="">Selecione um indicado...</option>

@@ -3,21 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useDocumentCounts } from '../../../hooks/useDocumentCounts';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useCompanyStore } from '../../../store/useCompanyStore';
-import { useEffect, useState } from 'react';
-import { supabaseClient } from '../../../lib/supabase';
-
-interface EmpresaComPlano {
-  uid: string;
-  nome: string;
-  plano?: string;
-  // Outras propriedades necessárias
-}
 
 export function DocumentCards() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { company } = useCompanyStore();
-  const [empresaComPlano, setEmpresaComPlano] = useState<EmpresaComPlano | null>(null);
   const { 
     oficiosCount, 
     projetosLeiCount, 
@@ -27,30 +17,6 @@ export function DocumentCards() {
     isLoading 
   } = useDocumentCounts();
   
-  // Carrega os dados completos da empresa incluindo o plano
-  useEffect(() => {
-    async function carregarDadosEmpresa() {
-      if (!company?.uid) return;
-      
-      try {
-        const { data, error } = await supabaseClient
-          .from('gbp_empresas')
-          .select('*')
-          .eq('uid', company.uid)
-          .single();
-          
-        if (error) throw error;
-        
-        console.log('Dados completos da empresa:', data);
-        setEmpresaComPlano(data);
-      } catch (error) {
-        console.error('Erro ao carregar dados da empresa:', error);
-      }
-    }
-    
-    carregarDadosEmpresa();
-  }, [company?.uid]);
-  
   // Planos que têm acesso ao módulo de Demandas Ruas
   const planosComAcesso = [
     'Inter 2.0', 
@@ -59,13 +25,10 @@ export function DocumentCards() {
     'Básico 1.0'
   ];
   
-  // Verifica se o plano atual tem acesso ao módulo
-  const temAcessoDemandasRuas = empresaComPlano?.plano ? planosComAcesso.includes(empresaComPlano.plano) : false;
-  
-  // Log para depuração
-  console.log('Dados da empresa com plano:', empresaComPlano);
-  console.log('Plano atual:', empresaComPlano?.plano);
-  console.log('Tem acesso a Demandas Ruas?', temAcessoDemandasRuas);
+  // Verifica se o plano atual tem acesso ao módulo usando o plano do store
+  const temAcessoDemandasRuas = company?.plano 
+    ? planosComAcesso.includes(company.plano) 
+    : false;
 
   const cards = [
     {
@@ -139,9 +102,13 @@ export function DocumentCards() {
           if (['Projetos de Lei', 'Requerimentos', 'Emendas Parlamentares'].includes(card.title)) {
             return user?.nivel_acesso === 'admin';
           }
-          // Filtra por plano para o card de Demandas Ruas
+          // Filtra por plano e nível de acesso para o card de Demandas Ruas
           if (card.requerPlanoEspecifico) {
-            return temAcessoDemandasRuas;
+            const niveisPermitidos = ['admin', 'coordenador', 'analista'];
+            const temNivelAcesso = user?.nivel_acesso && niveisPermitidos.includes(user.nivel_acesso);
+            
+            // Valida nível de acesso E plano (ambos disponíveis instantaneamente no store)
+            return temNivelAcesso && temAcessoDemandasRuas;
           }
           return true;
         })

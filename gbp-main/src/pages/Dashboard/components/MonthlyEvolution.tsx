@@ -50,8 +50,8 @@ export function MonthlyEvolution({ data }: MonthlyEvolutionProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg p-4 shadow">
-      <h3 className="text-lg font-medium text-gray-700 mb-4">Evolução Mensal</h3>
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+      <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-4">Evolução Mensal</h3>
       <div className="h-[300px]">
         <Line options={options} data={data} />
       </div>

@@ -1,0 +1,121 @@
+/* CSS específico para página pública de consulta de demandas */
+/* FORÇA TOTAL scroll em toda a hierarquia - Sobrescreve TUDO */
+
+/* Reset SUPER agressivo dos estilos globais que bloqueiam scroll */
+html {
+  overflow: scroll !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100vh !important;
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+body {
+  overflow: scroll !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100vh !important;
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  -webkit-overflow-scrolling: touch !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+#root {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100vh !important;
+  position: relative !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Container da página de consulta */
+.consulta-demandas-page {
+  width: 100%;
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
+  position: relative;
+  padding-bottom: 4rem;
+}
+
+/* Smooth scroll para melhor experiência */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Garante que elementos não bloqueiem o scroll */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile específico */
+@media (max-width: 768px) {
+  html, body {
+    overflow: scroll !important;
+    overflow-y: scroll !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    position: relative !important;
+  }
+  
+  body {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  .consulta-demandas-page {
+    padding-bottom: 10rem !important;
+    min-height: calc(100vh + 10rem) !important;
+  }
+  
+  /* Garante espaço extra no final para mobile */
+  .consulta-demandas-page > div:last-child {
+    padding-bottom: 8rem !important;
+  }
+}
+
+/* Garante que o último elemento tenha espaço suficiente */
+.consulta-demandas-page > div:last-child {
+  margin-bottom: 2rem;
+}
+
+/* Remove qualquer limitação de altura nos containers */
+.consulta-demandas-page * {
+  max-height: none !important;
+}
+
+/* Extra: garante que todo o conteúdo seja visível */
+.scroll-spacer {
+  display: block !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Força height dinâmica no mobile */
+@media (max-width: 768px) {
+  .scroll-spacer {
+    height: 15vh !important;
+    min-height: 120px !important;
+    padding-bottom: 15vh !important;
+  }
+}

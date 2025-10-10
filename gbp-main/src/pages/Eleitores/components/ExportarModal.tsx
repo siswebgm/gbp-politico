@@ -389,20 +389,20 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds }: Ex
           <div className="mt-6 space-y-6 max-h-[calc(100vh-280px)] overflow-y-auto pr-2 custom-scrollbar">
             {/* Formato de exportação */}
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Formato de exportação</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Formato de exportação</h3>
               <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setFormato('xlsx')}
                   className={`flex flex-col items-center justify-center p-3 border rounded-lg transition-colors ${
                     formato === 'xlsx'
-                      ? 'border-blue-600 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-200'
                   }`}
                 >
                   <Table className="w-5 h-5 mb-1" />
                   <span className="text-xs font-medium">XLSX</span>
-                  <span className="text-[10px] text-gray-500">Planilha do Excel</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400">Planilha do Excel</span>
                 </button>
 
                 <button
@@ -410,13 +410,13 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds }: Ex
                   onClick={() => setFormato('csv')}
                   className={`flex flex-col items-center justify-center p-3 border rounded-lg transition-colors ${
                     formato === 'csv'
-                      ? 'border-blue-600 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-200'
                   }`}
                 >
                   <FileText className="w-5 h-5 mb-1" />
                   <span className="text-xs font-medium">CSV</span>
-                  <span className="text-[10px] text-gray-500">Texto separado por vírgulas</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400">Texto separado por vírgulas</span>
                 </button>
 
                 <button
@@ -424,13 +424,13 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds }: Ex
                   onClick={() => setFormato('pdf')}
                   className={`flex flex-col items-center justify-center p-3 border rounded-lg transition-colors ${
                     formato === 'pdf'
-                      ? 'border-blue-600 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-200'
                   }`}
                 >
                   <File className="w-5 h-5 mb-1" />
                   <span className="text-xs font-medium">PDF</span>
-                  <span className="text-[10px] text-gray-500">Documento portátil</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400">Documento portátil</span>
                 </button>
               </div>
             </div>

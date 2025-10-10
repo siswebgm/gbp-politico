@@ -49,7 +49,6 @@ export function DemandasRuas() {
   const [tipoDemandaFilter, setTipoDemandaFilter] = useState<string>('todos');
   const [cidadeFilter, setCidadeFilter] = useState<string>('todos');
   const [bairroFilter, setBairroFilter] = useState<string>('todos');
-  const [showFavoritos, setShowFavoritos] = useState(false);
   const [nivelFavoritoFilter, setNivelFavoritoFilter] = useState<string>('todos');
   const [respostaFilter, setRespostaFilter] = useState<string>('todos'); // novo filtro
   const [showArquivadas, setShowArquivadas] = useState(false); // mostrar arquivadas
@@ -192,9 +191,9 @@ export function DemandasRuas() {
     const matchesStatus = statusFilter === 'todos' || demanda.status === statusFilter;
     const matchesUrgencia = urgenciaFilter === 'todos' || demanda.nivel_de_urgencia === urgenciaFilter;
     const matchesDate = filterByDate(demanda.criado_em);
-    // Favoritos: mostra apenas demandas com nível > 0
-    const matchesFavoritos = !showFavoritos || (showFavoritos && demanda.nivel_favorito && demanda.nivel_favorito > 0);
+    // Filtro unificado de nível/favorito
     const matchesNivelFavorito = nivelFavoritoFilter === 'todos' || 
+      (nivelFavoritoFilter === 'favoritos' && demanda.nivel_favorito && demanda.nivel_favorito > 0) ||
       (nivelFavoritoFilter === '0' && (!demanda.nivel_favorito || demanda.nivel_favorito === 0)) ||
       (demanda.nivel_favorito && demanda.nivel_favorito.toString() === nivelFavoritoFilter);
     const matchesTipoDemanda = tipoDemandaFilter === 'todos' || demanda.tipo_de_demanda === tipoDemandaFilter;
@@ -210,7 +209,7 @@ export function DemandasRuas() {
     // Filtro de pasta: só aplica quando showArquivadas está ativo
     const matchesPasta = !showArquivadas || pastaFilter === 'todas' || demanda.pasta_arquivo === pastaFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesFavoritos && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesArquivadas && matchesPasta;
+    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesArquivadas && matchesPasta;
   });
 
   // Formatar data
@@ -526,18 +525,75 @@ export function DemandasRuas() {
                     </div>
                     
                     <div className="flex items-center gap-2 flex-wrap">
-                        <Button 
-                          variant={showFavoritos ? "default" : "outline"} 
-                          size="icon" 
-                          onClick={() => setShowFavoritos(!showFavoritos)}
-                          className={`h-9 w-9 sm:w-auto px-2 sm:px-3 transition-colors ${
-                            showFavoritos ? 'bg-yellow-50 hover:bg-yellow-100 text-yellow-600 border-yellow-200' : ''
-                          }`}
-                          title={showFavoritos ? 'Mostrar todas' : 'Mostrar favoritos'}
-                        >
-                          <Star className={`h-4 w-4 ${showFavoritos ? 'fill-yellow-400' : ''}`} />
-                          <span className="sr-only sm:not-sr-only sm:ml-1 text-xs">{showFavoritos ? 'Todas' : 'Favoritos'}</span>
-                        </Button>
+                        {/* Filtro unificado de Favorito/Nível */}
+                        <Select value={nivelFavoritoFilter} onValueChange={setNivelFavoritoFilter}>
+                          <SelectTrigger className={`h-9 flex-1 min-w-[140px] text-xs transition-colors ${
+                            nivelFavoritoFilter !== 'todos' ? 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700' : ''
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <Star className={`h-4 w-4 ${
+                                nivelFavoritoFilter === 'favoritos' ? 'fill-yellow-400 text-yellow-500' :
+                                nivelFavoritoFilter === '1' ? 'fill-blue-500 text-blue-500' :
+                                nivelFavoritoFilter === '2' ? 'fill-green-500 text-green-500' :
+                                nivelFavoritoFilter === '3' ? 'fill-yellow-500 text-yellow-500' :
+                                nivelFavoritoFilter === '4' ? 'fill-orange-500 text-orange-500' :
+                                nivelFavoritoFilter === '5' ? 'fill-red-500 text-red-500' :
+                                nivelFavoritoFilter === '0' ? 'text-gray-400' : ''
+                              }`} />
+                              <span className="truncate">
+                                {nivelFavoritoFilter === 'todos' ? 'Favoritos' :
+                                 nivelFavoritoFilter === 'favoritos' ? 'Mostrar favoritos' :
+                                 nivelFavoritoFilter === '0' ? 'Não marcado' :
+                                 `Nível ${nivelFavoritoFilter}`}
+                              </span>
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos" className="text-xs">Todos</SelectItem>
+                            <SelectItem value="favoritos" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-500" />
+                                <span>Mostrar favoritos</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="0" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 text-gray-400" />
+                                <span>Não marcado</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="1" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-blue-500 text-blue-500" />
+                                <span>Nível 1</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="2" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-green-500 text-green-500" />
+                                <span>Nível 2</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="3" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                                <span>Nível 3</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="4" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-orange-500 text-orange-500" />
+                                <span>Nível 4</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="5" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Star className="w-3 h-3 fill-red-500 text-red-500" />
+                                <span>Nível 5</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
 
                         {/* Botão/Select de Arquivadas com filtro de pasta integrado */}
                         <Select 
@@ -590,51 +646,6 @@ export function DemandasRuas() {
                                 ))}
                               </>
                             )}
-                          </SelectContent>
-                        </Select>
-
-                        {/* Filtro de Nível de Favorito */}
-                        <Select value={nivelFavoritoFilter} onValueChange={setNivelFavoritoFilter}>
-                          <SelectTrigger className="h-9 flex-1 min-w-[100px] text-xs">
-                            <span className="truncate">
-                              {nivelFavoritoFilter === 'todos' ? 'Todos os níveis' :
-                               nivelFavoritoFilter === '0' ? 'Não marcado' :
-                               `Nível ${nivelFavoritoFilter}`}
-                            </span>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos" className="text-xs">Todos os níveis</SelectItem>
-                            <SelectItem value="0" className="text-xs">Não marcado</SelectItem>
-                            <SelectItem value="1" className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 fill-blue-500 text-blue-500" />
-                                <span>Nível 1</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="2" className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 fill-green-500 text-green-500" />
-                                <span>Nível 2</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="3" className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                                <span>Nível 3</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="4" className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 fill-orange-500 text-orange-500" />
-                                <span>Nível 4</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="5" className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-3 h-3 fill-red-500 text-red-500" />
-                                <span>Nível 5</span>
-                              </div>
-                            </SelectItem>
                           </SelectContent>
                         </Select>
 

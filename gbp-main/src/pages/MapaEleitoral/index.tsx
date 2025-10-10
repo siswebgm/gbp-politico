@@ -137,7 +137,7 @@ export function ElectoralMap() {
   }, [canAccess, company?.uid]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="bg-gray-50 dark:bg-gray-900">
       {/* Header Section */}
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4">

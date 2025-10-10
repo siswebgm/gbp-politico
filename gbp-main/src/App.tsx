@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './providers/AuthProvider';
 import { CompanyProvider } from './providers/CompanyProvider';
+import { ThemeProvider } from './providers/ThemeProvider';
 import { ErrorBoundary } from 'react-error-boundary';
 import { EditModeProvider } from './contexts/EditModeContext';
 import { PesquisaProvider } from './contexts/PesquisaContext';
@@ -20,7 +21,6 @@ import { DemandaSucesso } from './pages/public/DemandaSucesso';
 // Inicializa o Stripe com sua chave pública
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
 import './styles/scrollbar.css';
-
 // Configuração do React Query
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,13 +63,14 @@ export function App() {
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <AuthProvider>
-            <CompanyProvider>
-              <EditModeProvider>
-                <PlanoProvider>
-                  <div className="min-h-screen bg-gray-50">
-                    <Toaster />
-                    <Routes>
+          <ThemeProvider>
+            <AuthProvider>
+              <CompanyProvider>
+                <EditModeProvider>
+                  <PlanoProvider>
+                    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+                      <Toaster />
+                      <Routes>
                       {/* Rotas públicas */}
                       <Route path="/demanda/:empresa_uid" element={
                         <div className="min-h-screen bg-gray-50">
@@ -100,6 +101,7 @@ export function App() {
               </EditModeProvider>
             </CompanyProvider>
           </AuthProvider>
+          </ThemeProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

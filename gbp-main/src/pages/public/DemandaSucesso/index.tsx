@@ -10,6 +10,20 @@ export function DemandaSucesso() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // FORÇA scroll na página pública
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+    
+    body.classList.add('public-page-scroll');
+    html.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important;';
+    body.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important; -webkit-overflow-scrolling: touch !important;';
+    
+    return () => {
+      body.classList.remove('public-page-scroll');
+    };
+  }, []);
+
   useEffect(() => {
     const fetchDemanda = async () => {
       if (!id) return;

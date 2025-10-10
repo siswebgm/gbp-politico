@@ -323,20 +323,20 @@ export function Eleitores() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="bg-gray-50 dark:bg-gray-900">
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           <div className="pb-6">
             <div className="mx-auto sm:px-0 md:px-0">
               {/* Filtros e Ações */}
-              <div className="bg-white rounded-lg shadow-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4">
                   {/* Título e Descrição */}
                   <div className="flex items-center gap-4">
                     {/* Botão Voltar */}
                     <Link
                       to="/app"
-                      className="inline-flex items-center justify-center w-10 h-10 text-gray-700 hover:text-gray-900"
+                      className="inline-flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                     >
                       <ArrowLeft className="h-5 w-5" />
                     </Link>
@@ -345,7 +345,7 @@ export function Eleitores() {
                     <div>
                       <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
                         Eleitores
-                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
                           {totalEleitores}
                         </span>
                       </h1>
@@ -371,21 +371,21 @@ export function Eleitores() {
                       )}
                     </button>
 
-                    {/* Botão Exportar */}
-                    <button
-                      onClick={() => setIsExportarModalOpen(true)}
-                      disabled={user?.nivel_acesso !== 'admin'}
-                      className="inline-flex items-center gap-x-1.5 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={user?.nivel_acesso !== 'admin' ? "Apenas administradores podem exportar" : ""}
-                    >
-                      <FileSpreadsheet className="-ml-0.5 h-5 w-5" aria-hidden="true" />
-                      Exportar
-                      {selectedEleitores.length > 0 && (
-                        <span className="ml-1.5 rounded-full bg-primary-700 px-2 py-0.5 text-xs">
-                          {selectedEleitores.length}
-                        </span>
-                      )}
-                    </button>
+                    {/* Botão Exportar - apenas para admin */}
+                    {user?.nivel_acesso === 'admin' && (
+                      <button
+                        onClick={() => setIsExportarModalOpen(true)}
+                        className="inline-flex items-center gap-x-1.5 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+                      >
+                        <FileSpreadsheet className="-ml-0.5 h-5 w-5" aria-hidden="true" />
+                        Exportar
+                        {selectedEleitores.length > 0 && (
+                          <span className="ml-1.5 rounded-full bg-primary-700 px-2 py-0.5 text-xs">
+                            {selectedEleitores.length}
+                          </span>
+                        )}
+                      </button>
+                    )}
 
                     {/* Botão Novo Eleitor */}
                     <button
@@ -455,54 +455,25 @@ export function Eleitores() {
                 setPeriodFilter(newPeriod);
                 setCurrentPage(1); // Volta para a primeira página ao mudar o filtro
               }}
-              className="w-24 px-2 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-24 appearance-none px-2 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
             >
-              <option value="">Período</option>
-              <option value="all">Todos</option>
-              <option value="today">Hoje</option>
-              <option value="7days">7 dias</option>
-              <option value="30days">30 dias</option>
-              <option value="60days">60 dias</option>
-              <option value="90days">90 dias</option>
+              <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Período</option>
+              <option value="all" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Todos</option>
+              <option value="today" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Hoje</option>
+              <option value="7days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">7 dias</option>
+              <option value="30days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">30 dias</option>
+              <option value="60days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">60 dias</option>
+              <option value="90days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">90 dias</option>
             </select>
 
-            {/* Botão de IA */}
-            <button
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-              onClick={() => navigate('/app/reconhecimento-facial')}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-6 h-6"
-              >
-                <path d="M15 5.5A3.5 3.5 0 0 1 18.5 9" />
-                <path d="M8.5 2C6 2 4 4 4 6.5C4 9 6 11 8.5 11" />
-                <path d="M13 2c2.5 0 4.5 2 4.5 4.5c0 2.5-2 4.5-4.5 4.5" />
-                <path d="M12 16v-4" />
-                <path d="M8 9H4" />
-                <path d="M20 9h-4" />
-                <path d="M8 14H4" />
-                <path d="M20 14h-4" />
-                <path d="M12 21v-2" />
-                <path d="M17 19l-2-2" />
-                <path d="M7 19l2-2" />
-                <path d="M9 7c0 1.7-1.3 3-3 3" />
-                <path d="M15 7c0 1.7 1.3 3 3 3" />
-                <path d="M9 12v4" />
-              </svg>
-            </button>
+            {/* Botão de IA - Oculto */}
           </div>
         </div>
 
         <div className="flex-1 h-[calc(100%-6rem)]">
           <EleitoresTable
-            eleitores={filteredEleitores}
+            eleitores={eleitores || []}
             isLoading={isLoadingEleitores}
             selectedEleitores={selectedEleitores}
             selectAll={selectAll}
@@ -567,16 +538,17 @@ export function Eleitores() {
                   <UserPlus className="h-4 w-4" />
                   <span className="text-sm font-medium">Novo Eleitor</span>
                 </button>
-                <button
-                  onClick={() => setIsExportarModalOpen(true)}
-                  className="h-10 pl-4 pr-5 bg-emerald-500 text-white rounded-full shadow-lg hover:bg-emerald-600 transition-all duration-200 flex items-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={user?.nivel_acesso !== 'admin'}
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span>
-                    Exportar
-                  </span>
-                </button>
+                {user?.nivel_acesso === 'admin' && (
+                  <button
+                    onClick={() => setIsExportarModalOpen(true)}
+                    className="h-10 pl-4 pr-5 bg-emerald-500 text-white rounded-full shadow-lg hover:bg-emerald-600 transition-all duration-200 flex items-center gap-2 group"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    <span>
+                      Exportar
+                    </span>
+                  </button>
+                )}
               </div>
             )}
             <button

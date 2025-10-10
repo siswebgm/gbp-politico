@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ErrorBoundary } from 'react-error-boundary';
-import { Menu, User, Settings, LogOut, Building, CheckCircle2, XCircle } from 'lucide-react';
+import { Menu, User, Settings, LogOut, Building, CheckCircle2, XCircle, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider';
 import { useState, useEffect, useRef } from 'react';
 import { NotificationBell } from './NotificationBell';
@@ -11,6 +11,7 @@ import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { useToast } from "./ui/use-toast";
 import { UserProfileModal } from './UserProfileModal';
 import { useCompanyStore } from '../store/useCompanyStore';
+import { useThemeStore } from '../store/useThemeStore';
 
 // Hook personalizado para verificar o status da empresa
 const useCheckCompanyStatus = () => {
@@ -80,7 +81,6 @@ function ErrorFallback({ error }: { error: Error }) {
 
 export function Layout() {
   useCheckCompanyStatus();
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [companyPlan, setCompanyPlan] = useState<string | null>(null);
@@ -90,6 +90,7 @@ export function Layout() {
   const company = useCompanyStore((state) => state.company);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isDarkMode, toggleTheme, loadUserTheme } = useThemeStore();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +111,9 @@ export function Layout() {
     const fetchUserData = async () => {
       if (user?.uid) {
         try {
+          // Carregar tema do usuário
+          await loadUserTheme(user.uid);
+          
           // Buscar dados do usuário diretamente da tabela gbp_usuarios
           const { data: userData, error } = await supabaseClient
             .from('gbp_usuarios')
@@ -140,7 +144,7 @@ export function Layout() {
     };
 
     fetchUserData();
-  }, [user?.uid]);
+  }, [user?.uid, loadUserTheme]);
 
   const handleLogout = async () => {
     try {
@@ -195,7 +199,7 @@ export function Layout() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 md:overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg">
         <div className="flex h-16 items-center justify-between px-4">
@@ -230,6 +234,17 @@ export function Layout() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
+            {/* Botão de alternância de tema - Apenas para administradores da empresa */}
+            {user?.adm_empresa === true && (
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full hover:bg-blue-500 dark:hover:bg-blue-700 text-white transition-colors"
+                title={isDarkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
+                type="button"
+              >
+                {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </button>
+            )}
             <NotificationBell />
             <div className="relative" ref={dropdownRef}>
               <button
@@ -351,8 +366,8 @@ export function Layout() {
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 overflow-y-auto h-full">
-          <div className="w-full h-full px-0 py-3 lg:px-4 lg:py-4">
+        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+          <div className="w-full px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
             </ErrorBoundary>

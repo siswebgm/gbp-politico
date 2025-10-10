@@ -17,7 +17,6 @@ interface AttendanceFiltersProps {
 export interface AttendanceFilters {
   categoria?: string;
   categoriaTipo?: string;
-  eleitor?: string;
   indicadoPor?: string;
   cidade?: string;
   bairro?: string;
@@ -60,39 +59,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
 
   return (
     <div>
-      {/* Filtro de Eleitor - Destacado */}
-      <div className="mb-6">
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-          <label htmlFor="eleitor" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-            Eleitor
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              id="eleitor"
-              name="eleitor"
-              value={filters.eleitor || ''}
-              onChange={handleInputChange}
-              placeholder="Digite o nome do eleitor"
-              className="h-[38px] px-3 pr-8 form-input block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-            {filters.eleitor && (
-              <button
-                type="button"
-                onClick={() => handleInputChange({ target: { name: 'eleitor', value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Outros Filtros */}
+      {/* Filtros */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Tipo de Categoria */}
         <div className="flex flex-col space-y-1">
@@ -105,6 +72,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.categoriaTipo || ''}
             onChange={handleInputChange}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">Todos</option>
             {tipos?.map((tipo) => (
@@ -126,6 +94,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.categoria || ''}
             onChange={handleInputChange}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">Todos</option>
             {categorias?.map((categoria) => (
@@ -149,6 +118,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.indicado || ''}
             onChange={handleInputChange}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">Todos</option>
             {useAtendimentoIndicados().data?.map((indicado) => (
@@ -170,6 +140,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.cidade || ''}
             onChange={handleInputChange}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">Todas</option>
             {locais?.cidades?.map((cidade) => (
@@ -192,6 +163,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             onChange={handleInputChange}
             disabled={!filters.cidade}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">{filters.cidade ? 'Todos' : 'Selecione uma cidade'}</option>
             {filters.cidade && locais?.bairrosPorCidade[filters.cidade]?.map((bairro) => (
@@ -228,6 +200,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.responsavel || ''}
             onChange={handleInputChange}
             className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
           >
             <option value="">Todos os responsáveis</option>
             {responsaveis?.map((responsavel) => (
@@ -249,6 +222,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.dataInicio || ''}
             onChange={handleInputChange}
             className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2 px-3 text-sm"
+            style={{ colorScheme: 'light dark' }}
           />
         </div>
 
@@ -263,6 +237,7 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             value={filters.dataFim || ''}
             onChange={handleInputChange}
             className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2 px-3 text-sm"
+            style={{ colorScheme: 'light dark' }}
           />
         </div>
       </div>

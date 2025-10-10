@@ -1,45 +1,73 @@
-/* Garante que a página ocupe toda a altura da tela */
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
+/* Reset básico - FORÇA rolagem para mobile */
+* {
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
 }
 
-/* Estilo para o container principal */
+html {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  position: static !important;
+  overscroll-behavior: none !important; /* Desabilita pull-to-refresh */
+  -webkit-overscroll-behavior: none !important;
+}
+
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  position: static !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: none !important; /* Desabilita pull-to-refresh */
+  -webkit-overscroll-behavior: none !important;
+}
+
+#root {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  position: static !important;
+}
+
+/* Container principal */
 .page-wrapper {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  width: 100%;
+  min-height: 100vh;
+  overflow: visible !important;
+  height: auto !important;
+  position: relative !important;
 }
 
-/* Cabeçalho fixo */
-.header {
-  flex-shrink: 0;
-}
-
-/* Conteúdo principal com rolagem */
+/* Conteúdo */
 .content-wrapper {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  width: 100%;
   padding: 0;
   padding-bottom: 2rem;
+  overflow: visible !important;
+  position: relative !important;
 }
 
-/* Ajustes para telas maiores */
+/* Desktop */
 @media (min-width: 768px) {
   .content-wrapper {
     padding: 2rem;
-    padding-bottom: 4rem;
+    padding-bottom: 2rem;
   }
   
   .content-wrapper form {
-    max-width: 48rem; /* Reduzido de 64rem para 48rem */
+    max-width: 48rem;
     margin: 0 auto;
     border-radius: 0.5rem;
-    overflow: hidden;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 }

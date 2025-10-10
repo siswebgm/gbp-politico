@@ -31,6 +31,8 @@ export interface DemandaRuaInput {
   uf: string;
   cep: string;
   referencia?: string;
+  latitude?: string;
+  longitude?: string;
   
   // Campos para compatibilidade
   anexar_boletim_de_correncia?: string | null;

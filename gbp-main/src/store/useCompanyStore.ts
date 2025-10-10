@@ -7,6 +7,7 @@ interface Company {
   token: string | null;
   instancia: string | null;
   porta: string | null;
+  plano?: string | null;
 }
 
 interface CompanyStore {

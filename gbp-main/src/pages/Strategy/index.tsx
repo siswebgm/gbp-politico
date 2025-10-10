@@ -245,7 +245,13 @@ export function Strategy() {
                 Confiabilidade do Voto
               </h3>
               <ul className="space-y-2">
-                {metrics.distribuicaoConfiabilidade.map((item) => (
+                {metrics.distribuicaoConfiabilidade
+                  .filter((item) => 
+                    item.confiabilidade_do_voto !== 'Não informado' &&
+                    ['convicto', 'fiel', 'frio'].includes(item.confiabilidade_do_voto.toLowerCase())
+                  )
+                  .slice(0, 3)
+                  .map((item) => (
                   <li key={item.confiabilidade_do_voto}>
                     <div
                       className="flex justify-between items-center p-2 -mx-2 rounded-md transition-colors duration-200"

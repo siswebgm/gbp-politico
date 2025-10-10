@@ -7,9 +7,40 @@ import { demandasRuasService } from '../../../services/demandasRuasService';
 import { getEmpresa } from '../../../services/empresa';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import './styles.css';
 
 export function ConsultarDemandas() {
   const { empresa_uid } = useParams<{ empresa_uid?: string }>();
+
+  // FORÇA scroll no mobile - adiciona classe especial ao body
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+    const root = document.getElementById('root');
+    
+    console.log('🔧 Ativando scroll para página pública...');
+    
+    // Adiciona classe especial que permite scroll (definida no index.css)
+    body.classList.add('public-page-scroll');
+    
+    // Força os estilos diretamente também (dupla garantia)
+    html.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; min-height: 100vh !important; position: relative !important; inset: auto !important;';
+    body.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; min-height: 100vh !important; position: relative !important; inset: auto !important; -webkit-overflow-scrolling: touch !important;';
+    
+    if (root) {
+      root.style.cssText = 'overflow: visible !important; height: auto !important; min-height: 100vh !important; position: relative !important;';
+    }
+    
+    console.log('✅ Scroll ativado! Classes aplicadas:', body.className);
+    console.log('📊 Body overflow:', window.getComputedStyle(body).overflow);
+    console.log('📊 Body position:', window.getComputedStyle(body).position);
+    
+    // Cleanup ao desmontar - remove a classe
+    return () => {
+      body.classList.remove('public-page-scroll');
+      console.log('🔄 Scroll desativado, voltando ao normal');
+    };
+  }, []);
 
   // Buscar dados da empresa quando o componente for montado
   useEffect(() => {
@@ -199,7 +230,7 @@ export function ConsultarDemandas() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="consulta-demandas-page min-h-screen bg-gray-50">
       {/* Banner da Empresa */}
       {empresa_uid && (
         <div className="bg-white shadow-sm w-full">
@@ -236,8 +267,8 @@ export function ConsultarDemandas() {
         </div>
       )}
 
-      <div className="py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
+        <div className="max-w-4xl mx-auto pb-16">
 
         <div className="bg-white shadow rounded-lg p-6 mb-8">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -387,7 +418,7 @@ export function ConsultarDemandas() {
         </div>
 
         {demandas.length > 0 && (
-          <Accordion.Root type="single" collapsible className="w-full space-y-4">
+          <Accordion.Root type="single" collapsible className="w-full space-y-4 pb-32">
             <h2 className="text-lg font-medium text-gray-900">
               {demandas.length} {demandas.length === 1 ? 'demanda encontrada' : 'demandas encontradas'}
             </h2>
@@ -597,6 +628,9 @@ export function ConsultarDemandas() {
         )}
         </div>
       </div>
+      
+      {/* Espaçamento final para garantir scroll completo - MAIOR NO MOBILE */}
+      <div style={{ height: '1px', paddingBottom: '10rem' }} className="scroll-spacer"></div>
     </div>
   );
 }

@@ -17,10 +17,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
   useEffect(() => {
+    const root = document.documentElement;
     if (isDarkMode) {
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
     }
   }, [isDarkMode]);
 

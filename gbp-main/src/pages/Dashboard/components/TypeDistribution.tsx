@@ -11,13 +11,12 @@ const COLORS = ['#06b6d4', '#0ea5e9'];
 export function TypeDistribution({ data, total }: TypeDistributionProps) {
   const formattedData = [
     { name: 'Eleitores', value: total, color: '#06b6d4' },
-    { name: 'Atendimentos', value: data.datasets[0].data[0], color: '#0ea5e9' }
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-medium text-gray-900">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
           Distribuição por Tipo
         </h3>
         <div className="flex items-center gap-2">

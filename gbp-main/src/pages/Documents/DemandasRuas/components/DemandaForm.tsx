@@ -148,18 +148,7 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nível de Urgência</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o nível de urgência" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                      <SelectItem value="média">Média</SelectItem>
-                      <SelectItem value="alta">Alta</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o nível de urgência" /></SelectTrigger></FormControl><SelectContent><SelectItem value="baixa">Baixa</SelectItem><SelectItem value="média">Média</SelectItem><SelectItem value="alta">Alta</SelectItem></SelectContent></Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -171,19 +160,7 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                      <SelectItem value="concluido">Concluído</SelectItem>
-                      <SelectItem value="cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger></FormControl><SelectContent><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="em_andamento">Em Andamento</SelectItem><SelectItem value="concluido">Concluído</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -328,17 +305,7 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Possui Boletim de Ocorrência?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma opção" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="sim">Sim</SelectItem>
-                      <SelectItem value="não">Não</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione uma opção" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sim">Sim</SelectItem><SelectItem value="não">Não</SelectItem></SelectContent></Select>
                   <FormMessage />
                 </FormItem>
               )}

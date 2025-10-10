@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Info } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { DocumentCards } from './components/DocumentCards';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useAuth } from '../../providers/AuthProvider';
@@ -8,7 +8,7 @@ import { useAuth } from '../../providers/AuthProvider';
 export function Documents() {
   const navigate = useNavigate();
   const company = useCompanyStore((state) => state.company);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -48,7 +48,7 @@ export function Documents() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col bg-gray-50 dark:bg-gray-900">
       <div className="flex-1 py-2 md:py-6 px-2 md:px-4">
         <div className="flex flex-col space-y-2 md:space-y-4">
           {/* Header Section */}
