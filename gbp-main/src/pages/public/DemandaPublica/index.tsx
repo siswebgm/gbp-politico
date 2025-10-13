@@ -81,15 +81,15 @@ export function DemandaPublica() {
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'pendente':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+        return 'bg-yellow-100 text-yellow-800';
       case 'em_andamento':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+        return 'bg-blue-100 text-blue-800';
       case 'concluido':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+        return 'bg-green-100 text-green-800';
       case 'cancelado':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+        return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -103,7 +103,7 @@ export function DemandaPublica() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="min-h-screen bg-gray-50 p-4 light">
         <div className="max-w-4xl mx-auto space-y-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="w-full">
@@ -123,7 +123,7 @@ export function DemandaPublica() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 light">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-red-500">Erro ao carregar</CardTitle>
@@ -148,14 +148,14 @@ export function DemandaPublica() {
           />
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">
           Demandas Abertas
         </h1>
         
         {demandas.length === 0 ? (
           <Card>
             <CardContent className="pt-6 text-center">
-              <p className="text-gray-500 dark:text-gray-400">Nenhuma demanda encontrada.</p>
+              <p className="text-gray-500">Nenhuma demanda encontrada.</p>
             </CardContent>
           </Card>
         ) : (
@@ -186,7 +186,7 @@ export function DemandaPublica() {
                   {demanda.descricao_do_problema && (
                     <div className="mt-2">
                       <p className="font-medium mb-1">Descrição:</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                      <p className="text-sm text-gray-600">
                         {demanda.descricao_do_problema}
                       </p>
                     </div>

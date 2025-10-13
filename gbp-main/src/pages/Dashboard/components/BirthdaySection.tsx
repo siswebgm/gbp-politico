@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Gift, ChevronLeft, ChevronRight, Info, ChevronUp } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Link } from 'react-router-dom'; // Import Link from react-router-dom
+import { Link } from 'react-router-dom';
 
 interface BirthdayPerson {
   uid: string;
@@ -105,8 +103,8 @@ export function BirthdaySection({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+    <div className="space-y-4 pb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-3 sm:gap-2">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -204,8 +202,48 @@ export function BirthdaySection({
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div 
+              ref={(el) => {
+                if (el) {
+                  el.style.cssText = 'overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; width: 100%; position: relative;';
+                  
+                  // Touch event handlers for mobile scroll
+                  let startX = 0;
+                  let startY = 0;
+                  let scrollLeft = 0;
+                  let isHorizontalScroll = false;
+                  
+                  el.addEventListener('touchstart', (e) => {
+                    startX = e.touches[0].pageX - el.offsetLeft;
+                    startY = e.touches[0].pageY;
+                    scrollLeft = el.scrollLeft;
+                    isHorizontalScroll = false;
+                  });
+                  
+                  el.addEventListener('touchmove', (e) => {
+                    const x = e.touches[0].pageX - el.offsetLeft;
+                    const y = e.touches[0].pageY;
+                    const deltaX = Math.abs(x - startX);
+                    const deltaY = Math.abs(y - startY);
+                    
+                    if (!isHorizontalScroll && deltaX < 10 && deltaY < 10) {
+                      return;
+                    }
+                    
+                    if (!isHorizontalScroll) {
+                      isHorizontalScroll = deltaX > deltaY;
+                    }
+                    
+                    if (isHorizontalScroll) {
+                      e.preventDefault();
+                      const walk = (x - startX) * 2;
+                      el.scrollLeft = scrollLeft - walk;
+                    }
+                  }, { passive: false });
+                }
+              }}
+            >
+              <table style={{ minWidth: '700px', width: '100%', borderCollapse: 'collapse', userSelect: 'none' }}>
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">
@@ -312,28 +350,24 @@ export function BirthdaySection({
             </div>
 
             {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 gap-2">
-                <div className="flex items-center gap-2 order-2 sm:order-1">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Página {currentPage} de {totalPages}
-                  </span>
-                </div>
-                <div className="flex gap-2 order-1 sm:order-2">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-300"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-300"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
+              <div className="flex items-center justify-center px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 gap-3">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[40px] text-center">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             )}
           </>

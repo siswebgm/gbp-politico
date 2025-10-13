@@ -4,7 +4,7 @@ import { useCompanyStore } from '../../store/useCompanyStore';
 import { eleitorStatsService, EleitorStats } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical } from 'lucide-react';
+import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake } from 'lucide-react';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
@@ -12,6 +12,46 @@ import { hasRestrictedAccess } from '../../constants/accessLevels';
 import { supabaseClient } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+
+// Helper para adicionar scroll horizontal com touch
+const setupHorizontalScroll = (el: HTMLDivElement | null) => {
+  if (!el) return;
+  
+  el.style.cssText = 'overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; width: 100%; position: relative;';
+  
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let isHorizontalScroll = false;
+  
+  el.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].pageX - el.offsetLeft;
+    startY = e.touches[0].pageY;
+    scrollLeft = el.scrollLeft;
+    isHorizontalScroll = false;
+  });
+  
+  el.addEventListener('touchmove', (e) => {
+    const x = e.touches[0].pageX - el.offsetLeft;
+    const y = e.touches[0].pageY;
+    const deltaX = Math.abs(x - startX);
+    const deltaY = Math.abs(y - startY);
+    
+    if (!isHorizontalScroll && deltaX < 10 && deltaY < 10) {
+      return;
+    }
+    
+    if (!isHorizontalScroll) {
+      isHorizontalScroll = deltaX > deltaY;
+    }
+    
+    if (isHorizontalScroll) {
+      e.preventDefault();
+      const walk = (x - startX) * 2;
+      el.scrollLeft = scrollLeft - walk;
+    }
+  }, { passive: false });
+};
 
 export function EleitoresReport() {
   const navigate = useNavigate();
@@ -26,6 +66,15 @@ export function EleitoresReport() {
   const [openMenuConfiabilidade, setOpenMenuConfiabilidade] = useState<string | null>(null);
   const [openMenuIndicado, setOpenMenuIndicado] = useState<string | null>(null);
   const [openMenuZona, setOpenMenuZona] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [aniversariantes, setAniversariantes] = useState<any[]>([]);
+  const [loadingAniversariantes, setLoadingAniversariantes] = useState(false);
+  const [openMenuAniversariante, setOpenMenuAniversariante] = useState<boolean>(false);
+  const [aniversariantesPage, setAniversariantesPage] = useState(1);
+  const [generoFilter, setGeneroFilter] = useState<'all' | 'MASCULINO' | 'FEMININO' | 'hoje' | '7dias' | '15dias'>('all');
   
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
 
@@ -59,6 +108,15 @@ export function EleitoresReport() {
     loadStats();
   }, [company?.uid, canAccess]);
 
+  // Carregar aniversariantes quando o mês mudar
+  useEffect(() => {
+    if (company?.uid && selectedMonth) {
+      loadAniversariantes();
+      setGeneroFilter('all'); // Resetar filtro ao mudar o mês
+      setAniversariantesPage(1);
+    }
+  }, [company?.uid, selectedMonth]);
+
   // Fechar menu ao clicar fora
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -70,16 +128,17 @@ export function EleitoresReport() {
         setOpenMenuConfiabilidade(null);
         setOpenMenuIndicado(null);
         setOpenMenuZona(null);
+        setOpenMenuAniversariante(false);
       }
     };
     
-    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona) {
+    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante) {
       setTimeout(() => {
         document.addEventListener('click', handleClickOutside);
       }, 0);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona]);
+  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante]);
 
   const loadStats = async () => {
     if (!company?.uid) {
@@ -96,6 +155,47 @@ export function EleitoresReport() {
       // toast.error('Erro ao carregar estatísticas');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAniversariantes = async () => {
+    if (!company?.uid || !selectedMonth) return;
+
+    try {
+      setLoadingAniversariantes(true);
+      const [year, month] = selectedMonth.split('-');
+      
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('uid, nome, nascimento, whatsapp, telefone, cidade, bairro, genero')
+        .eq('empresa_uid', company.uid)
+        .not('nascimento', 'is', null)
+        .order('nascimento');
+
+      if (error) throw error;
+
+      // Filtrar por mês de nascimento (tratando timezone corretamente)
+      const filtered = data?.filter(eleitor => {
+        if (!eleitor.nascimento) return false;
+        // Criar data local sem conversão de timezone
+        const [y, m, d] = eleitor.nascimento.split('-').map(Number);
+        const birthDate = new Date(y, m - 1, d);
+        return birthDate.getMonth() + 1 === parseInt(month);
+      }) || [];
+
+      // Ordenar por dia do mês
+      filtered.sort((a, b) => {
+        const [, , dayA] = a.nascimento.split('-').map(Number);
+        const [, , dayB] = b.nascimento.split('-').map(Number);
+        return dayA - dayB;
+      });
+
+      setAniversariantes(filtered);
+    } catch (error) {
+      console.error('Erro ao carregar aniversariantes:', error);
+      setAniversariantes([]);
+    } finally {
+      setLoadingAniversariantes(false);
     }
   };
 
@@ -947,6 +1047,192 @@ export function EleitoresReport() {
     }
   };
 
+  // Função para exportar aniversariantes do mês para Excel
+  const handleExportAniversariantesExcel = async () => {
+    if (!company?.uid || aniversariantes.length === 0) return;
+
+    try {
+      const [year, month] = selectedMonth.split('-');
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      const monthName = monthNames[parseInt(month) - 1];
+
+      // Aplicar o filtro selecionado
+      let filteredData = aniversariantes;
+      let filterName = monthName;
+      
+      if (generoFilter === 'MASCULINO') {
+        filteredData = aniversariantes.filter(e => e.genero?.toUpperCase() === 'MASCULINO');
+        filterName = `${monthName} - Masculino`;
+      } else if (generoFilter === 'FEMININO') {
+        filteredData = aniversariantes.filter(e => e.genero?.toUpperCase() === 'FEMININO');
+        filterName = `${monthName} - Feminino`;
+      } else if (generoFilter === 'hoje') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d === todayDay;
+        });
+        filterName = `${monthName} - Hoje`;
+      } else if (generoFilter === '7dias') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        const startDay = Math.max(1, todayDay - 7);
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d >= startDay && d <= todayDay;
+        });
+        filterName = `${monthName} - Ultimos_7_Dias`;
+      } else if (generoFilter === '15dias') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        const startDay = Math.max(1, todayDay - 15);
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d >= startDay && d <= todayDay;
+        });
+        filterName = `${monthName} - Ultimos_15_Dias`;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(`Aniversariantes ${filterName}`);
+
+      sheet.columns = [
+        { header: 'Dia', key: 'dia', width: 8 },
+        { header: 'Nome', key: 'nome', width: 35 },
+        { header: 'Data de Nascimento', key: 'nascimento', width: 18 },
+        { header: 'Idade', key: 'idade', width: 8 },
+        { header: 'Gênero', key: 'genero', width: 12 },
+        { header: 'WhatsApp', key: 'whatsapp', width: 16 },
+        { header: 'Telefone', key: 'telefone', width: 16 },
+        { header: 'Cidade', key: 'cidade', width: 20 },
+        { header: 'Bairro', key: 'bairro', width: 20 }
+      ];
+
+      filteredData.forEach(eleitor => {
+        const [y, m, d] = eleitor.nascimento.split('-').map(Number);
+        const birthDate = new Date(y, m - 1, d);
+        const age = new Date().getFullYear() - birthDate.getFullYear();
+        
+        sheet.addRow({
+          dia: birthDate.getDate(),
+          nome: eleitor.nome || '',
+          nascimento: birthDate.toLocaleDateString('pt-BR'),
+          idade: age,
+          genero: eleitor.genero || 'Não informado',
+          whatsapp: eleitor.whatsapp || '',
+          telefone: eleitor.telefone || '',
+          cidade: eleitor.cidade || '',
+          bairro: eleitor.bairro || ''
+        });
+      });
+
+      // Estilo para o cabeçalho
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE6F0FF' }
+      };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `aniversariantes_${filterName.replace(/\s+/g, '_')}_${year}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar aniversariantes Excel:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar aniversariantes do mês para PDF
+  const handleExportAniversariantesPDF = async () => {
+    if (!company?.uid || aniversariantes.length === 0) return;
+
+    try {
+      const [year, month] = selectedMonth.split('-');
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      const monthName = monthNames[parseInt(month) - 1];
+
+      // Aplicar o filtro selecionado
+      let filteredData = aniversariantes;
+      let filterName = monthName;
+      
+      if (generoFilter === 'MASCULINO') {
+        filteredData = aniversariantes.filter(e => e.genero?.toUpperCase() === 'MASCULINO');
+        filterName = `${monthName} - Masculino`;
+      } else if (generoFilter === 'FEMININO') {
+        filteredData = aniversariantes.filter(e => e.genero?.toUpperCase() === 'FEMININO');
+        filterName = `${monthName} - Feminino`;
+      } else if (generoFilter === 'hoje') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d === todayDay;
+        });
+        filterName = `${monthName} - Hoje`;
+      } else if (generoFilter === '7dias') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        const startDay = Math.max(1, todayDay - 7);
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d >= startDay && d <= todayDay;
+        });
+        filterName = `${monthName} - Ultimos_7_Dias`;
+      } else if (generoFilter === '15dias') {
+        const today = new Date();
+        const todayDay = today.getDate();
+        const startDay = Math.max(1, todayDay - 15);
+        filteredData = aniversariantes.filter(e => {
+          const [, , d] = e.nascimento.split('-').map(Number);
+          return d >= startDay && d <= todayDay;
+        });
+        filterName = `${monthName} - Ultimos_15_Dias`;
+      }
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(16);
+      doc.text(`Aniversariantes - ${filterName} ${year}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${filteredData.length} aniversariantes`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Dia', 'Nome', 'Nascimento', 'Idade', 'Gênero', 'Telefone', 'Bairro']],
+        body: filteredData.map(e => {
+          const [y, m, d] = e.nascimento.split('-').map(Number);
+          const birthDate = new Date(y, m - 1, d);
+          const age = new Date().getFullYear() - birthDate.getFullYear();
+          return [
+            birthDate.getDate(),
+            e.nome || '',
+            birthDate.toLocaleDateString('pt-BR'),
+            age,
+            e.genero || 'N/A',
+            e.whatsapp || e.telefone || '',
+            e.bairro || ''
+          ];
+        }),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save(`aniversariantes_${filterName.replace(/\s+/g, '_')}_${year}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar aniversariantes PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
   // Função para exportar eleitores de um bairro específico para PDF
   const handleExportBairroPDF = async (cidade: string, bairro: string) => {
     if (!company?.uid) return;
@@ -1013,7 +1299,7 @@ export function EleitoresReport() {
 
   return (
     <div className="p-0 sm:p-0">
-      <div className="bg-gray-50 rounded-lg p-0 sm:p-4">
+      <div className="bg-gray-50 dark:bg-gray-950 rounded-lg p-0 sm:p-4">
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
@@ -1044,27 +1330,27 @@ export function EleitoresReport() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 px-4 sm:px-0">
           {/* Cabeçalho com Total e Líderes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card Total de Eleitores */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-lg">
+            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-gray-300">Total de Eleitores</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full">
-                    <Users2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Total de Eleitores</h3>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                    <Users2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                   </div>
                 </div>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400">
+                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
                     {stats.totalEleitores.toLocaleString()}
                   </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
                     eleitores
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex flex-wrap gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
                   <span>{stats.porCidade.length} cidades</span>
                   <span className="hidden sm:inline">•</span>
                   <span>{stats.porBairro.length} bairros</span>
@@ -1075,24 +1361,24 @@ export function EleitoresReport() {
             </Card>
 
             {/* Cidade Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-lg">
+            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-gray-300">Cidade Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full">
-                    <Building2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Cidade Líder</h3>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                    <Building2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                   </div>
                 </div>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400">
+                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
                     {stats.porCidade[0]?.total.toLocaleString() || '0'}
                   </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
                     eleitores
                   </span>
                 </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={stats.porCidade[0]?.cidade || '-'}>
+                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
+                  <span className="font-medium text-gray-900 dark:text-white truncate" title={stats.porCidade[0]?.cidade || '-'}>
                     {stats.porCidade[0]?.cidade || '-'}
                   </span>
                   <span>({((stats.porCidade[0]?.total / stats.totalEleitores) * 100).toFixed(1)}% do total)</span>
@@ -1101,24 +1387,24 @@ export function EleitoresReport() {
             </Card>
 
             {/* Bairro Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-lg">
+            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-gray-300">Bairro Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full">
-                    <Home className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Bairro Líder</h3>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                    <Home className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                   </div>
                 </div>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400">
+                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
                     {stats.porBairro[0]?.total.toLocaleString() || '0'}
                   </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
                     eleitores
                   </span>
                 </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-medium text-gray-900 dark:text-gray-100 truncate" title={stats.porBairro[0]?.bairro || '-'}>
+                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
+                  <span className="font-medium text-gray-900 dark:text-white truncate" title={stats.porBairro[0]?.bairro || '-'}>
                     {stats.porBairro[0]?.bairro || '-'}
                   </span>
                   <span className="truncate" title={stats.porBairro[0]?.cidade || '-'}>
@@ -1130,24 +1416,24 @@ export function EleitoresReport() {
             </Card>
 
             {/* Zona Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900 shadow-lg">
+            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-gray-300">Zona Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-full">
-                    <MapPin className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Zona Líder</h3>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                    <MapPin className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                   </div>
                 </div>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400">
+                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
                     {stats.porZonaSecao[0]?.total.toLocaleString() || '0'}
                   </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
                     eleitores
                   </span>
                 </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
+                  <span className="font-medium text-gray-900 dark:text-white">
                     Zona {stats.porZonaSecao[0]?.zona || '-'}
                   </span>
                   <span>Seção {stats.porZonaSecao[0]?.secao || '-'}</span>
@@ -1158,43 +1444,42 @@ export function EleitoresReport() {
           </div>
 
           {/* Distribuição por Cidade */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Distribuição por Cidade</h3>
-                <p className="text-sm text-gray-500">Total de cidades: {stats.porCidade.length}</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Cidade</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total de cidades: {stats.porCidade.length}</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-center">
+                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-center">
                   Maior: {stats.porCidade[0]?.cidade} ({stats.porCidade[0]?.total})
                 </span>
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-center">
+                <span className="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded text-center">
                   Menor: {stats.porCidade[stats.porCidade.length - 1]?.cidade} ({stats.porCidade[stats.porCidade.length - 1]?.total})
                 </span>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-[600px] px-4 sm:px-0">
-                <table className="w-full">
+            <div ref={setupHorizontalScroll}>
+              <table style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Cidade</th>
-                      <th className="text-right py-2">Total</th>
-                      <th className="text-right py-2">%</th>
-                      <th className="px-4 py-2 w-1/3">Progresso</th>
-                      <th className="text-center py-2">Ações</th>
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="text-left py-2 text-gray-900 dark:text-white">Cidade</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getPaginatedData(stats.porCidade, cidadePage).map(({ cidade, total }, index) => {
                       const percentage = (total / stats.totalEleitores) * 100;
                       return (
-                        <tr key={cidade} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
-                          <td className="py-2">{cidade}</td>
-                          <td className="text-right py-2">{total}</td>
-                          <td className="text-right py-2">{percentage.toFixed(1)}%</td>
+                        <tr key={cidade} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                          <td className="py-2 text-gray-900 dark:text-white">{cidade}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{total}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                           <td className="px-4 py-2">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                               <div
                                 className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                                 style={{ width: `${percentage}%` }}
@@ -1208,15 +1493,15 @@ export function EleitoresReport() {
                                   e.stopPropagation();
                                   setOpenMenuCidade(openMenuCidade === cidade ? null : cidade);
                                 }}
-                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                                 title="Opções de exportação"
                               >
-                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                                <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                               </button>
                               
                               {openMenuCidade === cidade && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -1225,9 +1510,9 @@ export function EleitoresReport() {
                                       handleExportCidadeExcel(cidade);
                                       setOpenMenuCidade(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     <span>Excel</span>
                                   </button>
                                   <button
@@ -1236,9 +1521,9 @@ export function EleitoresReport() {
                                       handleExportCidadePDF(cidade);
                                       setOpenMenuCidade(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                     <span>PDF</span>
                                   </button>
                                 </div>
@@ -1250,7 +1535,6 @@ export function EleitoresReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
             </div>
             <TablePagination
               currentPage={cidadePage}
@@ -1261,44 +1545,44 @@ export function EleitoresReport() {
           </Card>
 
           {/* Distribuição por Indicado */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Distribuição por Indicado</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Indicado</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total de indicados: {stats.porIndicado.length}
                 </p>
               </div>
               {stats.porIndicado.length > 0 && (
                 <div className="text-sm w-full sm:w-auto">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded block text-center">
+                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
                     Maior: {stats.porIndicado[0]?.indicado_nome} ({stats.porIndicado[0]?.total})
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
+            <div ref={setupHorizontalScroll}>
+              <table style={{ minWidth: '600px', width: '100%' }}>
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Indicado</th>
-                    <th className="text-right py-2">Total</th>
-                    <th className="text-right py-2">%</th>
-                    <th className="px-4 py-2">Distribuição</th>
-                    <th className="text-center py-2">Ações</th>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="text-left py-2 text-gray-900 dark:text-white">Indicado</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                    <th className="px-4 py-2 text-gray-900 dark:text-white">Distribuição</th>
+                    <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {getPaginatedData(stats.porIndicado, indicadoPage).map((item, index) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
                     return (
-                      <tr key={item.indicado_nome} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
-                        <td className="py-2">{item.indicado_nome}</td>
-                        <td className="text-right py-2">{item.total}</td>
-                        <td className="text-right py-2">{percentage.toFixed(1)}%</td>
+                      <tr key={item.indicado_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                        <td className="py-2 text-gray-900 dark:text-white">{item.indicado_nome}</td>
+                        <td className="text-right py-2 text-gray-900 dark:text-white">{item.total}</td>
+                        <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                         <td className="px-4 py-2">
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                             <div
                               className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                               style={{ width: `${percentage}%` }}
@@ -1312,15 +1596,15 @@ export function EleitoresReport() {
                                 e.stopPropagation();
                                 setOpenMenuIndicado(openMenuIndicado === item.indicado_nome ? null : item.indicado_nome);
                               }}
-                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                               title="Opções de exportação"
                             >
-                              <MoreVertical className="w-4 h-4 text-gray-600" />
+                              <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                             </button>
                             
                             {openMenuIndicado === item.indicado_nome && (
                               <div 
-                                className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <button
@@ -1329,9 +1613,9 @@ export function EleitoresReport() {
                                     handleExportIndicadoExcel(item.indicado_nome);
                                     setOpenMenuIndicado(null);
                                   }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                 >
-                                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                   <span>Excel</span>
                                 </button>
                                 <button
@@ -1340,9 +1624,9 @@ export function EleitoresReport() {
                                     handleExportIndicadoPDF(item.indicado_nome);
                                     setOpenMenuIndicado(null);
                                   }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                 >
-                                  <FileText className="w-4 h-4 text-red-600" />
+                                  <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                   <span>PDF</span>
                                 </button>
                               </div>
@@ -1364,16 +1648,16 @@ export function EleitoresReport() {
           </Card>
 
           {/* Distribuição por Bairro */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Distribuição por Bairro</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Bairro</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total de bairros: {stats.porBairro.length} em {new Set(stats.porBairro.map(b => b.cidade)).size} cidades
                 </p>
               </div>
               <div className="text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded block text-center">
+                <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
                   Maior: {stats.porBairro[0]?.bairro} ({stats.porBairro[0]?.total})
                 </span>
               </div>
@@ -1401,29 +1685,28 @@ export function EleitoresReport() {
                   .slice((currentPage - 1) * bairrosPerPage, currentPage * bairrosPerPage);
 
                 return (
-                  <div key={cidade} className="bg-gray-50 rounded-lg p-4">
+                  <div key={cidade} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                     {/* Cabeçalho da Cidade */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4 pb-2 border-b">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4 pb-2 border-b dark:border-gray-700">
                       <div>
-                        <h4 className="text-lg font-semibold text-gray-800">{cidade}</h4>
-                        <p className="text-sm text-gray-500">
+                        <h4 className="text-lg font-semibold text-gray-800 dark:text-white">{cidade}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                           {bairros.length} bairros | Total: {cidadeTotal} ({cidadePercentage.toFixed(1)}%)
                         </p>
                       </div>
                     </div>
 
                     {/* Tabela de Bairros */}
-                    <div className="overflow-x-auto -mx-4 sm:mx-0">
-                      <div className="min-w-[600px] px-4 sm:px-0">
-                        <table className="w-full">
+                    <div ref={setupHorizontalScroll}>
+                        <table style={{ minWidth: '600px', width: '100%' }}>
                           <thead>
-                            <tr className="border-b">
-                              <th className="text-left py-2">Bairro</th>
-                              <th className="text-right py-2">Total</th>
-                              <th className="text-right py-2">% da Cidade</th>
-                              <th className="text-right py-2">% Total</th>
-                              <th className="px-4 py-2 w-1/3">Progresso</th>
-                              <th className="text-center py-2">Ações</th>
+                            <tr className="border-b dark:border-gray-700">
+                              <th className="text-left py-2 text-gray-900 dark:text-white">Bairro</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white">% da Cidade</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white">% Total</th>
+                              <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                              <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1434,16 +1717,16 @@ export function EleitoresReport() {
                               return (
                                 <tr
                                   key={`${bairro.cidade}-${bairro.bairro}`}
-                                  className={`border-b hover:bg-white transition-colors ${
-                                    index === 0 ? 'bg-green-50/50' : ''
+                                  className={`border-b dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700 transition-colors ${
+                                    index === 0 ? 'bg-green-50/50 dark:bg-green-900/30' : ''
                                   }`}
                                 >
-                                  <td className="py-2">{bairro.bairro}</td>
-                                  <td className="text-right py-2">{bairro.total}</td>
-                                  <td className="text-right py-2">{percentageCidade.toFixed(1)}%</td>
-                                  <td className="text-right py-2">{percentageTotal.toFixed(1)}%</td>
+                                  <td className="py-2 text-gray-900 dark:text-white">{bairro.bairro}</td>
+                                  <td className="text-right py-2 text-gray-900 dark:text-white">{bairro.total}</td>
+                                  <td className="text-right py-2 text-gray-900 dark:text-white">{percentageCidade.toFixed(1)}%</td>
+                                  <td className="text-right py-2 text-gray-900 dark:text-white">{percentageTotal.toFixed(1)}%</td>
                                   <td className="px-4 py-2">
-                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                                       <div
                                         className={`h-2.5 rounded-full ${
                                           index === 0 ? 'bg-green-600' : 'bg-green-400'
@@ -1459,15 +1742,15 @@ export function EleitoresReport() {
                                           e.stopPropagation();
                                           setOpenMenuBairro(openMenuBairro === `${bairro.cidade}-${bairro.bairro}` ? null : `${bairro.cidade}-${bairro.bairro}`);
                                         }}
-                                        className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
                                         title="Opções de exportação"
                                       >
-                                        <MoreVertical className="w-4 h-4 text-gray-600" />
+                                        <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                                       </button>
                                       
                                       {openMenuBairro === `${bairro.cidade}-${bairro.bairro}` && (
                                         <div 
-                                          className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                          className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <button
@@ -1476,9 +1759,9 @@ export function EleitoresReport() {
                                               handleExportBairroExcel(bairro.cidade, bairro.bairro);
                                               setOpenMenuBairro(null);
                                             }}
-                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                           >
-                                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                            <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                             <span>Excel</span>
                                           </button>
                                           <button
@@ -1487,9 +1770,9 @@ export function EleitoresReport() {
                                               handleExportBairroPDF(bairro.cidade, bairro.bairro);
                                               setOpenMenuBairro(null);
                                             }}
-                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                           >
-                                            <FileText className="w-4 h-4 text-red-600" />
+                                            <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                             <span>PDF</span>
                                           </button>
                                         </div>
@@ -1501,14 +1784,13 @@ export function EleitoresReport() {
                             })}
                           </tbody>
                         </table>
-                        <TablePagination
-                          currentPage={currentPage}
-                          totalItems={bairros.length}
-                          itemsPerPage={bairrosPerPage}
-                          onPageChange={(page) => handleBairroPageChange(cidade, page)}
-                        />
-                      </div>
                     </div>
+                    <TablePagination
+                      currentPage={currentPage}
+                      totalItems={bairros.length}
+                      itemsPerPage={bairrosPerPage}
+                      onPageChange={(page) => handleBairroPageChange(cidade, page)}
+                    />
                   </div>
                 );
               })}
@@ -1530,33 +1812,33 @@ export function EleitoresReport() {
           </Card>
 
           {/* Distribuição por Zona e Seção */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Distribuição por Zona e Seção</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Zona e Seção</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total de zonas/seções: {stats.porZonaSecao.length}
                 </p>
               </div>
               {stats.porZonaSecao.length > 0 && (
                 <div className="text-sm w-full sm:w-auto">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded block text-center">
+                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
                     Maior: Zona {stats.porZonaSecao[0]?.zona} Seção {stats.porZonaSecao[0]?.secao} ({stats.porZonaSecao[0]?.total})
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
+            <div ref={setupHorizontalScroll}>
+              <table style={{ minWidth: '600px', width: '100%' }}>
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Zona</th>
-                    <th className="text-left py-2">Seção</th>
-                    <th className="text-right py-2">Total</th>
-                    <th className="text-right py-2">%</th>
-                    <th className="px-4 py-2">Distribuição</th>
-                    <th className="text-center py-2">Ações</th>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="text-left py-2 text-gray-900 dark:text-white">Zona</th>
+                    <th className="text-left py-2 text-gray-900 dark:text-white">Seção</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                    <th className="px-4 py-2 text-gray-900 dark:text-white">Distribuição</th>
+                    <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1564,13 +1846,13 @@ export function EleitoresReport() {
                     const percentage = (item.total / stats.totalEleitores) * 100;
                     const zonaSecaoKey = `${item.zona}-${item.secao}`;
                     return (
-                      <tr key={zonaSecaoKey} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
-                        <td className="py-2">{item.zona}</td>
-                        <td className="py-2">{item.secao}</td>
-                        <td className="text-right py-2">{item.total}</td>
-                        <td className="text-right py-2">{percentage.toFixed(1)}%</td>
+                      <tr key={zonaSecaoKey} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                        <td className="py-2 text-gray-900 dark:text-white">{item.zona}</td>
+                        <td className="py-2 text-gray-900 dark:text-white">{item.secao}</td>
+                        <td className="text-right py-2 text-gray-900 dark:text-white">{item.total}</td>
+                        <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                         <td className="px-4 py-2">
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                             <div
                               className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                               style={{ width: `${percentage}%` }}
@@ -1584,15 +1866,15 @@ export function EleitoresReport() {
                                 e.stopPropagation();
                                 setOpenMenuZona(openMenuZona === zonaSecaoKey ? null : zonaSecaoKey);
                               }}
-                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                               title="Opções de exportação"
                             >
-                              <MoreVertical className="w-4 h-4 text-gray-600" />
+                              <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                             </button>
                             
                             {openMenuZona === zonaSecaoKey && (
                               <div 
-                                className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <button
@@ -1601,9 +1883,9 @@ export function EleitoresReport() {
                                     handleExportZonaExcel(item.zona, item.secao);
                                     setOpenMenuZona(null);
                                   }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                 >
-                                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                   <span>Excel</span>
                                 </button>
                                 <button
@@ -1612,9 +1894,9 @@ export function EleitoresReport() {
                                     handleExportZonaPDF(item.zona, item.secao);
                                     setOpenMenuZona(null);
                                   }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                 >
-                                  <FileText className="w-4 h-4 text-red-600" />
+                                  <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                   <span>PDF</span>
                                 </button>
                               </div>
@@ -1626,35 +1908,34 @@ export function EleitoresReport() {
                   })}
                 </tbody>
               </table>
-              <TablePagination
-                currentPage={zonaPage}
-                totalItems={stats.porZonaSecao.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setZonaPage}
-              />
             </div>
+            <TablePagination
+              currentPage={zonaPage}
+              totalItems={stats.porZonaSecao.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setZonaPage}
+            />
           </Card>
 
           {/* Top 5 Eleitores com Mais Atendimentos */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Users2 className="w-5 h-5" />
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Users2 className="w-5 h-5 text-gray-900 dark:text-white" />
                   Top 20 Eleitores - Atendimentos
                 </h3>
-                <p className="text-sm text-gray-500">Eleitores com maior número de atendimentos registrados</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Eleitores com maior número de atendimentos registrados</p>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-[600px] px-4 sm:px-0">
-                <table className="w-full">
+            <div ref={setupHorizontalScroll}>
+                <table style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 w-1/3">Eleitor</th>
-                      <th className="text-right py-2 w-1/4">WhatsApp</th>
-                      <th className="text-right py-2 w-20">Total</th>
-                      <th className="px-4 py-2 w-1/4">Progresso</th>
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="text-left py-2 w-1/3 text-gray-900 dark:text-white">Eleitor</th>
+                      <th className="text-right py-2 w-1/4 text-gray-900 dark:text-white">WhatsApp</th>
+                      <th className="text-right py-2 w-20 text-gray-900 dark:text-white">Total</th>
+                      <th className="px-4 py-2 w-1/4 text-gray-900 dark:text-white">Progresso</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1662,14 +1943,14 @@ export function EleitoresReport() {
                       const maxAtendimentos = stats.topEleitoresAtendimentos[0]?.total_atendimentos || 1;
 
                       return (
-                        <tr key={eleitor.eleitor_nome}>
+                        <tr key={eleitor.eleitor_nome} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                           <td className="py-2 truncate">
                             <div className="flex items-center gap-2">
                               <Link 
                                 to={`/app/eleitores/${eleitor.uid}`} 
-                                className="flex items-center gap-2 text-gray-900 hover:text-primary"
+                                className="flex items-center gap-2 text-gray-900 dark:text-white hover:text-primary dark:hover:text-primary"
                               >
-                                <UserCircle2 className="w-5 h-5 text-primary" />
+                                <UserCircle2 className="w-5 h-5 text-primary dark:text-primary" />
                                 {eleitor.eleitor_nome}
                               </Link>
                             </div>
@@ -1692,7 +1973,6 @@ export function EleitoresReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
             </div>
             <TablePagination
               currentPage={topEleitoresPage}
@@ -1703,26 +1983,25 @@ export function EleitoresReport() {
           </Card>
 
           {/* Tabela de Confiabilidade */}
-          <Card className="p-4">
+          <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <ThumbsUp className="w-5 h-5" />
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
+                  <ThumbsUp className="w-5 h-5 text-gray-900 dark:text-white" />
                   Confiabilidade do Voto
                 </h3>
-                <p className="text-sm text-gray-500">Distribuição dos eleitores por nível de confiabilidade</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Distribuição dos eleitores por nível de confiabilidade</p>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-[600px] px-4 sm:px-0">
-                <table className="w-full">
+            <div ref={setupHorizontalScroll}>
+                <table style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Nível</th>
-                      <th className="text-right py-2">Total</th>
-                      <th className="text-right py-2">%</th>
-                      <th className="px-4 py-2 w-1/3">Progresso</th>
-                      <th className="text-center py-2">Ações</th>
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="text-left py-2 text-gray-900 dark:text-white">Nível</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1735,15 +2014,15 @@ export function EleitoresReport() {
                       };
                       
                       return (
-                        <tr key={confiabilidade} className="border-b hover:bg-gray-50">
-                          <td className="py-2 flex items-center gap-2">
+                        <tr key={confiabilidade} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <td className="py-2 flex items-center gap-2 text-gray-900 dark:text-white">
                             <span>{config.icon}</span>
                             {confiabilidade}
                           </td>
-                          <td className="text-right py-2">{total}</td>
-                          <td className="text-right py-2">{percentage.toFixed(1)}%</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{total}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                           <td className="px-4 py-2">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                               <div
                                 className="h-2.5 rounded-full bg-blue-600"
                                 style={{ width: `${percentage}%` }}
@@ -1757,15 +2036,15 @@ export function EleitoresReport() {
                                   e.stopPropagation();
                                   setOpenMenuConfiabilidade(openMenuConfiabilidade === confiabilidade ? null : confiabilidade);
                                 }}
-                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                                 title="Opções de exportação"
                               >
-                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                                <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                               </button>
                               
                               {openMenuConfiabilidade === confiabilidade && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -1774,9 +2053,9 @@ export function EleitoresReport() {
                                       handleExportConfiabilidadeExcel(confiabilidade);
                                       setOpenMenuConfiabilidade(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     <span>Excel</span>
                                   </button>
                                   <button
@@ -1785,9 +2064,9 @@ export function EleitoresReport() {
                                       handleExportConfiabilidadePDF(confiabilidade);
                                       setOpenMenuConfiabilidade(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                     <span>PDF</span>
                                   </button>
                                 </div>
@@ -1799,7 +2078,6 @@ export function EleitoresReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
             </div>
             <TablePagination
               currentPage={confiabilidadePage}
@@ -1809,41 +2087,452 @@ export function EleitoresReport() {
             />
           </Card>
 
+          {/* Aniversariantes do Mês */}
+          <Card className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Cake className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+                  Aniversariantes do Mês
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Visualize todos os aniversariantes do mês selecionado</p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm flex-1 sm:flex-initial bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                />
+                {aniversariantes.length > 0 && (
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuAniversariante(!openMenuAniversariante);
+                      }}
+                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                      title="Exportar aniversariantes"
+                    >
+                      <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                    </button>
+                    
+                    {openMenuAniversariante && (
+                      <div 
+                        className="absolute right-0 top-10 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportAniversariantesExcel();
+                            setOpenMenuAniversariante(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                        >
+                          <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                          <span>Excel</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportAniversariantesPDF();
+                            setOpenMenuAniversariante(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                        >
+                          <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          <span>PDF</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {loadingAniversariantes ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : aniversariantes.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <Cake className="w-12 h-12 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                <p>Nenhum aniversariante encontrado para este mês</p>
+              </div>
+            ) : (
+              <>
+                {generoFilter !== 'all' && (
+                  <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg flex flex-row items-center justify-between gap-2">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                      <span className="font-semibold">Filtro ativo:</span> {
+                        generoFilter === 'MASCULINO' ? 'Masculino' : 
+                        generoFilter === 'FEMININO' ? 'Feminino' : 
+                        generoFilter === 'hoje' ? 'Aniversariantes de Hoje' :
+                        generoFilter === '7dias' ? 'Últimos 7 dias' :
+                        'Últimos 15 dias'
+                      }
+                    </p>
+                    <button
+                      onClick={() => {
+                        setGeneroFilter('all');
+                        setAniversariantesPage(1);
+                      }}
+                      className="text-xs text-yellow-800 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-200 underline whitespace-nowrap flex-shrink-0"
+                    >
+                      Limpar filtro
+                    </button>
+                  </div>
+                )}
+                
+                {/* Filtro de Período - Dropdown */}
+                <div className="mb-3 flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Filtrar por período:
+                  </label>
+                  <select
+                    value={generoFilter === '7dias' ? '7dias' : generoFilter === '15dias' ? '15dias' : 'all'}
+                    onChange={(e) => {
+                      setGeneroFilter(e.target.value as any);
+                      setAniversariantesPage(1);
+                    }}
+                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="all">Todos do mês</option>
+                    <option value="7dias">Últimos 7 dias</option>
+                    <option value="15dias">Últimos 15 dias</option>
+                  </select>
+                </div>
+                
+                <div className={`mb-3 grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 ${
+                  (() => {
+                    const today = new Date();
+                    const todayDay = today.getDate();
+                    const todayMonth = today.getMonth() + 1;
+                    const selectedMonthNum = parseInt(selectedMonth.split('-')[1]);
+                    
+                    if (selectedMonthNum === todayMonth) {
+                      const aniversariantesHoje = aniversariantes.filter(e => {
+                        const [, , d] = e.nascimento.split('-').map(Number);
+                        return d === todayDay;
+                      });
+                      
+                      if (aniversariantesHoje.length > 0) {
+                        return 'lg:grid-cols-4';
+                      }
+                    }
+                    return 'lg:grid-cols-3';
+                  })()
+                }`}>
+                  <button
+                    onClick={() => {
+                      setGeneroFilter('all');
+                      setAniversariantesPage(1);
+                    }}
+                    className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:shadow-md cursor-pointer ${
+                      generoFilter === 'all' ? 'bg-blue-100 dark:bg-blue-900/50 ring-2 ring-blue-500 dark:ring-blue-400' : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                    }`}
+                  >
+                    <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-300 font-medium mb-1">Total</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-200">{aniversariantes.length}</p>
+                  </button>
+                  
+                  {/* Card de Aniversariantes de Hoje - Aparece após Total */}
+                  {(() => {
+                    const today = new Date();
+                    const todayDay = today.getDate();
+                    const todayMonth = today.getMonth() + 1;
+                    const selectedMonthNum = parseInt(selectedMonth.split('-')[1]);
+                    
+                    if (selectedMonthNum === todayMonth) {
+                      const aniversariantesHoje = aniversariantes.filter(e => {
+                        const [, , d] = e.nascimento.split('-').map(Number);
+                        return d === todayDay;
+                      });
+                      
+                      if (aniversariantesHoje.length > 0) {
+                        return (
+                          <button
+                            onClick={() => {
+                              setGeneroFilter('hoje');
+                              setAniversariantesPage(1);
+                            }}
+                            className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:shadow-lg cursor-pointer border-2 ${
+                              generoFilter === 'hoje' 
+                                ? 'bg-gradient-to-r from-green-100 to-emerald-100 dark:from-green-900/50 dark:to-emerald-900/50 border-green-500 dark:border-green-400 ring-2 ring-green-300 dark:ring-green-600' 
+                                : 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-green-300 dark:border-green-600 hover:border-green-400 dark:hover:border-green-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="p-1.5 bg-green-500 rounded-full flex-shrink-0">
+                                <Cake className="w-4 h-4 text-white" />
+                              </div>
+                              <p className="text-xs font-medium text-green-700 dark:text-green-300">🎉 Aniversariantes Hoje</p>
+                            </div>
+                            <div className="flex items-baseline gap-1">
+                              <p className="text-2xl sm:text-3xl font-bold text-green-700 dark:text-green-200">{aniversariantesHoje.length}</p>
+                              <p className="text-xs text-green-600 dark:text-green-400">
+                                {aniversariantesHoje.length === 1 ? 'pessoa' : 'pessoas'}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
+                  <button
+                    onClick={() => {
+                      setGeneroFilter('MASCULINO');
+                      setAniversariantesPage(1);
+                    }}
+                    className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:shadow-md cursor-pointer ${
+                      generoFilter === 'MASCULINO' ? 'bg-cyan-100 dark:bg-cyan-900/50 ring-2 ring-cyan-500 dark:ring-cyan-400' : 'bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 dark:hover:bg-cyan-900/40'
+                    }`}
+                  >
+                    <p className="text-xs sm:text-sm text-cyan-600 dark:text-cyan-300 font-medium mb-1">Masculino</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-cyan-700 dark:text-cyan-200">
+                      {aniversariantes.filter(e => e.genero?.toUpperCase() === 'MASCULINO').length}
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setGeneroFilter('FEMININO');
+                      setAniversariantesPage(1);
+                    }}
+                    className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:shadow-md cursor-pointer ${
+                      generoFilter === 'FEMININO' ? 'bg-pink-100 dark:bg-pink-900/50 ring-2 ring-pink-500 dark:ring-pink-400' : 'bg-pink-50 dark:bg-pink-900/30 hover:bg-pink-100 dark:hover:bg-pink-900/40'
+                    }`}
+                  >
+                    <p className="text-xs sm:text-sm text-pink-600 dark:text-pink-300 font-medium mb-1">Feminino</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-pink-700 dark:text-pink-200">
+                      {aniversariantes.filter(e => e.genero?.toUpperCase() === 'FEMININO').length}
+                    </p>
+                  </button>
+                </div>
+                <div 
+                  ref={(el) => {
+                    if (el) {
+                      el.style.cssText = 'overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; width: 100%; position: relative;';
+                      
+                      // Controle de scroll com detecção de direção
+                      let startX = 0;
+                      let startY = 0;
+                      let scrollLeft = 0;
+                      let isHorizontalScroll = false;
+                      
+                      el.addEventListener('touchstart', (e) => {
+                        startX = e.touches[0].pageX - el.offsetLeft;
+                        startY = e.touches[0].pageY;
+                        scrollLeft = el.scrollLeft;
+                        isHorizontalScroll = false;
+                      });
+                      
+                      el.addEventListener('touchmove', (e) => {
+                        const x = e.touches[0].pageX - el.offsetLeft;
+                        const y = e.touches[0].pageY;
+                        const deltaX = Math.abs(x - startX);
+                        const deltaY = Math.abs(y - startY);
+                        
+                        // Detecta se é scroll horizontal ou vertical
+                        if (!isHorizontalScroll && deltaX < 10 && deltaY < 10) {
+                          return; // Movimento muito pequeno, ignora
+                        }
+                        
+                        if (!isHorizontalScroll) {
+                          isHorizontalScroll = deltaX > deltaY;
+                        }
+                        
+                        // Só previne default se for scroll horizontal
+                        if (isHorizontalScroll) {
+                          e.preventDefault();
+                          const walk = (x - startX) * 2;
+                          el.scrollLeft = scrollLeft - walk;
+                        }
+                      }, { passive: false });
+                    }
+                  }}
+                >
+                  <table style={{ minWidth: '700px', width: '100%', borderCollapse: 'collapse', userSelect: 'none' }}>
+                      <thead>
+                        <tr className="border-b dark:border-gray-700">
+                          <th className="text-left py-2 px-2 text-gray-900 dark:text-white" style={{ width: '64px' }}>Dia</th>
+                          <th className="text-left py-2 px-2 text-gray-900 dark:text-white" style={{ minWidth: '150px' }}>Nome</th>
+                          <th className="text-left py-2 px-2 text-gray-900 dark:text-white" style={{ width: '128px' }}>Nascimento</th>
+                          <th className="text-center py-2 px-2 text-gray-900 dark:text-white" style={{ width: '80px' }}>Idade</th>
+                          <th className="text-center py-2 px-2 text-gray-900 dark:text-white" style={{ width: '80px' }}>Gênero</th>
+                          <th className="text-left py-2 px-2 text-gray-900 dark:text-white" style={{ minWidth: '120px' }}>Contato</th>
+                          <th className="text-left py-2 px-2 text-gray-900 dark:text-white" style={{ minWidth: '120px' }}>Bairro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          // Filtrar por gênero
+                          let filteredAniversariantes = aniversariantes;
+                          if (generoFilter === 'MASCULINO') {
+                            filteredAniversariantes = aniversariantes.filter(e => e.genero?.toUpperCase() === 'MASCULINO');
+                          } else if (generoFilter === 'FEMININO') {
+                            filteredAniversariantes = aniversariantes.filter(e => e.genero?.toUpperCase() === 'FEMININO');
+                          } else if (generoFilter === 'hoje') {
+                            const today = new Date();
+                            const todayDay = today.getDate();
+                            filteredAniversariantes = aniversariantes.filter(e => {
+                              const [, , d] = e.nascimento.split('-').map(Number);
+                              return d === todayDay;
+                            });
+                          } else if (generoFilter === '7dias') {
+                            const today = new Date();
+                            const todayDay = today.getDate();
+                            const startDay = Math.max(1, todayDay - 7);
+                            filteredAniversariantes = aniversariantes.filter(e => {
+                              const [, , d] = e.nascimento.split('-').map(Number);
+                              return d >= startDay && d <= todayDay;
+                            });
+                          } else if (generoFilter === '15dias') {
+                            const today = new Date();
+                            const todayDay = today.getDate();
+                            const startDay = Math.max(1, todayDay - 15);
+                            filteredAniversariantes = aniversariantes.filter(e => {
+                              const [, , d] = e.nascimento.split('-').map(Number);
+                              return d >= startDay && d <= todayDay;
+                            });
+                          }
+                          
+                          return getPaginatedData(filteredAniversariantes, aniversariantesPage).map((eleitor, index) => {
+                          const [y, m, d] = eleitor.nascimento.split('-').map(Number);
+                          const birthDate = new Date(y, m - 1, d);
+                          const day = birthDate.getDate();
+                          const age = new Date().getFullYear() - birthDate.getFullYear();
+                          
+                          // Verificar se é aniversário hoje
+                          const today = new Date();
+                          const isToday = today.getDate() === day && (today.getMonth() + 1) === parseInt(selectedMonth.split('-')[1]);
+                          
+                          return (
+                            <tr key={eleitor.uid} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${isToday ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                              <td className="py-3 px-2">
+                                <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm ${
+                                  isToday ? 'bg-blue-500 dark:bg-blue-600 text-white ring-2 ring-blue-300 dark:ring-blue-500' : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                                }`}>
+                                  {day}
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                <Link 
+                                  to={`/app/eleitores/${eleitor.uid}`} 
+                                  className="text-sm text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 font-medium"
+                                >
+                                  {eleitor.nome}
+                                </Link>
+                              </td>
+                              <td className="py-3 px-2 text-xs text-gray-600 dark:text-gray-400">
+                                {birthDate.toLocaleDateString('pt-BR')}
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300">
+                                  {age}
+                                </span>
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                {eleitor.genero?.toUpperCase() === 'MASCULINO' ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300">
+                                    ♂
+                                  </span>
+                                ) : eleitor.genero?.toUpperCase() === 'FEMININO' ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 dark:bg-pink-900/50 text-pink-800 dark:text-pink-300">
+                                    ♀
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 text-xs text-gray-600 dark:text-gray-400">
+                                {eleitor.whatsapp || eleitor.telefone || '-'}
+                              </td>
+                              <td className="py-3 px-2 text-xs text-gray-600 dark:text-gray-400">
+                                {eleitor.bairro || '-'}
+                              </td>
+                            </tr>
+                          );
+                        });
+                        })()}
+                      </tbody>
+                    </table>
+                </div>
+                <TablePagination
+                  currentPage={aniversariantesPage}
+                  totalItems={(() => {
+                    if (generoFilter === 'MASCULINO') {
+                      return aniversariantes.filter(e => e.genero?.toUpperCase() === 'MASCULINO').length;
+                    } else if (generoFilter === 'FEMININO') {
+                      return aniversariantes.filter(e => e.genero?.toUpperCase() === 'FEMININO').length;
+                    } else if (generoFilter === 'hoje') {
+                      const today = new Date();
+                      const todayDay = today.getDate();
+                      return aniversariantes.filter(e => {
+                        const [, , d] = e.nascimento.split('-').map(Number);
+                        return d === todayDay;
+                      }).length;
+                    } else if (generoFilter === '7dias') {
+                      const today = new Date();
+                      const todayDay = today.getDate();
+                      const startDay = Math.max(1, todayDay - 7);
+                      return aniversariantes.filter(e => {
+                        const [, , d] = e.nascimento.split('-').map(Number);
+                        return d >= startDay && d <= todayDay;
+                      }).length;
+                    } else if (generoFilter === '15dias') {
+                      const today = new Date();
+                      const todayDay = today.getDate();
+                      const startDay = Math.max(1, todayDay - 15);
+                      return aniversariantes.filter(e => {
+                        const [, , d] = e.nascimento.split('-').map(Number);
+                        return d >= startDay && d <= todayDay;
+                      }).length;
+                    }
+                    return aniversariantes.length;
+                  })()}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setAniversariantesPage}
+                />
+              </>
+            )}
+          </Card>
+
           {/* Tabela de Usuários */}
-          <Card className="p-4">
+          <Card className="p-4 mb-8 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Cadastros por Usuário</h3>
-                <p className="text-sm text-gray-500">Total de usuários ativos: {stats.porUsuario.length}</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cadastros por Usuário</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total de usuários ativos: {stats.porUsuario.length}</p>
               </div>
               <div className="text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded block text-center">
+                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded block text-center">
                   Líder: {stats.porUsuario[0]?.usuario_nome} ({stats.porUsuario[0]?.total})
                 </span>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <div className="min-w-[600px] px-4 sm:px-0">
-                <table className="w-full">
+            <div ref={setupHorizontalScroll}>
+                <table style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Usuário</th>
-                      <th className="text-right py-2">Total</th>
-                      <th className="text-right py-2">%</th>
-                      <th className="px-4 py-2 w-1/3">Progresso</th>
-                      <th className="text-center py-2">Ações</th>
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="text-left py-2 text-gray-900 dark:text-white">Usuário</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getPaginatedData(stats.porUsuario, usuarioPage).map(({ usuario_nome, total }, index) => {
                       const percentage = (total / stats.totalEleitores) * 100;
                       return (
-                        <tr key={usuario_nome} className={`border-b hover:bg-gray-50 ${index === 0 ? 'bg-blue-50' : ''}`}>
-                          <td className="py-2">{usuario_nome}</td>
-                          <td className="text-right py-2">{total}</td>
-                          <td className="text-right py-2">{percentage.toFixed(1)}%</td>
+                        <tr key={usuario_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                          <td className="py-2 text-gray-900 dark:text-white">{usuario_nome}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{total}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                           <td className="px-4 py-2">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                               <div
                                 className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
                                 style={{ width: `${percentage}%` }}
@@ -1857,15 +2546,15 @@ export function EleitoresReport() {
                                   e.stopPropagation();
                                   setOpenMenuUsuario(openMenuUsuario === usuario_nome ? null : usuario_nome);
                                 }}
-                                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                                 title="Opções de exportação"
                               >
-                                <MoreVertical className="w-4 h-4 text-gray-600" />
+                                <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                               </button>
                               
                               {openMenuUsuario === usuario_nome && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -1874,9 +2563,9 @@ export function EleitoresReport() {
                                       handleExportUsuarioExcel(usuario_nome);
                                       setOpenMenuUsuario(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                    <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     <span>Excel</span>
                                   </button>
                                   <button
@@ -1885,9 +2574,9 @@ export function EleitoresReport() {
                                       handleExportUsuarioPDF(usuario_nome);
                                       setOpenMenuUsuario(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
                                   >
-                                    <FileText className="w-4 h-4 text-red-600" />
+                                    <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
                                     <span>PDF</span>
                                   </button>
                                 </div>
@@ -1899,7 +2588,6 @@ export function EleitoresReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
             </div>
             <TablePagination
               currentPage={usuarioPage}

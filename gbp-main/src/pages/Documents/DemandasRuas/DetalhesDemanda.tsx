@@ -354,11 +354,9 @@ export function DetalhesDemanda() {
       const updatedDemanda = await demandasRuasService.updateDemanda(demanda.uid, updateData);
 
       setDemanda(prev => prev ? { ...prev, ...updatedDemanda } : updatedDemanda);
+      setNovoStatus('protocolado');
       setShowProtocoloModal(false);
       setProtocoloFile(null);
-
-      // Agora, chama a função central para atualizar o status
-      await updateStatus('protocolado');
 
       toast({
         title: 'Sucesso!',

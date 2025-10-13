@@ -66,38 +66,31 @@ export function WhatsAppPreview({ message, files, includeSaudacao }: WhatsAppPre
                         )}
                         {file.type === 'video' && (
                           <div className="relative">
-                            <div className="w-[240px] h-48 bg-black flex items-center justify-center text-white">
-                              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center mb-2">
-                                  <Play className="w-6 h-6 text-white" />
-                                </div>
-                                <span className="text-sm text-white/90">Prévia do vídeo</span>
-                              </div>
-                              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black/70 to-transparent flex items-center px-3">
-                                <div className="w-full flex items-center justify-between text-xs">
-                                  <span>0:00</span>
-                                  <span>1:30</span>
-                                </div>
-                              </div>
-                            </div>
+                            <video
+                              src={file.previewUrl}
+                              controls
+                              className="w-full h-48 bg-black object-contain"
+                              preload="metadata"
+                            >
+                              Seu navegador não suporta vídeos.
+                            </video>
                           </div>
                         )}
                         {file.type === 'audio' && (
-                          <div className="w-full h-16 bg-[#075E54] flex items-center px-4 text-white rounded-lg">
-                            <div className="flex items-center gap-4 w-full">
-                              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                                <Play className="w-5 h-5 flex-shrink-0" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between text-xs mb-1.5">
-                                  <span>Prévia do áudio</span>
-                                  <span>1:30</span>
-                                </div>
-                                <div className="w-full h-1 bg-white/30 rounded-full">
-                                  <div className="w-1/3 h-full bg-white rounded-full" />
-                                </div>
-                              </div>
-                            </div>
+                          <div className="w-full bg-[#075E54] rounded-lg overflow-hidden p-2">
+                            <audio
+                              src={file.previewUrl}
+                              controls
+                              controlsList="nodownload"
+                              className="w-full"
+                              preload="auto"
+                              style={{
+                                height: '32px',
+                                maxWidth: '100%'
+                              }}
+                            >
+                              Seu navegador não suporta áudio.
+                            </audio>
                           </div>
                         )}
                         {file.type === 'pdf' && (

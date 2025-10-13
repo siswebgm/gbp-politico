@@ -2,7 +2,7 @@ import { Container, Button, IconButton, Tooltip, Dialog } from '@mui/material';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { Filter, FileSpreadsheet, FileText, ArrowLeft, X, Search, Calendar } from 'lucide-react';
+import { Filter, FileSpreadsheet, FileText, ArrowLeft, X, Search, Calendar, MoreVertical } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect } from 'react';
 import { AttendanceFilters, AttendanceFilters as IAttendanceFilters } from './components/AttendanceFilters';
@@ -208,6 +208,16 @@ export function AttendanceList() {
   const [filters, setFilters] = useState<IAttendanceFilters>({});
   const [quickSearch, setQuickSearch] = useState('');
   const [quickPeriod, setQuickPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Fechar menu de exportação ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = () => setShowExportMenu(false);
+    if (showExportMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showExportMenu]);
 
   // Função para calcular tempo decorrido
   const calculateElapsedTime = (dataAtendimento: string) => {
@@ -311,7 +321,7 @@ export function AttendanceList() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 py-6">
+    <div className="bg-white dark:bg-gray-800 py-6 pb-24 md:pb-6">
       <Container maxWidth={false}>
         <div className="space-y-3 sm:space-y-4">
           <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
@@ -342,111 +352,125 @@ export function AttendanceList() {
                 </Button>
 
                 {hasAdminAccess && (
-                  <div className="hidden md:flex gap-2">
-                    <Tooltip title="Exportar para Excel">
-                      <span>
-                        <IconButton 
-                          onClick={handleExportExcel} 
-                          className="text-green-600 hover:text-green-700"
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowExportMenu(!showExportMenu);
+                      }}
+                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    </button>
+
+                    {showExportMenu && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                        <button
+                          onClick={() => {
+                            handleExportExcel();
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
                         >
-                          <FileSpreadsheet className="w-5 h-5 text-green-600" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip title="Exportar para PDF">
-                      <span>
-                        <IconButton 
-                          onClick={handleExportPDF} 
-                          className="text-red-600 hover:text-red-700"
+                          <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                          <span>Exportar Excel</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleExportPDF();
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-b-lg"
                         >
-                          <FileText className="w-5 h-5 text-red-600" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
+                          <FileText className="w-4 h-4 text-red-600" />
+                          <span>Exportar PDF</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 cursor-pointer">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3 lg:gap-4 cursor-pointer">
           <div 
             onClick={() => setStatusFilter('all')} 
-            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-4 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : ''}`}
           >
             <div className="flex items-center">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Total</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.total}</p>
+                <p className="text-xs sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Total</p>
+                <p className="text-2xl sm:text-xl lg:text-2xl font-semibold mt-1 sm:mt-1 lg:mt-2">{statusCounts.total}</p>
               </div>
-              <div className="flex-shrink-0 ml-1 sm:ml-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
+              <div className="flex-shrink-0 ml-3 sm:ml-2">
+                <div className="w-12 h-12 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
-              <div className="bg-blue-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: '100%' }} />
+            <div className="mt-3 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 sm:h-1.5 lg:h-2">
+              <div className="bg-blue-600 h-1.5 sm:h-1.5 lg:h-2 rounded-full" style={{ width: '100%' }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Pendente')} 
-            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Pendente' ? 'ring-2 ring-yellow-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-4 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Pendente' ? 'ring-2 ring-yellow-500' : ''}`}
           >
             <div className="flex items-center">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Pendentes</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.pendentes}</p>
+                <p className="text-xs sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Pendentes</p>
+                <p className="text-2xl sm:text-xl lg:text-2xl font-semibold mt-1 sm:mt-1 lg:mt-2">{statusCounts.pendentes}</p>
               </div>
-              <div className="flex-shrink-0 ml-1 sm:ml-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
-                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-yellow-600 dark:text-yellow-400" />
+              <div className="flex-shrink-0 ml-3 sm:ml-2">
+                <div className="w-12 h-12 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
+                  <Clock className="w-6 h-6 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-yellow-600 dark:text-yellow-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
-              <div className="bg-yellow-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.pendentes / statusCounts.total) * 100}%` }} />
+            <div className="mt-3 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 sm:h-1.5 lg:h-2">
+              <div className="bg-yellow-600 h-1.5 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.pendentes / statusCounts.total) * 100}%` }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Em Andamento')} 
-            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Em Andamento' ? 'ring-2 ring-blue-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-4 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Em Andamento' ? 'ring-2 ring-blue-500' : ''}`}
           >
             <div className="flex items-center">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Em Andamento</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.emAndamento}</p>
+                <p className="text-xs sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Em Andamento</p>
+                <p className="text-2xl sm:text-xl lg:text-2xl font-semibold mt-1 sm:mt-1 lg:mt-2">{statusCounts.emAndamento}</p>
               </div>
-              <div className="flex-shrink-0 ml-1 sm:ml-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
+              <div className="flex-shrink-0 ml-3 sm:ml-2">
+                <div className="w-12 h-12 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
-              <div className="bg-blue-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.emAndamento / statusCounts.total) * 100}%` }} />
+            <div className="mt-3 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 sm:h-1.5 lg:h-2">
+              <div className="bg-blue-600 h-1.5 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.emAndamento / statusCounts.total) * 100}%` }} />
             </div>
           </div>
 
           <div 
             onClick={() => setStatusFilter('Concluído')} 
-            className={`bg-white dark:bg-gray-800 p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Concluído' ? 'ring-2 ring-green-500' : ''}`}
+            className={`bg-white dark:bg-gray-800 p-4 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'Concluído' ? 'ring-2 ring-green-500' : ''}`}
           >
             <div className="flex items-center">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Concluídos</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-semibold mt-0.5 sm:mt-1 lg:mt-2">{statusCounts.concluidos}</p>
+                <p className="text-xs sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Concluídos</p>
+                <p className="text-2xl sm:text-xl lg:text-2xl font-semibold mt-1 sm:mt-1 lg:mt-2">{statusCounts.concluidos}</p>
               </div>
-              <div className="flex-shrink-0 ml-1 sm:ml-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-green-600 dark:text-green-400" />
+              <div className="flex-shrink-0 ml-3 sm:ml-2">
+                <div className="w-12 h-12 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-green-600 dark:text-green-400" />
                 </div>
               </div>
             </div>
-            <div className="mt-2 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 sm:h-1.5 lg:h-2">
-              <div className="bg-green-600 h-1 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.concluidos / statusCounts.total) * 100}%` }} />
+            <div className="mt-3 sm:mt-3 lg:mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 sm:h-1.5 lg:h-2">
+              <div className="bg-green-600 h-1.5 sm:h-1.5 lg:h-2 rounded-full" style={{ width: `${(statusCounts.concluidos / statusCounts.total) * 100}%` }} />
             </div>
           </div>
         </div>
@@ -571,7 +595,7 @@ export function AttendanceList() {
       </Container>
 
       {/* Botão flutuante de filtros para mobile */}
-      <div className="fixed bottom-6 right-6 md:hidden z-50">
+      <div className="fixed bottom-6 right-4 md:hidden z-50">
         <button
           onClick={() => setShowFilters(!showFilters)}
           className="h-14 w-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all duration-200 flex items-center justify-center"

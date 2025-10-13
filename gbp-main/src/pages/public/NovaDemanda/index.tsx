@@ -965,163 +965,53 @@ export function NovaDemanda() {
             <div className="border-b border-gray-200 pb-6">
               <div className="mb-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Endereço do Problema</h3>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button 
-                    type="button" 
-                    onClick={async () => {
-                      if (!formData.requerente_cpf) {
-                        toast.error('Por favor, informe o CPF primeiro');
-                        return;
-                      }
-                      
-                      try {
-                        const { data: requerente, error } = await supabase
-                          .from('gbp_requerentes_demanda_rua')
-                          .select('*')
-                          .eq('cpf', formData.requerente_cpf.replace(/\D/g, ''))
-                          .eq('empresa_uid', empresa_uid)
-                          .single();
-                        
-                        if (error) {
-                          toast.error('CPF não encontrado no cadastro');
+                {temEnderecoRequerente && (
+                  <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        if (!formData.requerente_cpf) {
+                          toast.error('Por favor, informe o CPF primeiro');
                           return;
                         }
                         
-                        if (requerente) {
-                          setFormData(prev => ({
-                            ...prev,
-                            cep: requerente.cep || '',
-                            logradouro: requerente.logradouro || '',
-                            numero: requerente.numero || '',
-                            bairro: requerente.bairro || '',
-                            cidade: requerente.cidade || '',
-                            uf: requerente.uf || '',
-                            referencia: requerente.referencia || ''
-                          }));
-                          toast.success('Endereço do cadastro carregado!');
-                        }
-                      } catch (error) {
-                        console.error('Erro ao buscar endereço:', error);
-                        toast.error('Erro ao buscar endereço do cadastro');
-                      }
-                    }}
-                    className="flex-1 px-4 py-2 border border-primary-600 text-sm font-medium rounded-md text-primary-600 bg-white hover:bg-primary-50"
-                  >
-                    Usar Endereço do Cadastro
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      if (navigator.geolocation) {
-                        toast.info('Obtendo sua localização...');
-                        
-                        navigator.geolocation.getCurrentPosition(
-                          async (position) => {
-                            try {
-                              const { latitude, longitude, accuracy } = position.coords;
-                              
-                              console.log('📍 Localização obtida:', {
-                                latitude,
-                                longitude,
-                                accuracy: `${accuracy.toFixed(2)} metros`,
-                                timestamp: new Date(position.timestamp).toLocaleString()
-                              });
-                              
-                              toast.info(`Buscando endereço...`);
-                              
-                              // Usando BigDataCloud API (gratuita, sem CORS, sem API key necessária)
-                              const response = await fetch(
-                                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=pt`
-                              );
-                              
-                              if (!response.ok) {
-                                throw new Error('Erro ao buscar endereço');
-                              }
-                              
-                              const data = await response.json();
-                              
-                              console.log('🗺️ Dados completos do endereço:', JSON.stringify(data, null, 2));
-                              
-                              // Extrai dados do endereço usando a estrutura correta da BigDataCloud
-                              // localityInfo.administrative tem níveis de 0 (país) até 8+ (rua)
-                              
-                              // Rua/Logradouro - geralmente nos níveis mais específicos (8, 7, 6)
-                              const rua = data.localityInfo?.administrative?.[8]?.name || 
-                                         data.localityInfo?.administrative?.[7]?.name || 
-                                         data.localityInfo?.administrative?.[6]?.name ||
-                                         data.locality || '';
-                              
-                              // Bairro - geralmente nível 5 ou 4 (não pegar nível 3 que é região metropolitana)
-                              const bairro = data.localityInfo?.administrative?.[5]?.name || 
-                                            data.localityInfo?.administrative?.[4]?.name || 
-                                            data.locality || '';
-                              
-                              // Cidade - geralmente nível 2 ou 3
-                              const cidade = data.city || 
-                                           data.localityInfo?.administrative?.[2]?.name || 
-                                           data.locality || '';
-                              
-                              // Estado - código de 2 letras
-                              const estado = data.principalSubdivisionCode?.replace('BR-', '').substring(0, 2) || '';
-                              
-                              console.log('✅ Dados extraídos:', { rua, bairro, cidade, estado });
-                              
-                              // Preenche o formulário com os dados obtidos
-                              setFormData(prev => ({
-                                ...prev,
-                                latitude: latitude.toString(),
-                                longitude: longitude.toString(),
-                                logradouro: rua,
-                                bairro: bairro,
-                                cidade: cidade,
-                                uf: estado,
-                                cep: data.postcode || '',
-                                referencia: prev.referencia
-                              }));
-                              
-                              toast.success('Localização e endereço carregados!');
-                              toast.info('Verifique e complete os campos conforme necessário.');
-                            } catch (error) {
-                              console.error('❌ Erro ao buscar endereço:', error);
-                              
-                              // Se falhar, ao menos salva as coordenadas
-                              const { latitude, longitude } = position.coords;
-                              setFormData(prev => ({
-                                ...prev,
-                                latitude: latitude.toString(),
-                                longitude: longitude.toString()
-                              }));
-                              
-                              toast.warning('Localização GPS obtida! Preencha o endereço manualmente.');
-                            }
-                          },
-                          (error) => {
-                            console.log('Erro ao obter localização:', error);
-                            if (error.code === 1) {
-                              toast.error('Permissão de localização negada.');
-                            } else if (error.code === 2) {
-                              toast.error('Localização indisponível.');
-                            } else if (error.code === 3) {
-                              toast.error('Tempo esgotado ao obter localização.');
-                            } else {
-                              toast.error('Erro ao obter localização.');
-                            }
-                          },
-                          {
-                            enableHighAccuracy: true,
-                            timeout: 5000,
-                            maximumAge: 0
+                        try {
+                          const { data: requerente, error } = await supabase
+                            .from('gbp_requerentes_demanda_rua')
+                            .select('*')
+                            .eq('cpf', formData.requerente_cpf.replace(/\D/g, ''))
+                            .eq('empresa_uid', empresa_uid)
+                            .single();
+                          
+                          if (error) {
+                            toast.error('CPF não encontrado no cadastro');
+                            return;
                           }
-                        );
-                      } else {
-                        toast.error('Geolocalização não é suportada pelo seu navegador');
-                      }
-                    }}
-                    className="flex-1 px-4 py-2 text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-                  >
-                    Minha Localização
-                  </button>
-                </div>
+                          
+                          if (requerente) {
+                            setFormData(prev => ({
+                              ...prev,
+                              cep: requerente.cep || '',
+                              logradouro: requerente.logradouro || '',
+                              numero: requerente.numero || '',
+                              bairro: requerente.bairro || '',
+                              cidade: requerente.cidade || '',
+                              uf: requerente.uf || '',
+                              referencia: requerente.referencia || ''
+                            }));
+                            toast.success('Endereço do cadastro carregado!');
+                          }
+                        } catch (error) {
+                          console.error('Erro ao buscar endereço:', error);
+                          toast.error('Erro ao buscar endereço do cadastro');
+                        }
+                      }}
+                      className="flex-1 px-4 py-2 border border-primary-600 text-sm font-medium rounded-md text-primary-600 bg-white hover:bg-primary-50 transition-colors"
+                    >
+                      ✓ Usar Endereço do Cadastro
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="hidden">
                 <div className="flex items-center">
@@ -1376,14 +1266,13 @@ export function NovaDemanda() {
                   </select>
                 </div>
 
-                <div className="sm:col-span-6">
+                <div className="sm:col-span-6 hidden">
                   <label htmlFor="boletim_ocorrencia" className="block text-sm font-medium text-gray-700">
                     Denúncia com boletim de ocorrência? *
                   </label>
                   <select
                     id="boletim_ocorrencia"
                     name="boletim_ocorrencia"
-                    required
                     value={formData.boletim_ocorrencia}
                     onChange={handleInputChange}
                     className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
@@ -1509,66 +1398,104 @@ export function NovaDemanda() {
                 </span>
               </label>
               
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-3 text-center w-full">
-                  <div className="flex flex-row gap-2 justify-center items-center">
-                    <label
-                      htmlFor="file-upload"
-                      className="cursor-pointer bg-primary-600 text-white px-6 py-3 rounded-md font-medium hover:bg-primary-700 transition-colors whitespace-nowrap"
-                    >
-                      <span>Escolher da Galeria</span>
-                      <input
-                        id="file-upload"
-                        name="file-upload"
-                        type="file"
-                        className="sr-only"
-                        multiple
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </label>
-                    <label
-                      htmlFor="camera-upload"
-                      className="md:hidden cursor-pointer bg-primary-600 text-white px-6 py-3 rounded-md font-medium hover:bg-primary-700 transition-colors whitespace-nowrap"
-                    >
-                      <span>Tirar Foto</span>
-                      <input
-                        id="camera-upload"
-                        name="camera-upload"
-                        type="file"
-                        className="sr-only"
-                        multiple
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleFileChange}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </label>
+              {previewUrls.length > 0 ? (
+                <div>
+                  {/* Pré-visualização das imagens */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
+                    {previewUrls.map((url, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={url}
+                          alt={`Pré-visualização ${index + 1}`}
+                          className="h-24 w-full object-cover rounded-md border-2 border-green-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
-                </div>
-              </div>
-
-              {/* Pré-visualização das imagens */}
-              {previewUrls.length > 0 && (
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {previewUrls.map((url, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={url}
-                        alt={`Pré-visualização ${index + 1}`}
-                        className="h-24 w-full object-cover rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeFile(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                  
+                  {/* Botão para adicionar mais fotos (se ainda não atingiu o limite) */}
+                  {files.length < 2 && (
+                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                      <div className="space-y-3 text-center w-full">
+                        <svg
+                          className="mx-auto h-12 w-12 text-gray-400"
+                          stroke="currentColor"
+                          fill="none"
+                          viewBox="0 0 48 48"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <div className="flex flex-row gap-2 justify-center items-center">
+                          <label
+                            htmlFor="file-upload-more"
+                            className="cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50"
+                          >
+                            <span>Adicionar mais fotos</span>
+                            <input
+                              id="file-upload-more"
+                              name="file-upload-more"
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              className="sr-only"
+                              multiple
+                              onChange={handleFileChange}
+                            />
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                      </div>
                     </div>
-                  ))}
+                  )}
+                </div>
+              ) : (
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-3 text-center w-full">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <div className="flex flex-row gap-2 justify-center items-center">
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50"
+                      >
+                        <span>Enviar fotos</span>
+                        <input
+                          id="file-upload"
+                          name="file-upload"
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="sr-only"
+                          multiple
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                  </div>
                 </div>
               )}
             </div>

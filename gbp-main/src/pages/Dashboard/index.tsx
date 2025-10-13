@@ -610,6 +610,9 @@ export function Dashboard() {
         </div>
       </div>
       
+      {/* Espaçamento extra no final para mobile */}
+      <div className="h-8 sm:h-0"></div>
+      
       {/* Componente de Notificações de Novos Atendimentos */}
       <NewAttendancesNotification />
     </div>

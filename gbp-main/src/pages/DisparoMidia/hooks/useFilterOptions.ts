@@ -8,7 +8,7 @@ export interface FilterOption {
   label: string;
 }
 
-export function useFilterOptions() {
+export function useFilterOptions(selectedCities?: string[]) {
   const company = useCompanyStore(state => state.company);
   const { user } = useAuth();
 
@@ -49,18 +49,26 @@ export function useFilterOptions() {
   });
 
   const neighborhoodsQuery = useQuery({
-    queryKey: ['disparo-midia-neighborhoods', company?.uid],
+    queryKey: ['disparo-midia-neighborhoods', company?.uid, selectedCities],
     queryFn: async () => {
       try {
         if (!company?.uid) return [];
 
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
           .from('gbp_eleitores')
           .select('bairro')
           .eq('empresa_uid', company.uid)
           .neq('bairro', null)
-          .neq('bairro', '')
-          .order('bairro');
+          .neq('bairro', '');
+
+        // Filtrar por cidades selecionadas
+        if (selectedCities && selectedCities.length > 0 && !selectedCities.includes('all')) {
+          query = query.in('cidade', selectedCities);
+        }
+
+        query = query.order('bairro');
+
+        const { data, error } = await query;
 
         if (error) throw error;
 

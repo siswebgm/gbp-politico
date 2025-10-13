@@ -34,6 +34,7 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings } from 'lucide-react';
+import { DateInput } from '@/components/ui/date-input';
 
 export function DemandasRuas() {
   const navigate = useNavigate();
@@ -456,7 +457,7 @@ export function DemandasRuas() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900 relative">
       
-      <div className="flex-1 py-2 md:py-6 px-2 md:px-4">
+      <div className="flex-1 py-2 md:py-6 px-2 md:px-4 pb-24 md:pb-6">
         <div className="flex flex-col space-y-2 md:space-y-4">
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-4">
@@ -495,14 +496,6 @@ export function DemandasRuas() {
             </div>
             <div className="flex items-baseline gap-2 ml-8">
               <p className="text-muted-foreground">Gerencie as demandas da cidade</p>
-              <span className="text-sm text-muted-foreground/70">
-                • {filteredDemandas.length} de {demandas.length} itens
-                {filteredDemandas.length < demandas.length && (
-                  <span className="text-muted-foreground/70">
-                    {' '}({demandas.length - filteredDemandas.length} oculto{filteredDemandas.length < demandas.length - 1 ? 's' : ''})
-                  </span>
-                )}
-              </span>
             </div>
           </div>
           </div>
@@ -650,26 +643,22 @@ export function DemandasRuas() {
                         </Select>
 
                         {/* Filtro de Data Início */}
-                        <div className="relative flex-1 min-w-[130px]">
-                          <CalendarDays className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none z-10" />
-                          <Input
-                            type="date"
+                        <div className="flex-1 min-w-[130px]">
+                          <DateInput
                             value={dataInicio}
-                            onChange={(e) => setDataInicio(e.target.value)}
+                            onChange={setDataInicio}
                             placeholder="Data início"
-                            className="w-full pl-9 pr-3 h-9 text-xs"
+                            className="w-full pr-3 h-9 text-xs"
                           />
                         </div>
 
                         {/* Filtro de Data Fim */}
-                        <div className="relative flex-1 min-w-[130px]">
-                          <CalendarDays className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none z-10" />
-                          <Input
-                            type="date"
+                        <div className="flex-1 min-w-[130px]">
+                          <DateInput
                             value={dataFim}
-                            onChange={(e) => setDataFim(e.target.value)}
+                            onChange={setDataFim}
                             placeholder="Data fim"
-                            className="w-full pl-9 pr-3 h-9 text-xs"
+                            className="w-full pr-3 h-9 text-xs"
                           />
                         </div>
                     </div>
@@ -1253,36 +1242,18 @@ export function DemandasRuas() {
                   )}
                 </div>
               </CardContent>
-              <CardFooter className="bg-gray-50 px-6 py-4 border-t">
-                <div className="w-full flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
-                  <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <span>Total:</span>
-                      <span className="font-medium text-foreground">{demandas.length}</span>
-                    </div>
-                    <span className="hidden sm:inline">•</span>
-                    <div className="flex items-center gap-1">
-                      <span>Exibindo:</span>
-                      <span className="font-medium text-foreground">{filteredDemandas.length}</span>
-                      <span>demanda{filteredDemandas.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    {filteredDemandas.length < demandas.length && (
-                      <>
-                        <span className="hidden sm:inline">•</span>
-                        <div className="flex items-center gap-1">
-                          <span>Filtrado</span>
-                          <span className="text-amber-600 dark:text-amber-400">
-                            ({demandas.length - filteredDemandas.length} oculto{filteredDemandas.length < demandas.length - 1 ? 's' : ''})
-                          </span>
-                        </div>
-                      </>
-                    )}
+              <CardFooter className="bg-gray-50 px-4 py-2 border-t mb-6">
+                <div className="w-full flex flex-row justify-between items-center">
+                  <div className="flex flex-row items-center gap-x-2 text-xs text-muted-foreground">
+                    <span>Total: <span className="font-medium text-foreground">{demandas.length}</span></span>
+                    <span className="text-gray-300">•</span>
+                    <span>Exibindo: <span className="font-medium text-foreground">{filteredDemandas.length}</span></span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm" disabled={true}>
+                  <div className="flex items-center space-x-1">
+                    <Button variant="ghost" size="sm" disabled={true} className="h-7 px-2 text-xs">
                       Anterior
                     </Button>
-                    <Button variant="outline" size="sm" disabled={true}>
+                    <Button variant="ghost" size="sm" disabled={true} className="h-7 px-2 text-xs">
                       Próximo
                     </Button>
                   </div>
@@ -1294,7 +1265,7 @@ export function DemandasRuas() {
       </div>
 
       {/* Botão flutuante de configurações para mobile */}
-      <div className="md:hidden fixed bottom-6 right-6 z-50">
+      <div className="md:hidden fixed bottom-20 right-4 z-50">
         <button
           onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
           className="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"

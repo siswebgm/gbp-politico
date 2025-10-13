@@ -234,17 +234,6 @@ export function Layout() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Botão de alternância de tema - Apenas para administradores da empresa */}
-            {user?.adm_empresa === true && (
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-full hover:bg-blue-500 dark:hover:bg-blue-700 text-white transition-colors"
-                title={isDarkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
-                type="button"
-              >
-                {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </button>
-            )}
             <NotificationBell />
             <div className="relative" ref={dropdownRef}>
               <button
@@ -331,6 +320,19 @@ export function Layout() {
 
                   {/* Actions */}
                   <div className="px-2 py-2 space-y-1">
+                    {user?.adm_empresa === true && (
+                      <button
+                        onClick={() => {
+                          toggleTheme();
+                        }}
+                        className="w-full px-4 py-2.5 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-3 group"
+                      >
+                        <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+                          {isDarkMode ? <Sun className="h-4 w-4 text-gray-600 dark:text-gray-300" /> : <Moon className="h-4 w-4 text-gray-600 dark:text-gray-300" />}
+                        </div>
+                        {isDarkMode ? 'Modo claro' : 'Modo escuro'}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setIsProfileDropdownOpen(false);

@@ -120,8 +120,8 @@ export function DisparoMidia() {
     label: cat.nome
   })) || [];
 
-  // Buscar opções de filtro
-  const { cities, neighborhoods, isLoading: isLoadingFilters } = useFilterOptions();
+  // Buscar opções de filtro (bairros filtrados pelas cidades selecionadas)
+  const { cities, neighborhoods, isLoading: isLoadingFilters } = useFilterOptions(selectedCities);
 
   // Função para contar eleitores
   const countEleitores = async () => {
@@ -257,10 +257,13 @@ export function DisparoMidia() {
 
   // Limpar todos os filtros
   const handleClearFilters = () => {
+    setSelectedCategoryType('all');
     setSelectedCategories(['all']);
     setSelectedCities(['all']);
     setSelectedNeighborhoods(['all']);
     setSelectedGender('all');
+    setMediaFiles([]);
+    setMessage('');
   };
 
   // Preparar dados para inserção
@@ -623,26 +626,32 @@ export function DisparoMidia() {
                     <Filter className="h-5 w-5 text-purple-500" />
                     <h2 className="font-medium">Filtros</h2>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {loadingCount ? (
-                      <div className="text-sm text-gray-500 flex items-center gap-1">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="hidden sm:inline">Calculando...</span>
+                      <div className="flex items-center gap-2 px-3 py-1.5">
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Calculando...</span>
                       </div>
                     ) : (
-                      <div className="text-sm text-blue-600 font-medium whitespace-nowrap">
-                        {eleitoresCount} {eleitoresCount === 1 ? 'eleitor' : 'eleitores'}
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-full">
+                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                          {eleitoresCount.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-sm font-medium text-blue-600/80 dark:text-blue-400/80">
+                          {eleitoresCount === 1 ? 'eleitor' : 'eleitores'}
+                        </span>
                       </div>
                     )}
                     {(selectedCategories.length > 0 || selectedCities.length > 0 || selectedNeighborhoods.length > 0 || selectedGender !== 'all') && (
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        className="text-xs text-gray-500 hover:text-purple-500 flex items-center gap-1 p-0 h-auto"
+                        className="text-xs text-gray-500 hover:text-red-500 flex items-center gap-1 px-2 py-1 h-auto"
                         onClick={handleClearFilters}
                       >
                         <X className="h-3 w-3" />
-                        <span className="hidden sm:inline">Limpar filtros</span>
+                        <span>Limpar filtros</span>
                       </Button>
                     )}
                   </div>
@@ -702,6 +711,17 @@ export function DisparoMidia() {
                         <SelectItem value="all" className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
                           Todas as categorias
                         </SelectItem>
+                        <div 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const allCategoryIds = formattedCategories.map(cat => cat.value);
+                            setSelectedCategories(allCategoryIds);
+                          }}
+                          className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-purple-50 dark:hover:bg-purple-900/20 focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 font-medium border-b border-gray-200 dark:border-gray-700"
+                        >
+                          ✓ Selecionar TODAS as categorias
+                        </div>
                         {formattedCategories.map((category) => (
                           <SelectItem 
                             key={category.value} 
@@ -766,6 +786,17 @@ export function DisparoMidia() {
                         <SelectItem value="all" className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
                           Todos os bairros
                         </SelectItem>
+                        <div 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const allNeighborhoodIds = neighborhoods.map(n => n.value);
+                            setSelectedNeighborhoods(allNeighborhoodIds);
+                          }}
+                          className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-green-50 dark:hover:bg-green-900/20 focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 font-medium border-b border-gray-200 dark:border-gray-700"
+                        >
+                          ✓ Selecionar TODOS os bairros
+                        </div>
                         {neighborhoods.map((neighborhood) => (
                           <SelectItem 
                             key={neighborhood.value} 
@@ -1005,17 +1036,13 @@ export function DisparoMidia() {
                             )}
 
                             {/* Botão Remover */}
-                            <div 
-                              className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all flex items-center justify-center"
+                            <button
+                              onClick={() => handleRemoveFile(index)}
+                              className="absolute top-1 right-1 p-1 bg-gray-800/60 text-white rounded-full hover:bg-red-500 transition-colors z-10"
+                              title="Clique para remover"
                             >
-                              <button
-                                onClick={() => handleRemoveFile(index)}
-                                className="p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                                title="Clique para remover"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
+                              <X className="h-3 w-3" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1024,7 +1051,7 @@ export function DisparoMidia() {
                     {/* Total de Arquivos */}
                     <div className="text-xs text-gray-500">
                       {mediaFiles.length} arquivo{mediaFiles.length !== 1 ? 's' : ''} 
-                      <span className="text-gray-400"> (passe o mouse sobre o arquivo para remover)</span>
+                      <span className="text-gray-400"> (clique no X vermelho para remover)</span>
                     </div>
                   </div>
                 )}
@@ -1036,7 +1063,8 @@ export function DisparoMidia() {
               <Button
                 variant="outline"
                 onClick={handleSendTest}
-                disabled={!message || sendingTest}
+                disabled={!message || sendingTest || statusWpp === 'close'}
+                title={statusWpp === 'close' ? 'WhatsApp está desconectado' : ''}
               >
                 {sendingTest ? (
                   <>
@@ -1049,8 +1077,9 @@ export function DisparoMidia() {
               </Button>
               <Button
                 onClick={handleSendClick}
-                disabled={loading || !message}
+                disabled={loading || !message || statusWpp === 'close'}
                 className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white"
+                title={statusWpp === 'close' ? 'WhatsApp está desconectado' : ''}
               >
                 {loading ? (
                   <>

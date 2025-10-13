@@ -352,7 +352,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
         </div>
 
         {/* View para Desktop */}
-        <div className={`hidden md:block overflow-x-auto overflow-y-visible ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
+        <div className={`hidden md:block overflow-x-auto ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
@@ -382,7 +382,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                     onClick={() => handleRowClick(atendimento)}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div 
                           onClick={(e) => {
@@ -391,10 +391,9 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                               navigate(`/app/eleitores/${atendimento.eleitor_uid}`);
                             }
                           }}
-                          className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer min-w-[100px]"
-                          title={getEleitorName(atendimento)}
+                          className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer"
                         >
-                          {formatName(getEleitorName(atendimento))}
+                          {getEleitorName(atendimento)}
                         </div>
                         {(() => {
                           const count = getEleitorAtendimentosCount(getEleitorName(atendimento));
@@ -528,8 +527,8 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
         </div>
 
         {/* View para Mobile */}
-        <div className={`md:hidden overflow-visible ${atendimentos.length <= 3 ? 'min-h-[300px]' : ''}`}>
-          <div className={`divide-y divide-gray-200 dark:divide-gray-700 overflow-visible ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
+        <div className={`md:hidden ${atendimentos.length <= 3 ? 'min-h-[300px]' : ''}`}>
+          <div className={`divide-y divide-gray-200 dark:divide-gray-700 ${atendimentos.length <= 3 ? 'pb-32' : ''}`}>
             {currentItems.map((atendimento) => {
               const StatusIcon = statusConfig[atendimento.status as AtendimentoStatus]?.icon || AlertCircle;
               return (
@@ -539,9 +538,9 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                   onClick={() => handleRowClick(atendimento)}
                 >
                   <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <div className="text-base font-medium text-gray-900 dark:text-white">
-                        {formatName(getEleitorName(atendimento))}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="text-base font-medium text-gray-900 dark:text-white truncate">
+                        {getEleitorName(atendimento)}
                       </div>
                       {(() => {
                         const count = getEleitorAtendimentosCount(getEleitorName(atendimento));
@@ -555,69 +554,13 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                         );
                       })()}
                     </div>
-                    <div className="relative">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenStatusMenu(openStatusMenu === atendimento.uid ? null : atendimento.uid);
-                        }}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          statusConfig[atendimento.status as AtendimentoStatus]?.color
-                        }`}
-                      >
-                        <StatusIcon className="w-3.5 h-3.5 mr-1" />
-                        {atendimento.status}
-                        <ChevronDown className="w-3.5 h-3.5 ml-1" />
-                      </button>
-                      
-                      {openStatusMenu === atendimento.uid && (
-                        <div className="absolute right-0 z-10 mt-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
-                          <div className="py-1">
-                            {Object.keys(statusConfig).map((status) => {
-                              const Icon = statusConfig[status as AtendimentoStatus].icon;
-                              return (
-                                <button
-                                  key={status}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStatusChange(atendimento.uid, status as AtendimentoStatus);
-                                  }}
-                                  className={`w-full text-left px-4 py-2 text-sm flex items-center space-x-2 ${
-                                    status === atendimento.status
-                                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                  }`}
-                                >
-                                  <Icon className={`w-4 h-4 ${statusConfig[status as AtendimentoStatus].color.replace('bg-', 'text-')}`} />
-                                  <span>{status}</span>
-                                  {status === atendimento.status && (
-                                    <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-                    <p><span className="font-medium">Categoria:</span> {atendimento.gbp_categorias?.nome || 'N/A'}</p>
-                    {atendimento.data_atendimento && calculateElapsedTime && (
-                      <p className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        <span className="font-medium">Há:</span> {calculateElapsedTime(atendimento.data_atendimento)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end">
-                    <div className="relative">
+                    <div className="relative flex-shrink-0">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenActionMenu(openActionMenu === atendimento.uid ? null : atendimento.uid);
                         }}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                       >
                         <MoreVertical className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                       </button>
@@ -660,6 +603,65 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                       )}
                     </div>
                   </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenStatusMenu(openStatusMenu === atendimento.uid ? null : atendimento.uid);
+                        }}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          statusConfig[atendimento.status as AtendimentoStatus]?.color
+                        }`}
+                      >
+                        <StatusIcon className="w-3.5 h-3.5 mr-1" />
+                        {atendimento.status}
+                        <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                      </button>
+                      
+                      {openStatusMenu === atendimento.uid && (
+                        <div className="absolute left-0 z-10 mt-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
+                          <div className="py-1">
+                            {Object.keys(statusConfig).map((status) => {
+                              const Icon = statusConfig[status as AtendimentoStatus].icon;
+                              return (
+                                <button
+                                  key={status}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStatusChange(atendimento.uid, status as AtendimentoStatus);
+                                  }}
+                                  className={`w-full text-left px-4 py-2 text-sm flex items-center space-x-2 ${
+                                    status === atendimento.status
+                                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                  }`}
+                                >
+                                  <Icon className={`w-4 h-4 ${statusConfig[status as AtendimentoStatus].color.replace('bg-', 'text-')}`} />
+                                  <span>{status}</span>
+                                  {status === atendimento.status && (
+                                    <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {atendimento.data_atendimento && calculateElapsedTime && (
+                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>Há {calculateElapsedTime(atendimento.data_atendimento)}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <p><span className="font-medium">Categoria:</span> {atendimento.gbp_categorias?.nome || 'N/A'}</p>
+                  </div>
                 </div>
               );
             })}
@@ -667,45 +669,47 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
         </div>
 
         {/* Paginação */}
-        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
           {/* Versão Mobile */}
           <div className="sm:hidden">
-            <div className="flex flex-col space-y-3">
-              <div className="text-sm text-gray-700 dark:text-gray-300 text-center">
-                <span className="font-medium">{startIndex + 1}</span>-
+            <div className="flex flex-col space-y-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Mostrando <span className="font-medium">{startIndex + 1}</span> até{' '}
                 <span className="font-medium">{Math.min(endIndex, atendimentos.length)}</span> de{' '}
-                <span className="font-medium">{atendimentos.length}</span>
+                <span className="font-medium">{atendimentos.length}</span> resultados
               </div>
-              <div className="flex justify-center space-x-2">
+              <div className="flex justify-center items-center space-x-1">
                 <button
                   onClick={() => handlePageChange(1)}
                   disabled={currentPage === 1}
-                  className="inline-flex items-center p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Primeira página"
                 >
-                  <ChevronsLeft className="h-5 w-5" />
+                  <ChevronsLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-md"
                 >
-                  <ChevronLeft className="h-5 w-5 mr-1" />
+                  <ChevronLeft className="h-4 w-4 mr-1" />
                   Anterior
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-md"
                 >
                   Próxima
-                  <ChevronRight className="h-5 w-5 ml-1" />
+                  <ChevronRight className="h-4 w-4 ml-1" />
                 </button>
                 <button
                   onClick={() => handlePageChange(totalPages)}
                   disabled={currentPage === totalPages}
-                  className="inline-flex items-center p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Última página"
                 >
-                  <ChevronsRight className="h-5 w-5" />
+                  <ChevronsRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -714,45 +718,45 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
           {/* Versão Desktop */}
           <div className="hidden sm:flex sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                Mostrando <span className="font-medium">{startIndex + 1}</span> até{' '}
-                <span className="font-medium">{Math.min(endIndex, atendimentos.length)}</span> de{' '}
-                <span className="font-medium">{atendimentos.length}</span> resultados
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Mostrando <span className="font-medium text-gray-700 dark:text-gray-300">{startIndex + 1}</span> até{' '}
+                <span className="font-medium text-gray-700 dark:text-gray-300">{Math.min(endIndex, atendimentos.length)}</span> de{' '}
+                <span className="font-medium text-gray-700 dark:text-gray-300">{atendimentos.length}</span> resultados
               </p>
             </div>
             <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+              <nav className="relative z-0 inline-flex items-center space-x-1">
                 <button
                   onClick={() => handlePageChange(1)}
                   disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="relative inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Primeira página"
                 >
-                  <span className="sr-only">Primeira</span>
-                  <ChevronsLeft className="h-5 w-5" />
+                  <ChevronsLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="relative inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Página anterior"
                 >
-                  <span className="sr-only">Anterior</span>
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="relative inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Próxima página"
                 >
-                  <span className="sr-only">Próxima</span>
-                  <ChevronRight className="h-5 w-5" />
+                  <ChevronRight className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handlePageChange(totalPages)}
                   disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  className="relative inline-flex items-center p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Última página"
                 >
-                  <span className="sr-only">Última</span>
-                  <ChevronsRight className="h-5 w-5" />
+                  <ChevronsRight className="h-4 w-4" />
                 </button>
               </nav>
             </div>

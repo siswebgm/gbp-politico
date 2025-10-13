@@ -12,33 +12,31 @@ import './styles.css';
 export function ConsultarDemandas() {
   const { empresa_uid } = useParams<{ empresa_uid?: string }>();
 
-  // FORÇA scroll no mobile - adiciona classe especial ao body
+  // FORÇA scroll no mobile - simplificado
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
     const root = document.getElementById('root');
     
-    console.log('🔧 Ativando scroll para página pública...');
-    
-    // Adiciona classe especial que permite scroll (definida no index.css)
+    // Adiciona classe especial que permite scroll
     body.classList.add('public-page-scroll');
     
-    // Força os estilos diretamente também (dupla garantia)
-    html.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; min-height: 100vh !important; position: relative !important; inset: auto !important;';
-    body.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; min-height: 100vh !important; position: relative !important; inset: auto !important; -webkit-overflow-scrolling: touch !important;';
+    // Aplica estilos de forma limpa
+    html.style.cssText = 'overflow-y: auto !important; overflow-x: hidden !important; height: 100% !important;';
+    body.style.cssText = 'overflow-y: auto !important; overflow-x: hidden !important; height: 100% !important; -webkit-overflow-scrolling: touch !important;';
     
     if (root) {
-      root.style.cssText = 'overflow: visible !important; height: auto !important; min-height: 100vh !important; position: relative !important;';
+      root.style.cssText = 'overflow: visible !important; height: auto !important; min-height: 100vh !important;';
     }
     
-    console.log('✅ Scroll ativado! Classes aplicadas:', body.className);
-    console.log('📊 Body overflow:', window.getComputedStyle(body).overflow);
-    console.log('📊 Body position:', window.getComputedStyle(body).position);
-    
-    // Cleanup ao desmontar - remove a classe
+    // Cleanup ao desmontar
     return () => {
       body.classList.remove('public-page-scroll');
-      console.log('🔄 Scroll desativado, voltando ao normal');
+      html.style.cssText = '';
+      body.style.cssText = '';
+      if (root) {
+        root.style.cssText = '';
+      }
     };
   }, []);
 
@@ -230,7 +228,7 @@ export function ConsultarDemandas() {
   };
 
   return (
-    <div className="consulta-demandas-page min-h-screen bg-gray-50">
+    <div className="consulta-demandas-page bg-gray-50" style={{ minHeight: 'auto' }}>
       {/* Banner da Empresa */}
       {empresa_uid && (
         <div className="bg-white shadow-sm w-full">
@@ -267,8 +265,8 @@ export function ConsultarDemandas() {
         </div>
       )}
 
-      <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
-        <div className="max-w-4xl mx-auto pb-16">
+      <div className="pt-4 pb-2 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
 
         <div className="bg-white shadow rounded-lg p-6 mb-8">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -628,9 +626,6 @@ export function ConsultarDemandas() {
         )}
         </div>
       </div>
-      
-      {/* Espaçamento final para garantir scroll completo - MAIOR NO MOBILE */}
-      <div style={{ height: '1px', paddingBottom: '10rem' }} className="scroll-spacer"></div>
     </div>
   );
 }
