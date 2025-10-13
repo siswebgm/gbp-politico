@@ -40,6 +40,7 @@ import NovoProjetoParte3 from './pages/Documents/ProjetosLei/NovoProjetoParte3';
 import NovoProjetoParte4 from './pages/Documents/ProjetosLei/NovoProjetoParte4';
 import VisualizarProjeto from './pages/Documents/ProjetosLei/VisualizarProjeto';
 import UploadProjeto from './pages/Documents/ProjetosLei/UploadProjeto';
+import EditarProjeto from './pages/Documents/ProjetosLei/EditarProjeto';
 import { Requerimentos } from './pages/Documents/Requerimentos';
 import UploadRequerimento from './pages/Documents/Requerimentos/UploadRequerimento';
 import EditRequerimento from './pages/Documents/Requerimentos/EditRequerimento';
@@ -286,6 +287,7 @@ export function AppRoutes() {
             <Route path="novo/parte-3" element={<AdminRoute><NovoProjetoParte3 /></AdminRoute>} />
             <Route path="novo/parte-4" element={<AdminRoute><NovoProjetoParte4 /></AdminRoute>} />
             <Route path="upload" element={<AdminRoute><UploadProjeto /></AdminRoute>} />
+            <Route path=":uid/editar" element={<AdminRoute><EditarProjeto /></AdminRoute>} />
             <Route path="visualizar/:id" element={<AdminRoute><VisualizarProjeto /></AdminRoute>} />
           </Route>
           <Route path="requerimentos">

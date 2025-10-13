@@ -34,7 +34,7 @@ interface DeleteModalState {
 export function CategorySettings() {
   const company = useCompanyStore((state) => state.company);
   const { data: categorias, isLoading, createCategory: create, updateCategory: update, deleteCategory: deleteCategoria, refetch } = useCategories();
-  const { tipos, isLoading: isLoadingTipos, updateTipo, refetch: refetchTipos } = useCategoriaTipos();
+  const { tipos, isLoading: isLoadingTipos, updateTipo, deleteTipo, refetch: refetchTipos } = useCategoriaTipos();
   const { checkCategoryHasVoters } = useCategories();
 
   useEffect(() => {
@@ -69,6 +69,16 @@ export function CategorySettings() {
     categoriaId: '',
     nome: '',
     hasVoters: false
+  });
+
+  const [deleteTipoModal, setDeleteTipoModal] = useState<{
+    isOpen: boolean;
+    tipoId: string;
+    tipoNome: string;
+  }>({
+    isOpen: false,
+    tipoId: '',
+    tipoNome: ''
   });
 
   const [newTipo, setNewTipo] = useState({ nome: '', isCreating: false });
@@ -398,6 +408,30 @@ export function CategorySettings() {
     setDeleteModal({ isOpen: false, categoriaId: '', nome: '', hasVoters: false });
   };
 
+  const handleDeleteTipoClick = (tipo: CategoriaTipo) => {
+    setDeleteTipoModal({
+      isOpen: true,
+      tipoId: tipo.uid,
+      tipoNome: tipo.nome
+    });
+  };
+
+  const handleConfirmDeleteTipo = async () => {
+    try {
+      await deleteTipo(deleteTipoModal.tipoId);
+      toast.success('Tipo excluído com sucesso!');
+      setDeleteTipoModal({ isOpen: false, tipoId: '', tipoNome: '' });
+      refetchTipos();
+    } catch (error) {
+      console.error('Erro ao excluir tipo:', error);
+      toast.error('Erro ao excluir tipo');
+    }
+  };
+
+  const handleCancelDeleteTipo = () => {
+    setDeleteTipoModal({ isOpen: false, tipoId: '', tipoNome: '' });
+  };
+
   return (
     <div className="space-y-4 md:space-y-6 relative min-h-screen pb-20 sm:pb-0">
       <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
@@ -641,6 +675,15 @@ export function CategorySettings() {
                       >
                         <Settings className="h-5 w-5 stroke-[1.5] transform hover:rotate-90 transition-transform duration-300" />
                       </button>
+                      {grupo.categorias.length === 0 && grupo.tipo.uid !== 'sem-tipo' && (
+                        <button
+                          onClick={() => handleDeleteTipoClick(grupo.tipo)}
+                          className="p-2.5 text-rose-400 hover:text-white hover:bg-rose-400 transition-all rounded-full hover:shadow-md group"
+                          title="Excluir Tipo"
+                        >
+                          <Trash2 className="h-5 w-5 stroke-[1.5] transform group-hover:scale-110 transition-transform" />
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -819,6 +862,52 @@ export function CategorySettings() {
                     Confirmar Exclusão
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Tipo */}
+      {deleteTipoModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto overflow-hidden transform transition-all">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirmar Exclusão</h3>
+                  <p className="text-gray-600 mt-1">
+                    Tem certeza que deseja excluir este tipo?
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-rose-50 rounded-lg p-4 mb-6">
+                <p className="text-rose-800 font-medium text-center">
+                  {deleteTipoModal.tipoNome}
+                </p>
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm text-rose-600">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Esta ação não pode ser desfeita.</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  onClick={handleCancelDeleteTipo}
+                  className="flex-1 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDeleteTipo}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-lg hover:from-rose-600 hover:to-rose-700 transition-all font-medium"
+                >
+                  Confirmar Exclusão
+                </button>
               </div>
             </div>
           </div>

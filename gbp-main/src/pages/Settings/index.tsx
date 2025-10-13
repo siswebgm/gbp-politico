@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CategorySettings } from './components/CategorySettings';
 import { IndicadoSettings } from './components/IndicadoSettings';
 import { BirthdaySettings } from './components/BirthdaySettings';
@@ -11,11 +11,52 @@ import TiposDemanda from './TiposDemanda';
 
 type SettingsTab = 'categories' | 'indicados' | 'birthday' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'tipos-demanda';
 
+// Helper para adicionar scroll horizontal com touch
+const setupHorizontalScroll = (el: HTMLDivElement | null) => {
+  if (!el) return;
+  
+  el.style.cssText = 'overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; width: 100%; position: relative;';
+  
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let isHorizontalScroll = false;
+  
+  el.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].pageX - el.offsetLeft;
+    startY = e.touches[0].pageY;
+    scrollLeft = el.scrollLeft;
+    isHorizontalScroll = false;
+  });
+  
+  el.addEventListener('touchmove', (e) => {
+    const x = e.touches[0].pageX - el.offsetLeft;
+    const y = e.touches[0].pageY;
+    const deltaX = Math.abs(x - startX);
+    const deltaY = Math.abs(y - startY);
+    
+    if (!isHorizontalScroll && deltaX < 10 && deltaY < 10) {
+      return;
+    }
+    
+    if (!isHorizontalScroll) {
+      isHorizontalScroll = deltaX > deltaY;
+    }
+    
+    if (isHorizontalScroll) {
+      e.preventDefault();
+      const walk = (x - startX) * 2;
+      el.scrollLeft = scrollLeft - walk;
+    }
+  }, { passive: false });
+};
+
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('categories');
   const { isAuthenticated, isLoading, user } = useAuth();
   const company = useCompanyStore((state) => state.company);
   const navigate = useNavigate();
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
 
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
 
@@ -33,6 +74,11 @@ export function Settings() {
       navigate('/app/configuracoes/gerenciar-formulario');
     }
   }, [activeTab, navigate]);
+
+  // Configurar scroll horizontal com touch
+  useEffect(() => {
+    setupHorizontalScroll(tabsContainerRef.current);
+  }, []);
 
   const handleTabChange = (tab: SettingsTab) => {
     if (tab === 'whatsapp') {
@@ -112,7 +158,7 @@ export function Settings() {
               <div className="p-4">
                 {/* Tabs */}
                 <div className="space-y-6">
-                  <div className="overflow-x-auto pb-4">
+                  <div ref={tabsContainerRef} className="overflow-x-auto pb-4">
                     <nav className="flex gap-6 min-w-max">
                       {tabs.map((tab) => {
                         const Icon = tab.icon;

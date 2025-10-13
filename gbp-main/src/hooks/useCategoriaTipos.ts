@@ -79,12 +79,22 @@ export function useCategoriaTipos() {
     },
   });
 
+  const deleteTipo = useMutation({
+    mutationFn: async (uid: string) => {
+      return categoriaTipoService.delete(uid);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categoria-tipos', company?.uid] });
+    },
+  });
+
   return {
     tipos: data,
     isLoading,
     error,
     createTipo: createTipo.mutateAsync,
     updateTipo: updateTipo.mutateAsync,
+    deleteTipo: deleteTipo.mutateAsync,
     refetch
   };
 }
