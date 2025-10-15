@@ -64,11 +64,12 @@ export function useDocumentCounts() {
 
         if (emendasError) throw emendasError;
 
-        // Buscar contagem de demandas de rua
+        // Buscar contagem de demandas de rua (apenas não excluídas)
         const { count: demandasRuasCount, error: demandasError } = await supabaseClient
           .from('gbp_demandas_ruas')
           .select('*', { count: 'exact', head: true })
-          .eq('empresa_uid', company.uid);
+          .eq('empresa_uid', company.uid)
+          .eq('excluido', false);
 
         if (demandasError) throw demandasError;
 

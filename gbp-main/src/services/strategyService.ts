@@ -13,6 +13,7 @@ export interface StrategyMetrics {
   topCategorias: Array<{
     categoria_uid: string;
     nome: string;
+    tipo: string;
     quantidade: number;
   }>;
   distribuicaoGenero: Array<{
@@ -60,6 +61,22 @@ export class StrategyService {
       const { data: topCategorias, error: errorCategorias } = await supabaseClient
         .rpc('get_top_categorias', { empresa_uid: empresaUid });
       console.log('Dados categorias:', topCategorias, 'Erro:', errorCategorias);
+      
+      // Buscar tipos das categorias
+      const categoriasComTipo = await Promise.all(
+        (topCategorias || []).map(async (categoria: any) => {
+          const { data: categoriaDetalhes } = await supabaseClient
+            .from('gbp_categorias')
+            .select('tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(nome)')
+            .eq('uid', categoria.categoria_uid)
+            .single();
+          
+          return {
+            ...categoria,
+            tipo: categoriaDetalhes?.tipo?.nome || 'Não informado'
+          };
+        })
+      );
 
       // Distribuição por Gênero
       const { data: generos, error: errorGeneros } = await supabaseClient
@@ -81,9 +98,10 @@ export class StrategyService {
           nome: indicado.nome || 'Não informado',
           quantidade: indicado.quantidade || 0
         })) || [],
-        topCategorias: topCategorias?.map((categoria: any) => ({
+        topCategorias: categoriasComTipo?.map((categoria: any) => ({
           categoria_uid: categoria.categoria_uid || 'Não informado',
           nome: categoria.nome || 'Não informado',
+          tipo: categoria.tipo || 'Não informado',
           quantidade: categoria.quantidade || 0
         })) || [],
         distribuicaoGenero: generos?.map((genero: any) => ({

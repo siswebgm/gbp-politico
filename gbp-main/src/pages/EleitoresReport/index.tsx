@@ -4,7 +4,7 @@ import { useCompanyStore } from '../../store/useCompanyStore';
 import { eleitorStatsService, EleitorStats } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake } from 'lucide-react';
+import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag } from 'lucide-react';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
@@ -75,6 +75,15 @@ export function EleitoresReport() {
   const [openMenuAniversariante, setOpenMenuAniversariante] = useState<boolean>(false);
   const [aniversariantesPage, setAniversariantesPage] = useState(1);
   const [generoFilter, setGeneroFilter] = useState<'all' | 'MASCULINO' | 'FEMININO' | 'hoje' | '7dias' | '15dias'>('all');
+  const [categorias, setCategorias] = useState<Array<{
+    categoria_uid: string;
+    nome: string;
+    tipo: string | null;
+    total: number;
+  }>>([]);
+  const [loadingCategorias, setLoadingCategorias] = useState(false);
+  const [openMenuCategoria, setOpenMenuCategoria] = useState<string | null>(null);
+  const [categoriaPage, setCategoriaPage] = useState(1);
   
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
 
@@ -106,6 +115,7 @@ export function EleitoresReport() {
       return;
     }
     loadStats();
+    loadCategorias();
   }, [company?.uid, canAccess]);
 
   // Carregar aniversariantes quando o mês mudar
@@ -129,16 +139,17 @@ export function EleitoresReport() {
         setOpenMenuIndicado(null);
         setOpenMenuZona(null);
         setOpenMenuAniversariante(false);
+        setOpenMenuCategoria(null);
       }
     };
     
-    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante) {
+    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante || openMenuCategoria) {
       setTimeout(() => {
         document.addEventListener('click', handleClickOutside);
       }, 0);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante]);
+  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante, openMenuCategoria]);
 
   const loadStats = async () => {
     if (!company?.uid) {
@@ -196,6 +207,223 @@ export function EleitoresReport() {
       setAniversariantes([]);
     } finally {
       setLoadingAniversariantes(false);
+    }
+  };
+
+  const loadCategorias = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCategorias(true);
+      
+      // Buscar todas as categorias com seus tipos e contar eleitores
+      const { data, error } = await supabaseClient
+        .from('gbp_categorias')
+        .select(`
+          uid,
+          nome,
+          tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(nome)
+        `)
+        .eq('empresa_uid', company.uid)
+        .order('nome');
+
+      if (error) throw error;
+
+      // Para cada categoria, contar quantos eleitores tem
+      const categoriasComContagem = await Promise.all(
+        (data || []).map(async (cat: any) => {
+          const { count } = await supabaseClient
+            .from('gbp_eleitores')
+            .select('*', { count: 'exact', head: true })
+            .eq('categoria_uid', cat.uid)
+            .eq('empresa_uid', company.uid);
+
+          return {
+            categoria_uid: cat.uid,
+            nome: cat.nome,
+            tipo: cat.tipo?.nome || null,
+            total: count || 0
+          };
+        })
+      );
+
+      // Ordenar por quantidade (maior para menor)
+      categoriasComContagem.sort((a, b) => b.total - a.total);
+      
+      setCategorias(categoriasComContagem);
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error);
+      setCategorias([]);
+    } finally {
+      setLoadingCategorias(false);
+    }
+  };
+
+  // Exportar eleitores de uma categoria específica para Excel
+  const exportarCategoriaExcel = async (categoriaUid: string, categoriaNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .eq('categoria_uid', categoriaUid)
+        .order('nome');
+
+      if (error) throw error;
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(categoriaNome);
+      
+      sheet.columns = [
+        { header: 'Nome', key: 'nome', width: 30 },
+        { header: 'CPF', key: 'cpf', width: 18 },
+        { header: 'RG/CNH', key: 'ax_rg_cnh', width: 18 },
+        { header: 'Data Nascimento', key: 'nascimento', width: 18 },
+        { header: 'Nome da Mãe', key: 'nome_mae', width: 30 },
+        { header: 'Gênero', key: 'genero', width: 12 },
+        { header: 'WhatsApp', key: 'whatsapp', width: 20 },
+        { header: 'Telefone', key: 'telefone', width: 20 },
+        { header: 'Instagram', key: 'instagram', width: 25 },
+        { header: 'CEP', key: 'cep', width: 12 },
+        { header: 'Logradouro', key: 'logradouro', width: 35 },
+        { header: 'Número', key: 'numero', width: 10 },
+        { header: 'Complemento', key: 'complemento', width: 20 },
+        { header: 'Bairro', key: 'bairro', width: 25 },
+        { header: 'Cidade', key: 'cidade', width: 25 },
+        { header: 'UF', key: 'uf', width: 8 },
+        { header: 'Título Eleitor', key: 'titulo', width: 18 },
+        { header: 'Zona', key: 'zona', width: 10 },
+        { header: 'Seção', key: 'secao', width: 10 },
+        { header: 'Colégio Eleitoral', key: 'colegio_eleitoral', width: 30 },
+        { header: 'Número SUS', key: 'numero_do_sus', width: 20 },
+        { header: 'Confiabilidade', key: 'confiabilidade_do_voto', width: 18 },
+        { header: 'Responsável', key: 'responsavel', width: 25 },
+        { header: 'Resp. pelo Eleitor', key: 'responsavel_pelo_eleitor', width: 25 },
+        { header: 'Qtd Adultos Residência', key: 'quantidade_adultos_residencia', width: 20 }
+      ];
+
+      (data || []).forEach(eleitor => {
+        sheet.addRow({
+          nome: eleitor.nome || '',
+          cpf: eleitor.cpf || '',
+          ax_rg_cnh: eleitor.ax_rg_cnh || '',
+          nascimento: eleitor.nascimento ? new Date(eleitor.nascimento).toLocaleDateString('pt-BR') : '',
+          nome_mae: eleitor.nome_mae || '',
+          genero: eleitor.genero || '',
+          whatsapp: eleitor.whatsapp || '',
+          telefone: eleitor.telefone || '',
+          instagram: eleitor.instagram || '',
+          cep: eleitor.cep || '',
+          logradouro: eleitor.logradouro || '',
+          numero: eleitor.numero || '',
+          complemento: eleitor.complemento || '',
+          bairro: eleitor.bairro || '',
+          cidade: eleitor.cidade || '',
+          uf: eleitor.uf || '',
+          titulo: eleitor.titulo || '',
+          zona: eleitor.zona || '',
+          secao: eleitor.secao || '',
+          colegio_eleitoral: eleitor.colegio_eleitoral || '',
+          numero_do_sus: eleitor.numero_do_sus || '',
+          confiabilidade_do_voto: eleitor.confiabilidade_do_voto || '',
+          responsavel: eleitor.responsavel || '',
+          responsavel_pelo_eleitor: eleitor.responsavel_pelo_eleitor || '',
+          quantidade_adultos_residencia: eleitor.quantidade_adultos_residencia || ''
+        });
+      });
+
+      // Estilizar cabeçalho
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF3B82F6' }
+      };
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `categoria_${categoriaNome.replace(/\s+/g, '_')}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar categoria:', error);
+    }
+  };
+
+  // Exportar eleitores de uma categoria específica para PDF
+  const exportarCategoriaPDF = async (categoriaUid: string, categoriaNome: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // Buscar tipo da categoria
+      const categoria = categorias.find(c => c.categoria_uid === categoriaUid);
+      const categoriaTipo = categoria?.tipo || 'Não informado';
+
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('nome, whatsapp, cidade, bairro')
+        .eq('empresa_uid', company.uid)
+        .eq('categoria_uid', categoriaUid)
+        .order('nome');
+
+      if (error) throw error;
+
+      const doc = new jsPDF();
+      
+      // Categoria (título principal)
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Categoria: ${categoriaNome}`, 14, 15);
+      
+      // Nome da Empresa (lado direito, menor)
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 100, 100); // Cinza
+      doc.text('GBP Politico', 196, 15, { align: 'right' });
+      
+      // Linha divisória
+      doc.setDrawColor(59, 130, 246); // Azul
+      doc.setLineWidth(0.5);
+      doc.line(14, 18, 196, 18);
+      
+      // Tipo da Categoria
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100); // Cinza
+      doc.text(`Tipo: ${categoriaTipo}`, 14, 24);
+      
+      // Total
+      doc.setTextColor(0, 0, 0); // Voltar para preto
+      doc.text(`Total: ${data?.length || 0} eleitores`, 14, 30);
+
+      (doc as any).autoTable({
+        head: [['Nome', 'WhatsApp', 'Cidade', 'Bairro']],
+        body: (data || []).map(eleitor => [
+          eleitor.nome || '',
+          eleitor.whatsapp || '',
+          eleitor.cidade || '',
+          eleitor.bairro || ''
+        ]),
+        startY: 36,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { cellWidth: 60 }, // Nome
+          1: { cellWidth: 40 }, // WhatsApp
+          2: { cellWidth: 40 }, // Cidade
+          3: { cellWidth: 42 }  // Bairro
+        }
+      });
+
+      doc.save(`categoria_${categoriaNome.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar categoria PDF:', error);
     }
   };
 
@@ -1645,6 +1873,110 @@ export function EleitoresReport() {
               itemsPerPage={itemsPerPage}
               onPageChange={setIndicadoPage}
             />
+          </Card>
+
+          {/* Distribuição por Categoria */}
+          <Card className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Categoria</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total de categorias: {categorias.length}</p>
+              </div>
+            </div>
+            {loadingCategorias ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div ref={setupHorizontalScroll}>
+                  <table style={{ minWidth: '600px', width: '100%' }}>
+                    <thead>
+                      <tr className="border-b dark:border-gray-700">
+                        <th className="text-left py-2 text-gray-900 dark:text-white">Categoria</th>
+                        <th className="text-left py-2 text-gray-900 dark:text-white">Tipo</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
+                        <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                        <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getPaginatedData(categorias, categoriaPage).map((categoria, index) => {
+                        const percentage = stats ? (categoria.total / stats.totalEleitores) * 100 : 0;
+                        return (
+                          <tr key={categoria.categoria_uid} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                            <td className="py-2 text-gray-900 dark:text-white">
+                              <div className="flex items-center gap-2">
+                                <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                {categoria.nome}
+                              </div>
+                            </td>
+                            <td className="py-2 text-gray-600 dark:text-gray-400 text-sm">
+                              {categoria.tipo || 'Não informado'}
+                            </td>
+                            <td className="text-right py-2 text-gray-900 dark:text-white">{categoria.total}</td>
+                            <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
+                            <td className="px-4 py-2">
+                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                <div
+                                  className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
+                                  style={{ width: `${Math.min(percentage, 100)}%` }}
+                                ></div>
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              <div className="relative flex items-center justify-center">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuCategoria(openMenuCategoria === categoria.categoria_uid ? null : categoria.categoria_uid);
+                                  }}
+                                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                >
+                                  <MoreVertical className="h-5 w-5 text-gray-500" />
+                                </button>
+                                
+                                {openMenuCategoria === categoria.categoria_uid && (
+                                  <div className="absolute right-0 top-8 z-10 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700">
+                                    <button
+                                      onClick={() => {
+                                        exportarCategoriaExcel(categoria.categoria_uid, categoria.nome);
+                                        setOpenMenuCategoria(null);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                    >
+                                      <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                                      Exportar Excel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        exportarCategoriaPDF(categoria.categoria_uid, categoria.nome);
+                                        setOpenMenuCategoria(null);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                    >
+                                      <FileText className="h-4 w-4 text-red-600" />
+                                      Exportar PDF
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination
+                  currentPage={categoriaPage}
+                  totalItems={categorias.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCategoriaPage}
+                />
+              </>
+            )}
           </Card>
 
           {/* Distribuição por Bairro */}

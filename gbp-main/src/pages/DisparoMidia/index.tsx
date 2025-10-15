@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Filter, Image, Video, Mic, FileText, Users, X, MessageSquare, Upload, Smartphone, Play, List, ListOrdered, Code, Building2, User, Info, Loader2, AlertTriangle, Tags, MapPin, Paperclip, CheckCircle } from 'lucide-react';
+import { Send, Filter, Image, Video, Mic, FileText, Users, X, MessageSquare, Upload, Smartphone, Play, List, ListOrdered, Code, Building2, User, Info, Loader2, AlertTriangle, Tags, MapPin, Paperclip, CheckCircle, FileBarChart, ArrowLeft } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { useToast } from '../../hooks/useToast';
 import { supabaseClient } from '../../lib/supabase';
@@ -92,8 +92,10 @@ export function DisparoMidia() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [includeSaudacao, setIncludeSaudacao] = useState(true);
   const [useNomeDisparo, setUseNomeDisparo] = useState(true);
-  const [eleitoresCount, setEleitoresCount] = useState<number>(0);
   const [loadingCount, setLoadingCount] = useState(false);
+  const [eleitoresCount, setEleitoresCount] = useState(0);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [neighborhoodDropdownOpen, setNeighborhoodDropdownOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -533,7 +535,7 @@ export function DisparoMidia() {
 
   return (
     <div className="bg-white/50 dark:bg-white/50">
-      <div className="container mx-auto space-y-4 p-3 md:p-4">
+      <div className="w-full mx-auto space-y-4 p-3 md:p-4">
       <style jsx global>{`
         .scrollbar-thin::-webkit-scrollbar {
           width: 6px;
@@ -550,7 +552,27 @@ export function DisparoMidia() {
         }
       `}</style>
       <div className="mt-0 mb-2 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Disparo de Mídia</h1>
+        <div className="flex items-center gap-3">
+          {/* Botão Voltar */}
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center justify-center hover:opacity-70 transition-opacity"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-6 w-6 text-gray-700 dark:text-gray-300" />
+          </button>
+          
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex-1">Disparo de Mídia</h1>
+          {(user?.nivel_acesso === 'admin' || user?.nivel_acesso === 'coordenador') && (
+            <button
+              onClick={() => navigate('/app/relatorio-disparo')}
+              className="p-2 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg transition-colors group"
+              title="Ver Relatórios de Disparo"
+            >
+              <FileBarChart className="h-6 w-6 text-gray-600 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           <span className="hidden sm:inline">Envie mensagens e mídias para seus contatos de forma eficiente e organizada.</span>
           <span className="sm:hidden">Envie mensagens e mídias para contatos.</span>
@@ -620,41 +642,48 @@ export function DisparoMidia() {
 
             {/* Grupo Filtros */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                {/* Header do Filtro */}
+                <div className="flex items-center justify-between mb-3 sm:mb-0">
                   <div className="flex items-center gap-2">
                     <Filter className="h-5 w-5 text-purple-500" />
-                    <h2 className="font-medium">Filtros</h2>
+                    <h2 className="font-medium text-sm sm:text-base">Filtros</h2>
                   </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {loadingCount ? (
-                      <div className="flex items-center gap-2 px-3 py-1.5">
-                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Calculando...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-full">
-                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                          {eleitoresCount.toLocaleString('pt-BR')}
-                        </span>
-                        <span className="text-sm font-medium text-blue-600/80 dark:text-blue-400/80">
-                          {eleitoresCount === 1 ? 'eleitor' : 'eleitores'}
-                        </span>
-                      </div>
-                    )}
-                    {(selectedCategories.length > 0 || selectedCities.length > 0 || selectedNeighborhoods.length > 0 || selectedGender !== 'all') && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="text-xs text-gray-500 hover:text-red-500 flex items-center gap-1 px-2 py-1 h-auto"
-                        onClick={handleClearFilters}
-                      >
-                        <X className="h-3 w-3" />
-                        <span>Limpar filtros</span>
-                      </Button>
-                    )}
-                  </div>
+                </div>
+
+                {/* Contador e Botão Limpar - Mobile First */}
+                <div className="flex items-center justify-between gap-2 mt-2 sm:mt-3">
+                  {/* Contador de Eleitores */}
+                  {loadingCount ? (
+                    <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5">
+                      <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-blue-600" />
+                      <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">Calculando...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-full">
+                      <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      <span className="text-lg sm:text-xl font-bold text-blue-600 dark:text-blue-400">
+                        {eleitoresCount.toLocaleString('pt-BR')}
+                      </span>
+                      <span className="text-xs sm:text-sm font-medium text-blue-600/80 dark:text-blue-400/80 whitespace-nowrap">
+                        {eleitoresCount === 1 ? 'eleitor' : 'eleitores'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Botão Limpar Filtros */}
+                  {(selectedCategories.length > 0 || selectedCities.length > 0 || selectedNeighborhoods.length > 0 || selectedGender !== 'all') && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="text-xs text-gray-500 hover:text-red-500 flex items-center gap-1 px-2 py-1 h-auto whitespace-nowrap"
+                      onClick={handleClearFilters}
+                    >
+                      <X className="h-3 w-3 flex-shrink-0" />
+                      <span className="hidden sm:inline">Limpar filtros</span>
+                      <span className="sm:hidden">Limpar</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -701,8 +730,14 @@ export function DisparoMidia() {
                     </Label>
                     <NewSelect 
                       value={selectedCategories[0] || ''} 
-                      onValueChange={handleCategoryChange}
+                      onValueChange={(value) => {
+                        handleCategoryChange(value);
+                        // Manter o dropdown aberto após seleção individual
+                        setTimeout(() => setCategoryDropdownOpen(true), 0);
+                      }}
                       disabled={isLoadingCategories}
+                      open={categoryDropdownOpen}
+                      onOpenChange={setCategoryDropdownOpen}
                     >
                       <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                         <SelectValue placeholder="Selecione uma categoria" />
@@ -717,6 +752,8 @@ export function DisparoMidia() {
                             e.stopPropagation();
                             const allCategoryIds = formattedCategories.map(cat => cat.value);
                             setSelectedCategories(allCategoryIds);
+                            // Fechar o dropdown após selecionar todas
+                            setCategoryDropdownOpen(false);
                           }}
                           className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-purple-50 dark:hover:bg-purple-900/20 focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 font-medium border-b border-gray-200 dark:border-gray-700"
                         >
@@ -777,7 +814,13 @@ export function DisparoMidia() {
                     </Label>
                     <NewSelect 
                       value={selectedNeighborhoods[0]} 
-                      onValueChange={handleNeighborhoodChange}
+                      onValueChange={(value) => {
+                        handleNeighborhoodChange(value);
+                        // Manter o dropdown aberto após seleção individual
+                        setTimeout(() => setNeighborhoodDropdownOpen(true), 0);
+                      }}
+                      open={neighborhoodDropdownOpen}
+                      onOpenChange={setNeighborhoodDropdownOpen}
                     >
                       <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                         <SelectValue placeholder="Todos os bairros" />
@@ -792,6 +835,8 @@ export function DisparoMidia() {
                             e.stopPropagation();
                             const allNeighborhoodIds = neighborhoods.map(n => n.value);
                             setSelectedNeighborhoods(allNeighborhoodIds);
+                            // Fechar o dropdown após selecionar todos
+                            setNeighborhoodDropdownOpen(false);
                           }}
                           className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-green-50 dark:hover:bg-green-900/20 focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 font-medium border-b border-gray-200 dark:border-gray-700"
                         >
@@ -837,61 +882,115 @@ export function DisparoMidia() {
                   </div>
                 </div>
 
-                {/* Tags dos filtros selecionados */}
-                {(selectedCategories.length > 0 || selectedCities.length > 0 || selectedNeighborhoods.length > 0 || selectedGender !== 'all') && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {selectedCategories.map(categoryId => {
-                      const category = formattedCategories.find(c => c.value === categoryId);
-                      return category && (
-                        <span key={categoryId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 text-purple-700 rounded-md border border-purple-200">
-                          {category.label}
-                          <X 
-                            className="h-3 w-3 cursor-pointer hover:text-purple-900" 
-                            onClick={() => handleCategoryChange(categoryId)}
-                          />
-                        </span>
-                      );
-                    })}
-                    
-                    {selectedCities.map(cityId => {
-                      const city = cities.find(c => c.value === cityId);
-                      return city && (
-                        <span key={cityId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-md border border-blue-200">
-                          {city.label}
-                          <X 
-                            className="h-3 w-3 cursor-pointer hover:text-blue-900" 
-                            onClick={() => handleCityChange(cityId)}
-                          />
-                        </span>
-                      );
-                    })}
-
-                    {selectedNeighborhoods.map(neighborhoodId => {
-                      const neighborhood = neighborhoods.find(n => n.value === neighborhoodId);
-                      return neighborhood && (
-                        <span key={neighborhoodId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 text-green-700 rounded-md border border-green-200">
-                          {neighborhood.label}
-                          <X 
-                            className="h-3 w-3 cursor-pointer hover:text-green-900" 
-                            onClick={() => handleNeighborhoodChange(neighborhoodId)}
-                          />
-                        </span>
-                      );
-                    })}
-
-                    {selectedGender !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-pink-50 text-pink-700 rounded-md border border-pink-200">
-                        {selectedGender}
-                        <X 
-                          className="h-3 w-3 cursor-pointer hover:text-pink-900" 
-                          onClick={() => setSelectedGender('all')}
-                        />
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
+
+            {/* Card de Tags Selecionadas */}
+            {(selectedCategories.length > 0 && selectedCategories[0] !== 'all' || selectedCities.length > 0 && selectedCities[0] !== 'all' || selectedNeighborhoods.length > 0 && selectedNeighborhoods[0] !== 'all' || selectedGender !== 'all') && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <div className="flex items-center gap-2">
+                    <Tags className="h-5 w-5 text-orange-500" />
+                    <h2 className="font-medium text-sm sm:text-base">Filtros Aplicados</h2>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-gray-800">
+                  <div className="space-y-3">
+                    {/* Grupo: Categorias */}
+                    {selectedCategories.length > 0 && selectedCategories[0] !== 'all' && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                          <Tags className="h-3 w-3" />
+                          Categorias Selecionadas:
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedCategories.map(categoryId => {
+                            const category = formattedCategories.find(c => c.value === categoryId);
+                            return category && (
+                              <span key={categoryId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 text-purple-700 rounded-md border border-purple-200">
+                                {category.label}
+                                <X 
+                                  className="h-3 w-3 cursor-pointer hover:text-purple-900" 
+                                  onClick={() => handleCategoryChange(categoryId)}
+                                />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grupo: Cidades */}
+                    {selectedCities.length > 0 && selectedCities[0] !== 'all' && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Cidades Selecionadas:
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedCities.map(cityId => {
+                            const city = cities.find(c => c.value === cityId);
+                            return city && (
+                              <span key={cityId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-md border border-blue-200">
+                                {city.label}
+                                <X 
+                                  className="h-3 w-3 cursor-pointer hover:text-blue-900" 
+                                  onClick={() => handleCityChange(cityId)}
+                                />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grupo: Bairros */}
+                    {selectedNeighborhoods.length > 0 && selectedNeighborhoods[0] !== 'all' && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Bairros Selecionados:
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedNeighborhoods.map(neighborhoodId => {
+                            const neighborhood = neighborhoods.find(n => n.value === neighborhoodId);
+                            return neighborhood && (
+                              <span key={neighborhoodId} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 text-green-700 rounded-md border border-green-200">
+                                {neighborhood.label}
+                                <X 
+                                  className="h-3 w-3 cursor-pointer hover:text-green-900" 
+                                  onClick={() => handleNeighborhoodChange(neighborhoodId)}
+                                />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grupo: Gênero */}
+                    {selectedGender !== 'all' && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          Gênero Selecionado:
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-pink-50 text-pink-700 rounded-md border border-pink-200">
+                            {selectedGender}
+                            <X 
+                              className="h-3 w-3 cursor-pointer hover:text-pink-900" 
+                              onClick={() => setSelectedGender('all')}
+                            />
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Grupo Arquivos */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -1059,12 +1158,13 @@ export function DisparoMidia() {
             </div>
 
             {/* Botões de ação */}
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-3 sm:gap-4 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+            <div className="mt-6 flex flex-row items-center justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
               <Button
                 variant="outline"
                 onClick={handleSendTest}
                 disabled={!message || sendingTest || statusWpp === 'close'}
                 title={statusWpp === 'close' ? 'WhatsApp está desconectado' : ''}
+                className="flex-1 sm:flex-initial"
               >
                 {sendingTest ? (
                   <>
@@ -1078,7 +1178,7 @@ export function DisparoMidia() {
               <Button
                 onClick={handleSendClick}
                 disabled={loading || !message || statusWpp === 'close'}
-                className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white"
+                className="flex-1 sm:flex-initial bg-blue-500 hover:bg-blue-600 text-white"
                 title={statusWpp === 'close' ? 'WhatsApp está desconectado' : ''}
               >
                 {loading ? (

@@ -77,6 +77,7 @@ interface Pesquisa {
   ativa: boolean;
   dados_participante: DadosParticipante;
   notificacao_whatsapp?: NotificacaoWhatsApp;
+  habilitar_intencao_voto?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +94,7 @@ export function ResponderPesquisa() {
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [respostas, setRespostas] = useState<Resposta[]>([]);
+  const [candidatoEscolhido, setCandidatoEscolhido] = useState<string | null>(null);
   
   // Dados do participante
   const [opiniaoSincera, setOpiniaoSincera] = useState('');
@@ -768,6 +770,11 @@ export function ResponderPesquisa() {
       erros.push('• Número é obrigatório');
     }
     
+    // Verificar se a intenção de voto foi respondida (se habilitada)
+    if (pesquisa.habilitar_intencao_voto && candidatos.length > 0 && !candidatoEscolhido) {
+      erros.push('• Selecione um candidato na pergunta de intenção de voto');
+    }
+    
     // Verificar se todas as perguntas obrigatórias foram respondidas
     const perguntasObrigatorias = perguntas.filter(p => p.obrigatoria);
     
@@ -1066,6 +1073,33 @@ export function ResponderPesquisa() {
             comentario: null
           },
           opiniao_sincera: opiniaoSincera.trim(), // Campo dedicado para a opinião sincera
+          participante_nome: dadosParticipanteEnvio.nome,
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Se houver intenção de voto selecionada, adicionar como uma resposta especial
+      if (pesquisa.habilitar_intencao_voto && candidatoEscolhido) {
+        const perguntaPadraoId = perguntas.length > 0 ? perguntas[0].uid : '00000000-0000-0000-0000-000000000000';
+        const candidatoSelecionado = candidatos.find(c => c.uid === candidatoEscolhido);
+        
+        respostasParaEnvio.push({
+          pesquisa_uid: id,
+          pergunta_uid: perguntaPadraoId,
+          participante_uid: participanteUid,
+          empresa_uid: pesquisa.empresa_uid || null,
+          resposta: {
+            tipo: 'intencao_voto',
+            valor: candidatoEscolhido,
+            candidato_uid: candidatoEscolhido,
+            pergunta: 'Em qual destes candidatos você votaria?',
+            candidato_nome: candidatoSelecionado?.nome || '',
+            candidato_partido: candidatoSelecionado?.partido || '',
+            candidato_foto: candidatoSelecionado?.foto_url || null,
+            opcoes: [],
+            data_resposta: new Date().toISOString(),
+            comentario: null
+          },
           participante_nome: dadosParticipanteEnvio.nome,
           created_at: new Date().toISOString()
         });
@@ -1680,6 +1714,76 @@ export function ResponderPesquisa() {
                     </div>
                   );
                 })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Seção de Intenção de Voto */}
+          {pesquisa.habilitar_intencao_voto && candidatos.length > 0 && (
+            <Card className="mb-8 border-2 border-blue-300 dark:border-blue-700">
+              <CardHeader className="bg-blue-50 dark:bg-blue-900/30 border-b border-blue-200 dark:border-blue-800">
+                <div className="flex items-center space-x-2">
+                  <Check className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  <CardTitle className="text-blue-900 dark:text-blue-100">
+                    Pergunta de Intenção de Voto
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <p className="font-semibold text-lg mb-4 text-gray-900 dark:text-gray-100">
+                  Em qual destes candidatos você votaria?
+                  <span className="text-red-500 ml-1">*</span>
+                </p>
+                <div className="space-y-2">
+                  {candidatos.map((candidato) => (
+                    <div 
+                      key={candidato.uid}
+                      className={`flex items-center space-x-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        candidatoEscolhido === candidato.uid
+                          ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-600 shadow-md' 
+                          : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-800 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                      }`}
+                      onClick={() => setCandidatoEscolhido(candidato.uid)}
+                    >
+                      <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                        {candidato.foto_url ? (
+                          <img 
+                            src={candidato.foto_url} 
+                            alt={candidato.nome} 
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-gray-500 dark:text-gray-400 text-sm">
+                            {candidato.nome.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium text-sm truncate ${candidatoEscolhido === candidato.uid ? 'text-blue-900 dark:text-blue-100' : ''}`}>
+                          {candidato.nome}
+                        </p>
+                        {candidato.partido && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {candidato.partido}
+                          </p>
+                        )}
+                      </div>
+                      <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        candidatoEscolhido === candidato.uid
+                          ? 'border-blue-600 dark:border-blue-400 bg-blue-600 dark:bg-blue-500'
+                          : 'border-gray-300 dark:border-gray-600'
+                      }`}>
+                        {candidatoEscolhido === candidato.uid && (
+                          <Check className="h-4 w-4 text-white" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-4 italic flex items-center">
+                  <span className="mr-1">ℹ️</span>
+                  Você pode selecionar apenas um candidato
+                </p>
               </CardContent>
             </Card>
           )}

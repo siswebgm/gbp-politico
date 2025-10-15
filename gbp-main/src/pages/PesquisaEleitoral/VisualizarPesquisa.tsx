@@ -118,6 +118,18 @@ export function VisualizarPesquisa() {
   const [cidadeFiltro, setCidadeFiltro] = useState<string>('');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarExportacao, setMostrarExportacao] = useState(false);
+  const [intencaoVoto, setIntencaoVoto] = useState<Array<{
+    candidato_nome: string;
+    candidato_partido: string;
+    total_votos: number;
+    percentual: number;
+  }>>([]);
+  const [loadingIntencaoVoto, setLoadingIntencaoVoto] = useState(false);
+  const [candidatoExpandido, setCandidatoExpandido] = useState<string | null>(null);
+  const [votosCarregados, setVotosCarregados] = useState<Record<string, Array<{ participante_nome: string; participante_telefone: string | null; data_voto: string }>>>({});
+  const [loadingVotos, setLoadingVotos] = useState<string | null>(null);
+  const [paginaVotos, setPaginaVotos] = useState<Record<string, number>>({});
+  const votosPerPage = 10;
 
   // Função para abrir o Google Maps com as localizações
   const handleVerMapa = () => {
@@ -546,6 +558,137 @@ export function VisualizarPesquisa() {
     if (abaAtiva === 'opinioes' && pesquisa?.uid) {
       console.log('Aba de opiniões ativada, recarregando opiniões...');
       carregarOpinioesSinceras(pesquisa.uid);
+    }
+  }, [abaAtiva, pesquisa?.uid]);
+
+  // Carregar participantes que votaram em um candidato específico
+  const toggleCandidato = async (candidatoNome: string) => {
+    // Se já está expandido, colapsar
+    if (candidatoExpandido === candidatoNome) {
+      setCandidatoExpandido(null);
+      return;
+    }
+    
+    // Expandir e carregar votos se ainda não foram carregados
+    setCandidatoExpandido(candidatoNome);
+    
+    if (!votosCarregados[candidatoNome]) {
+      try {
+        setLoadingVotos(candidatoNome);
+        
+        const { data, error } = await supabaseClient
+          .from('ps_gbp_respostas')
+          .select('participante_nome, participante_uid, created_at, resposta')
+          .eq('pesquisa_uid', pesquisa?.uid)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        // Filtrar votos do candidato específico
+        const votosDoCanditado = data
+          ?.filter((r: any) => 
+            r.resposta?.tipo === 'intencao_voto' && 
+            r.resposta?.candidato_nome === candidatoNome
+          ) || [];
+        
+        // Buscar telefones dos participantes
+        const participantesUids = votosDoCanditado
+          .map((r: any) => r.participante_uid)
+          .filter(Boolean);
+        
+        let telefonesMap: Record<string, string> = {};
+        
+        if (participantesUids.length > 0) {
+          const { data: participantesData } = await supabaseClient
+            .from('ps_gbp_participantes')
+            .select('uid, telefone')
+            .in('uid', participantesUids);
+          
+          if (participantesData) {
+            telefonesMap = participantesData.reduce((acc: any, p: any) => {
+              acc[p.uid] = p.telefone;
+              return acc;
+            }, {});
+          }
+        }
+        
+        const votosComTelefone = votosDoCanditado.map((r: any) => ({
+          participante_nome: r.participante_nome || 'Anônimo',
+          participante_telefone: r.participante_uid ? telefonesMap[r.participante_uid] : null,
+          data_voto: r.created_at
+        }));
+        
+        setVotosCarregados(prev => ({
+          ...prev,
+          [candidatoNome]: votosComTelefone
+        }));
+      } catch (error) {
+        console.error('Erro ao carregar votos do candidato:', error);
+        toast.error('Erro ao carregar lista de votantes');
+      } finally {
+        setLoadingVotos(null);
+      }
+    }
+  };
+
+  // Carregar dados de intenção de voto
+  const carregarIntencaoVoto = async (pesquisaUid: string) => {
+    try {
+      setLoadingIntencaoVoto(true);
+      
+      const { data, error } = await supabaseClient
+        .from('ps_gbp_respostas')
+        .select('resposta')
+        .eq('pesquisa_uid', pesquisaUid);
+      
+      if (error) throw error;
+      
+      // Filtrar apenas respostas de intenção de voto
+      const votosIntencao = data?.filter((r: any) => r.resposta?.tipo === 'intencao_voto') || [];
+      
+      // Agrupar por candidato
+      const votosPorCandidato: Record<string, { nome: string; partido: string; votos: number }> = {};
+      
+      votosIntencao.forEach((r: any) => {
+        const candidatoNome = r.resposta?.candidato_nome || 'Não informado';
+        const candidatoPartido = r.resposta?.candidato_partido || '';
+        
+        if (!votosPorCandidato[candidatoNome]) {
+          votosPorCandidato[candidatoNome] = {
+            nome: candidatoNome,
+            partido: candidatoPartido,
+            votos: 0
+          };
+        }
+        
+        votosPorCandidato[candidatoNome].votos++;
+      });
+      
+      // Calcular totais e percentuais
+      const totalVotos = Object.values(votosPorCandidato).reduce((sum, c) => sum + c.votos, 0);
+      
+      const resultado = Object.values(votosPorCandidato)
+        .map(c => ({
+          candidato_nome: c.nome,
+          candidato_partido: c.partido,
+          total_votos: c.votos,
+          percentual: totalVotos > 0 ? (c.votos / totalVotos) * 100 : 0
+        }))
+        .sort((a, b) => b.total_votos - a.total_votos);
+      
+      setIntencaoVoto(resultado);
+    } catch (error) {
+      console.error('Erro ao carregar intenção de voto:', error);
+      toast.error('Erro ao carregar dados de intenção de voto');
+    } finally {
+      setLoadingIntencaoVoto(false);
+    }
+  };
+
+  // Efeito para carregar intenção de voto quando a aba for alterada
+  useEffect(() => {
+    if (abaAtiva === 'intencao-voto' && pesquisa?.uid) {
+      carregarIntencaoVoto(pesquisa.uid);
     }
   }, [abaAtiva, pesquisa?.uid]);
 
@@ -1420,6 +1563,10 @@ export function VisualizarPesquisa() {
             <TabsTrigger value="localizacao" className="whitespace-nowrap">
               <MapPin className="h-4 w-4 mr-1" />
               Localização
+            </TabsTrigger>
+            <TabsTrigger value="intencao-voto" className="whitespace-nowrap">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Intenção de Voto
             </TabsTrigger>
           </TabsList>
 
@@ -2349,6 +2496,255 @@ export function VisualizarPesquisa() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     Nenhuma empresa associada à pesquisa
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Aba de Intenção de Voto */}
+          <TabsContent value="intencao-voto" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-blue-600" />
+                      Intenção de Voto
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Resultado consolidado da pergunta "Em qual destes candidatos você votaria?"
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingIntencaoVoto ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : intencaoVoto.length === 0 ? (
+                  <div className="text-center py-12">
+                    <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg font-medium">Nenhum voto registrado ainda</p>
+                    <p className="text-gray-400 text-sm mt-2">
+                      Os resultados aparecerão aqui quando os participantes responderem à pesquisa
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Cards de Resumo */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="bg-blue-50 border-blue-200">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-blue-700">Total de Votos</CardDescription>
+                          <CardTitle className="text-3xl text-blue-900">
+                            {intencaoVoto.reduce((sum, c) => sum + c.total_votos, 0)}
+                          </CardTitle>
+                        </CardHeader>
+                      </Card>
+                      <Card className="bg-green-50 border-green-200">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-green-700">Candidato em 1º</CardDescription>
+                          <CardTitle className="text-xl text-green-900">
+                            {intencaoVoto[0]?.candidato_nome || 'N/A'}
+                          </CardTitle>
+                          <p className="text-sm text-green-600 font-medium">
+                            {intencaoVoto[0]?.percentual.toFixed(1)}%
+                          </p>
+                        </CardHeader>
+                      </Card>
+                      <Card className="bg-orange-50 border-orange-200">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-orange-700">Candidato em 2º</CardDescription>
+                          <CardTitle className="text-xl text-orange-900">
+                            {intencaoVoto[1]?.candidato_nome || 'N/A'}
+                          </CardTitle>
+                          <p className="text-sm text-orange-600 font-medium">
+                            {intencaoVoto[1]?.percentual.toFixed(1)}%
+                          </p>
+                        </CardHeader>
+                      </Card>
+                    </div>
+
+                    {/* Ranking de Candidatos */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900">Ranking de Candidatos</h3>
+                      {intencaoVoto.map((candidato, index) => {
+                        const isExpanded = candidatoExpandido === candidato.candidato_nome;
+                        const votos = votosCarregados[candidato.candidato_nome] || [];
+                        const isLoadingVotos = loadingVotos === candidato.candidato_nome;
+                        
+                        return (
+                          <div 
+                            key={index}
+                            className={`bg-white border rounded-lg overflow-hidden transition-all ${
+                              isExpanded 
+                                ? 'border-blue-400 shadow-lg' 
+                                : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
+                            }`}
+                          >
+                            <div 
+                              className="p-4 cursor-pointer"
+                              onClick={() => toggleCandidato(candidato.candidato_nome)}
+                              title="Clique para ver os participantes que votaram neste candidato"
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-white ${
+                                    index === 0 ? 'bg-green-500' : 
+                                    index === 1 ? 'bg-blue-500' : 
+                                    index === 2 ? 'bg-orange-500' : 
+                                    'bg-gray-400'
+                                  }`}>
+                                    {index + 1}º
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-lg text-gray-900">
+                                      {candidato.candidato_nome}
+                                    </p>
+                                    {candidato.candidato_partido && (
+                                      <p className="text-sm text-gray-500">
+                                        {candidato.candidato_partido}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-2xl font-bold text-blue-600">
+                                    {candidato.percentual.toFixed(1)}%
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {candidato.total_votos} {candidato.total_votos === 1 ? 'voto' : 'votos'}
+                                  </p>
+                                  <p className="text-xs text-blue-500 mt-1 flex items-center justify-end gap-1">
+                                    <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    {isExpanded ? 'Ocultar' : 'Ver'} participantes
+                                  </p>
+                                </div>
+                              </div>
+                              {/* Barra de progresso */}
+                              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all duration-500 ${
+                                    index === 0 ? 'bg-green-500' : 
+                                    index === 1 ? 'bg-blue-500' : 
+                                    index === 2 ? 'bg-orange-500' : 
+                                    'bg-gray-400'
+                                  }`}
+                                  style={{ width: `${candidato.percentual}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Lista de Participantes Expandida */}
+                            {isExpanded && (
+                              <div className="border-t border-gray-200 bg-gray-50 p-4">
+                                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  Participantes que votaram ({candidato.total_votos})
+                                </h4>
+                                {isLoadingVotos ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                  </div>
+                                ) : votos.length === 0 ? (
+                                  <div className="text-center py-6 text-gray-500">
+                                    Nenhum participante encontrado
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="space-y-2">
+                                      {(() => {
+                                        const currentPage = paginaVotos[candidato.candidato_nome] || 1;
+                                        const startIndex = (currentPage - 1) * votosPerPage;
+                                        const endIndex = startIndex + votosPerPage;
+                                        const votosPaginados = votos.slice(startIndex, endIndex);
+                                        const totalPages = Math.ceil(votos.length / votosPerPage);
+                                        
+                                        return (
+                                          <>
+                                            {votosPaginados.map((voto, votoIndex) => (
+                                              <div 
+                                                key={votoIndex}
+                                                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
+                                              >
+                                                <div className="flex items-center gap-3 flex-1">
+                                                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-600 font-semibold text-xs flex-shrink-0">
+                                                    {startIndex + votoIndex + 1}
+                                                  </div>
+                                                  <div className="flex-1">
+                                                    <p className="font-medium text-gray-900 text-sm">
+                                                      {voto.participante_nome}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                      {voto.participante_telefone && (
+                                                        <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded">
+                                                          <Smartphone className="h-3 w-3" />
+                                                          {voto.participante_telefone}
+                                                        </span>
+                                                      )}
+                                                      <p className="text-xs text-gray-500">
+                                                        {format(new Date(voto.data_voto), "dd/MM/yyyy 'às' HH:mm")}
+                                                      </p>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <Users className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                              </div>
+                                            ))}
+                                            
+                                            {/* Paginação */}
+                                            {totalPages > 1 && (
+                                              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                                                <div className="text-sm text-gray-600">
+                                                  Mostrando {startIndex + 1} a {Math.min(endIndex, votos.length)} de {votos.length} participantes
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setPaginaVotos(prev => ({
+                                                        ...prev,
+                                                        [candidato.candidato_nome]: Math.max(1, currentPage - 1)
+                                                      }));
+                                                    }}
+                                                    disabled={currentPage === 1}
+                                                    className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    Anterior
+                                                  </button>
+                                                  <span className="text-sm text-gray-600">
+                                                    Página {currentPage} de {totalPages}
+                                                  </span>
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setPaginaVotos(prev => ({
+                                                        ...prev,
+                                                        [candidato.candidato_nome]: Math.min(totalPages, currentPage + 1)
+                                                      }));
+                                                    }}
+                                                    disabled={currentPage === totalPages}
+                                                    className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    Próxima
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </CardContent>

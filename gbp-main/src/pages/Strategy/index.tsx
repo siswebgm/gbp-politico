@@ -22,11 +22,11 @@ export function Strategy() {
 
     // 1. Worksheet for Indicadores Principais
     const ws_data_indicadores = [
-      ["Indicador", "Item", "Quantidade"],
-      ...metrics.topBairros.map(item => ["Top Bairros", item.bairro, item.quantidade]),
-      ...metrics.topIndicados.map(item => ["Top Indicados", item.nome || item.indicado_uid, item.quantidade]),
-      ...metrics.topCategorias.map(item => ["Top Categorias", item.nome, item.quantidade]),
-      ...metrics.distribuicaoGenero.map(item => ["Distribuição de Gênero", item.genero, item.quantidade]),
+      ["Indicador", "Item", "Tipo", "Quantidade"],
+      ...metrics.topBairros.map(item => ["Top Bairros", item.bairro, "", item.quantidade]),
+      ...metrics.topIndicados.map(item => ["Top Indicados", item.nome || item.indicado_uid, "", item.quantidade]),
+      ...metrics.topCategorias.map(item => ["Top Categorias", item.nome, item.tipo, item.quantidade]),
+      ...metrics.distribuicaoGenero.map(item => ["Distribuição de Gênero", item.genero, "", item.quantidade]),
     ];
     const ws_indicadores = XLSX.utils.aoa_to_sheet(ws_data_indicadores);
     XLSX.utils.book_append_sheet(wb, ws_indicadores, "Indicadores Principais");
@@ -157,13 +157,16 @@ export function Strategy() {
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
                 Top Categorias
               </h3>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {metrics.topCategorias.map((categoria, index) => {
                   console.log('Categoria:', categoria);
                   return (
-                    <li key={index} className="flex justify-between items-center">
-                      <span className="text-gray-500 dark:text-gray-400">{categoria.nome || categoria.categoria_uid}</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{categoria.quantidade.toString()}</span>
+                    <li key={index} className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="text-gray-900 dark:text-white font-medium">{categoria.nome || categoria.categoria_uid}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Tipo: {categoria.tipo}</p>
+                      </div>
+                      <span className="font-bold text-lg text-gray-900 dark:text-white ml-3">{categoria.quantidade.toString()}</span>
                     </li>
                   );
                 })}

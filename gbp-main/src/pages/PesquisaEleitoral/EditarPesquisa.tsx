@@ -143,6 +143,7 @@ export function EditarPesquisa() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [novaPergunta, setNovaPergunta] = useState('');
   const [tipoPergunta, setTipoPergunta] = useState<'estrelas' | 'nota' | 'votacao'>('estrelas');
+  const [habilitarIntencaoVoto, setHabilitarIntencaoVoto] = useState(false);
   
   // Função para processar upload de imagem
   const processarUploadImagem = async (base64Image: string, nomeCandidato: string, bucketName: string): Promise<string | null> => {
@@ -231,6 +232,7 @@ export function EditarPesquisa() {
         data_fim: dataFim ? dataFim.toISOString() : null,
         ativa: true,
         empresa_uid: empresaUid,
+        habilitar_intencao_voto: tipoPesquisa === 'eleitoral' ? habilitarIntencaoVoto : false,
         // Configuração dos campos do participante
         dados_participante: JSON.stringify({
           nome: { 
@@ -627,6 +629,9 @@ export function EditarPesquisa() {
           setDataInicio(dataInicio);
           setDataFim(dataFim);
           
+          // Carregar configuração de intenção de voto
+          setHabilitarIntencaoVoto(pesquisa.habilitar_intencao_voto || false);
+
           // Mapear candidatos (se for pesquisa eleitoral)
           if (pesquisa.tipo_pesquisa === 'eleitoral' && pesquisa.candidatos) {
             const candidatosMapeados = Array.isArray(pesquisa.candidatos) 
@@ -1330,6 +1335,34 @@ export function EditarPesquisa() {
                   ))}
                 </div>
               )}
+
+              {/* Opção de Intenção de Voto */}
+              {candidatos.length > 0 && (
+                <div className="mt-6 p-4 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Check className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <Label htmlFor="intencao-voto" className="text-base font-semibold text-gray-900 dark:text-gray-100 cursor-pointer">
+                          Adicionar pergunta de intenção de voto
+                        </Label>
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+                        Inclui automaticamente a pergunta: <span className="font-semibold">"Em qual destes candidatos você votaria?"</span>
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Os participantes poderão escolher apenas <span className="font-semibold">UM</span> candidato da lista acima.
+                      </p>
+                    </div>
+                    <Switch 
+                      id="intencao-voto"
+                      checked={habilitarIntencaoVoto}
+                      onCheckedChange={setHabilitarIntencaoVoto}
+                      className="data-[state=checked]:bg-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1584,6 +1617,51 @@ export function EditarPesquisa() {
                     )}
                   </div>
                 ))}
+
+                {/* Pergunta de Intenção de Voto */}
+                {tipoPesquisa === 'eleitoral' && habilitarIntencaoVoto && candidatos.length > 0 && (
+                  <div className="mt-8 p-6 border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <Check className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                        Pergunta de Intenção de Voto
+                      </h3>
+                    </div>
+                    <p className="font-semibold text-base mb-4 text-gray-900 dark:text-gray-100">
+                      Em qual destes candidatos você votaria?
+                    </p>
+                    <div className="space-y-2">
+                      {candidatos.map((candidato) => (
+                        <div 
+                          key={candidato.id}
+                          className="flex items-center space-x-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer transition-colors"
+                        >
+                          <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center">
+                            {candidato.imagem ? (
+                              <img 
+                                src={candidato.imagem} 
+                                alt={candidato.nome} 
+                                className="h-full w-full rounded-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-gray-500 dark:text-gray-400 text-xs">Foto</span>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{candidato.nome}</p>
+                            {candidato.partido && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{candidato.partido}</p>
+                            )}
+                          </div>
+                          <div className="h-5 w-5 rounded-full border-2 border-gray-300 dark:border-gray-600"></div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-3 italic">
+                      ℹ️ Os participantes poderão selecionar apenas um candidato
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
