@@ -201,7 +201,7 @@ export function Layout() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="flex h-16 items-center justify-between px-4">
           {/* Left side */}
           <div className="flex items-center gap-4">
@@ -363,12 +363,12 @@ export function Layout() {
       </header>
 
       {/* Main layout */}
-      <div className="flex flex-1 pt-16 h-[calc(100vh-4rem)]">
+      <div className="flex flex-1 h-[calc(100vh-4rem)]" style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}>
         {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="w-full px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
