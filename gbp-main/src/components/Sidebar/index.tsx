@@ -61,12 +61,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       path: '/agenda',
       adminOnly: false
     },
-    {
-      title: 'Resultados Eleitorais',
-      icon: BarChart,
-      path: '/app/resultados-eleitorais',
-      adminOnly: true
-    },
+    // {
+    //   title: 'Resultados Eleitorais',
+    //   icon: BarChart,
+    //   path: '/app/resultados-eleitorais',
+    //   adminOnly: true
+    // },
     {
       title: 'Nova Pesquisa',
       icon: Search,

@@ -46,11 +46,11 @@ const navigation: NavigationItem[] = [
   { name: 'Eleitores', href: '/app/eleitores', icon: Users },
   { name: 'Atendimentos', href: '/app/atendimentos', icon: CalendarCheck },
   { name: 'Agenda', href: '/app/agenda', icon: Calendar },
-  { 
-    name: 'Resultados Eleitorais', 
-    href: '/app/resultados-eleitorais', 
-    icon: BarChart3,
-  },
+  // { 
+  //   name: 'Resultados Eleitorais', 
+  //   href: '/app/resultados-eleitorais', 
+  //   icon: BarChart3,
+  // },
   { 
     name: 'Pesquisas', 
     href: '/app/pesquisas', 

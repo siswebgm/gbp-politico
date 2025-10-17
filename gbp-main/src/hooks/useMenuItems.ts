@@ -67,13 +67,13 @@ export function useMenuItems() {
         permission: 'agenda.view',
         adminOnly: false
       },
-      {
-        name: 'Resultados Eleitorais',
-        icon: BarChart2,
-        path: '/app/resultados-eleitorais',
-        permission: 'resultados.view',
-        adminOnly: true
-      },
+      // {
+      //   name: 'Resultados Eleitorais',
+      //   icon: BarChart2,
+      //   path: '/app/resultados-eleitorais',
+      //   permission: 'resultados.view',
+      //   adminOnly: true
+      // },
       {
         name: 'Documentos',
         icon: FileText,
