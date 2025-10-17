@@ -73,6 +73,7 @@ export interface DemandaRua {
   anexar_boletim_de_correncia?: string;
   numero_protocolo?: number;
   requerente_uid?: string;
+  indicado_uid?: string;
   envios_mensagem_whatsapp?: string[]; // Array de strings JSON serializadas
   requerente_nome?: string;
   requerente_whatsapp?: string;

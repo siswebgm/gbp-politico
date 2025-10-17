@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabaseClient as supabase } from '../../../lib/supabase';
 import { getEmpresa } from '../../../services/empresa';
 import { createDemandaRua, uploadDemandaFiles, uploadBoletimOcorrencia, DemandaRuaInput } from '../../../services/demandasRua';
+import { indicadoService, type Indicado } from '../../../services/indicadoService';
 import { toast } from 'react-toastify';
 import { X, Loader2 } from 'lucide-react';
 import './global.css';
@@ -27,6 +28,7 @@ type FormData = {
   tipo_de_demanda: string;
   descricao_do_problema: string;
   nivel_de_urgencia: 'baixa' | 'média' | 'alta';
+  indicado_uid: string;
   requerente_nome: string;
   requerente_cpf: string;
   requerente_whatsapp: string;
@@ -135,6 +137,8 @@ export function NovaDemanda() {
 
   const [tiposDemanda, setTiposDemanda] = useState<Array<{value: string, label: string, group?: string}>>([]);
   const [loadingTipos, setLoadingTipos] = useState(true);
+  const [indicados, setIndicados] = useState<Indicado[]>([]);
+  const [loadingIndicados, setLoadingIndicados] = useState(true);
 
   // Buscar tipos de demanda
   useEffect(() => {
@@ -200,10 +204,31 @@ export function NovaDemanda() {
     fetchTiposDemanda();
   }, [empresa_uid]);
 
+  // Buscar indicados da empresa
+  useEffect(() => {
+    const fetchIndicados = async () => {
+      if (!empresa_uid) return;
+      
+      try {
+        setLoadingIndicados(true);
+        const indicadosData = await indicadoService.listByEmpresa(empresa_uid);
+        setIndicados(indicadosData);
+      } catch (error) {
+        console.error('Erro ao buscar indicados:', error);
+        toast.error('Erro ao carregar indicados');
+      } finally {
+        setLoadingIndicados(false);
+      }
+    };
+
+    fetchIndicados();
+  }, [empresa_uid]);
+
   const [formData, setFormData] = useState<FormData>({
     tipo_de_demanda: '',
     descricao_do_problema: '',
     nivel_de_urgencia: 'média',
+    indicado_uid: '',
     requerente_nome: '',
     requerente_cpf: '',
     requerente_whatsapp: '',
@@ -222,6 +247,9 @@ export function NovaDemanda() {
   
   // Estado para controlar se o endereço da demanda é o mesmo do requerente
   const [usarEnderecoRequerente, setUsarEnderecoRequerente] = useState<boolean>(false);
+  
+  // Estado para controlar se tem indicado
+  const [temIndicado, setTemIndicado] = useState<string>('não');
 
   // Funções de formatação
   const formatPhone = (value: string): string => {
@@ -654,6 +682,7 @@ export function NovaDemanda() {
         // Dados da empresa e requerente
         empresa_uid: empresa_uid!,
         requerente_uid: requerenteUid,
+        indicado_uid: formData.indicado_uid || undefined,
         
         // Dados do endereço (obrigatórios)
         logradouro: endereco.logradouro || 'Não informado',
@@ -1265,6 +1294,57 @@ export function NovaDemanda() {
                     <option value="alta">Alta</option>
                   </select>
                 </div>
+
+                <div className="sm:col-span-6">
+                  <label htmlFor="tem_indicado" className="block text-sm font-medium text-gray-700">
+                    Esta demanda foi indicada por alguém?
+                  </label>
+                  <select
+                    id="tem_indicado"
+                    value={temIndicado}
+                    onChange={(e) => {
+                      setTemIndicado(e.target.value);
+                      // Limpa o indicado_uid se a resposta for "não"
+                      if (e.target.value === 'não') {
+                        setFormData(prev => ({ ...prev, indicado_uid: '' }));
+                      }
+                    }}
+                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                  >
+                    <option value="não">Não</option>
+                    <option value="sim">Sim</option>
+                  </select>
+                </div>
+
+                {temIndicado === 'sim' && (
+                  <div className="sm:col-span-6">
+                    <label htmlFor="indicado_uid" className="block text-sm font-medium text-gray-700">
+                      Selecione o indicado *
+                    </label>
+                    <select
+                      id="indicado_uid"
+                      name="indicado_uid"
+                      required
+                      value={formData.indicado_uid}
+                      onChange={handleInputChange}
+                      disabled={loadingIndicados}
+                      className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    >
+                      <option value="">
+                        {loadingIndicados ? 'Carregando indicados...' : 'Selecione um indicado...'}
+                      </option>
+                      {indicados.map((indicado) => (
+                        <option key={indicado.uid} value={indicado.uid}>
+                          {indicado.nome}
+                          {indicado.bairro && indicado.cidade && ` - ${indicado.bairro}, ${indicado.cidade}`}
+                        </option>
+                      ))}
+                      {indicados.length === 0 && !loadingIndicados && (
+                        <option value="" disabled>Nenhum indicado disponível</option>
+                      )}
+                    </select>
+                  </div>
+                )}
 
                 <div className="sm:col-span-6 hidden">
                   <label htmlFor="boletim_ocorrencia" className="block text-sm font-medium text-gray-700">

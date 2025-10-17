@@ -16,6 +16,7 @@ export interface DemandaRuaInput {
   // Referência ao requerente na tabela gbp_requerentes_demanda_rua
   requerente_uid: string;
   empresa_uid: string;
+  indicado_uid?: string;
   
   // Dados da demanda
   fotos_do_problema?: string[];
@@ -67,6 +68,7 @@ export async function createDemandaRua(demanda: DemandaRuaInput): Promise<Demand
       // Referências
       empresa_uid: demanda.empresa_uid,
       requerente_uid: demanda.requerente_uid,
+      indicado_uid: demanda.indicado_uid || null,
       
       // Dados de endereço (obrigatórios)
       logradouro: demanda.logradouro || 'Não informado',

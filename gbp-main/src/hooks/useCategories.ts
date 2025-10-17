@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { categoryService, type CategoryWithType, checkCategoryHasVoters } from '../services/categories';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { categoryService, type CategoryWithType, checkCategoryHasVoters, type Category } from '../services/categories';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useEffect } from 'react';
 import { supabaseClient } from '../lib/supabase';
@@ -48,11 +48,38 @@ export function useCategories(tipo?: string) {
     };
   }, [company?.uid, queryClient]);
 
+  const createCategory = useMutation({
+    mutationFn: async (data: Omit<Category, 'uid' | 'id' | 'created_at'>) => {
+      return categoryService.create(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categorias', company?.uid] });
+    },
+  });
+
+  const updateCategory = useMutation({
+    mutationFn: async ({ uid, ...data }: { uid: string } & Partial<Omit<Category, 'uid' | 'id' | 'created_at' | 'empresa_uid'>>) => {
+      return categoryService.update(uid, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categorias', company?.uid] });
+    },
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: async (uid: string) => {
+      return categoryService.delete(uid);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categorias', company?.uid] });
+    },
+  });
+
   return {
     ...query,
-    createCategory: categoryService.create,
-    updateCategory: categoryService.update,
-    deleteCategory: categoryService.delete,
+    createCategory: createCategory.mutateAsync,
+    updateCategory: updateCategory.mutateAsync,
+    deleteCategory: deleteCategory.mutateAsync,
     checkCategoryHasVoters,
     refetch: query.refetch
   };

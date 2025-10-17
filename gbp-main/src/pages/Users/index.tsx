@@ -639,7 +639,14 @@ export function Users() {
                         id="email"
                         type="email"
                         placeholder="exemplo@email.com"
-                        {...register('email')}
+                        {...register('email', {
+                          onChange: (e) => {
+                            // Remove espaços e força minúsculas
+                            const value = e.target.value.replace(/\s/g, '').toLowerCase();
+                            e.target.value = value;
+                            register('email').onChange(e);
+                          }
+                        })}
                         className={errors.email ? 'border-red-500' : ''}
                       />
                       {errors.email && (

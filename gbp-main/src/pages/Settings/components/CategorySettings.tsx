@@ -5,7 +5,6 @@ import { useCategoriaTipos } from '../../../hooks/useCategoriaTipos';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import type { CategoryWithType } from '../../../services/categories';
-import { categoriaTipoService } from '../../../services/categories';
 import { useCompanyStore } from '../../../store/useCompanyStore';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -34,7 +33,7 @@ interface DeleteModalState {
 export function CategorySettings() {
   const company = useCompanyStore((state) => state.company);
   const { data: categorias, isLoading, createCategory: create, updateCategory: update, deleteCategory: deleteCategoria, refetch } = useCategories();
-  const { tipos, isLoading: isLoadingTipos, updateTipo, deleteTipo, refetch: refetchTipos } = useCategoriaTipos();
+  const { tipos, isLoading: isLoadingTipos, createTipo, updateTipo, deleteTipo, refetch: refetchTipos } = useCategoriaTipos();
   const { checkCategoryHasVoters } = useCategories();
 
   useEffect(() => {
@@ -180,23 +179,28 @@ export function CategorySettings() {
     setEditingTipoData({ nome: '' });
   };
 
-  const capitalizeWords = (str: string) => {
-    return str
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   const toUpperCase = (str: string) => {
     return str.toUpperCase();
   };
 
   const toTitleCase = (str: string) => {
+    const exceptions = ['de', 'da', 'do', 'das', 'dos', 'e', 'ou', 'em', 'no', 'na', 'nos', 'nas', 'a', 'o', 'os', 'as'];
+    
     return str
       .toLowerCase()
       .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word, index) => {
+        // Primeira palavra sempre com inicial maiúscula
+        if (index === 0) {
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        }
+        // Palavras de exceção ficam em minúsculas
+        if (exceptions.includes(word)) {
+          return word;
+        }
+        // Demais palavras com inicial maiúscula
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
       .join(' ');
   };
 
@@ -207,18 +211,18 @@ export function CategorySettings() {
     }
 
     try {
-      const updateData = {
-        nome: capitalizeWords(editingData.nome)
+      const updateData: any = {
+        uid,
+        nome: toTitleCase(editingData.nome)
       };
       
       if (editingData.tipo_uid) {
         updateData.tipo_uid = editingData.tipo_uid;
       }
 
-      await update(uid, updateData);
+      await update(updateData);
       toast.success('Categoria atualizada com sucesso!');
       handleCancelEdit();
-      refetch();
     } catch (error) {
       console.error('Erro ao atualizar categoria:', error);
       toast.error('Erro ao atualizar categoria');
@@ -240,7 +244,6 @@ export function CategorySettings() {
     try {
       await deleteCategoria(uid);
       toast.success('Categoria excluída com sucesso!');
-      refetch();
     } catch (error) {
       if (error instanceof Error && error.message.includes('eleitores vinculados')) {
         toast.error('Não é possível excluir esta categoria pois existem eleitores vinculados a ela.', {
@@ -254,13 +257,25 @@ export function CategorySettings() {
   };
 
   const handleAddCategoria = () => {
-    const nomeFormatado = newCategoria.nome.trim();
+    const nomeOriginal = newCategoria.nome.trim();
     
-    if (!nomeFormatado) return;
+    if (!nomeOriginal) return;
     
-    // Verifica se a categoria já foi adicionada
+    // Formatar o nome com Title Case
+    const nomeFormatado = toTitleCase(nomeOriginal);
+    
+    // Verifica se a categoria já foi adicionada nas tags
     if (categoriasTags.some(tag => tag.nome.toLowerCase() === nomeFormatado.toLowerCase())) {
       toast.warning('Esta categoria já foi adicionada');
+      return;
+    }
+    
+    // Verifica se a categoria já existe no banco de dados
+    if (categorias?.some(cat => 
+      cat.nome.toLowerCase() === nomeFormatado.toLowerCase() && 
+      cat.tipo_uid === newCategoria.tipo_uid
+    )) {
+      toast.warning('Esta categoria já existe neste tipo');
       return;
     }
     
@@ -357,7 +372,7 @@ export function CategorySettings() {
     }
 
     try {
-      const createdTipo = await categoriaTipoService.create({
+      const createdTipo = await createTipo({
         nome: toUpperCase(newTipo.nome),
         empresa_uid: company.uid
       });
@@ -365,7 +380,6 @@ export function CategorySettings() {
       toast.success('Tipo criado com sucesso!');
       setNewTipo({ nome: '', isCreating: false });
       setNewCategoria(prev => ({ ...prev, tipo_uid: createdTipo.uid }));
-      // O refetch será feito automaticamente pelo realtime
     } catch (error) {
       console.error('Erro ao criar tipo:', error);
       toast.error('Erro ao criar tipo');
@@ -421,7 +435,6 @@ export function CategorySettings() {
       await deleteTipo(deleteTipoModal.tipoId);
       toast.success('Tipo excluído com sucesso!');
       setDeleteTipoModal({ isOpen: false, tipoId: '', tipoNome: '' });
-      refetchTipos();
     } catch (error) {
       console.error('Erro ao excluir tipo:', error);
       toast.error('Erro ao excluir tipo');
@@ -554,6 +567,7 @@ export function CategorySettings() {
                       onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategoria())}
                       className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
                       placeholder="Digite o nome da categoria"
+                      autoComplete="off"
                     />
                     <button
                       type="button"
@@ -698,7 +712,7 @@ export function CategorySettings() {
                           <input
                             type="text"
                             value={editingData.nome}
-                            onChange={(e) => setEditingData({ ...editingData, nome: capitalizeWords(e.target.value) })}
+                            onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
                             className="flex-1 px-4 py-2 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
                           />
                           <select

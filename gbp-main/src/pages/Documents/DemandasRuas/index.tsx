@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { demandasRuasService, type DemandaRua } from '@/services/demandasRuasService';
+import { indicadoService, type Indicado } from '@/services/indicadoService';
 import { useCompanyStore } from '@/store/useCompanyStore';
 import { useAuth } from '@/providers/AuthProvider';
 import { format } from 'date-fns';
@@ -52,6 +53,8 @@ export function DemandasRuas() {
   const [bairroFilter, setBairroFilter] = useState<string>('todos');
   const [nivelFavoritoFilter, setNivelFavoritoFilter] = useState<string>('todos');
   const [respostaFilter, setRespostaFilter] = useState<string>('todos'); // novo filtro
+  const [indicadoFilter, setIndicadoFilter] = useState<string>('todos'); // filtro de indicados
+  const [indicados, setIndicados] = useState<Indicado[]>([]);
   const [showArquivadas, setShowArquivadas] = useState(false); // mostrar arquivadas
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [demandaToDelete, setDemandaToDelete] = useState<DemandaRua | null>(null);
@@ -109,6 +112,22 @@ export function DemandasRuas() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
+  }, [company?.uid]);
+
+  // Carregar indicados da empresa
+  useEffect(() => {
+    const loadIndicados = async () => {
+      if (!company?.uid) return;
+      
+      try {
+        const indicadosData = await indicadoService.listByEmpresa(company.uid);
+        setIndicados(indicadosData);
+      } catch (error) {
+        console.error('Erro ao carregar indicados:', error);
+      }
+    };
+
+    loadIndicados();
   }, [company?.uid]);
 
   // Extrair opções únicas para os filtros
@@ -203,6 +222,9 @@ export function DemandasRuas() {
     const matchesResposta = respostaFilter === 'todos' || 
       (respostaFilter === 'respondidas' && demanda.tem_resposta_whatsapp) ||
       (respostaFilter === 'nao_respondidas' && !demanda.tem_resposta_whatsapp);
+    const matchesIndicado = indicadoFilter === 'todos' || 
+      (indicadoFilter === 'sem_indicado' && !demanda.indicado_uid) ||
+      demanda.indicado_uid === indicadoFilter;
     // Filtro de arquivadas: 
     // se showArquivadas = true, mostra APENAS arquivadas
     // se showArquivadas = false, mostra APENAS não arquivadas
@@ -210,7 +232,7 @@ export function DemandasRuas() {
     // Filtro de pasta: só aplica quando showArquivadas está ativo
     const matchesPasta = !showArquivadas || pastaFilter === 'todas' || demanda.pasta_arquivo === pastaFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesArquivadas && matchesPasta;
+    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesIndicado && matchesArquivadas && matchesPasta;
   });
 
   // Formatar data
@@ -795,9 +817,34 @@ export function DemandasRuas() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {/* Filtro de Indicado */}
+                    <div className="flex-1 min-w-[150px]">
+                      <Select value={indicadoFilter} onValueChange={setIndicadoFilter}>
+                        <SelectTrigger className="w-full text-xs sm:text-sm h-9">
+                          <div className="flex items-center gap-2">
+                            <User className="h-3.5 w-3.5 text-gray-400" />
+                            <span className="truncate">
+                              {indicadoFilter === 'todos' ? 'Indicado' : 
+                               indicadoFilter === 'sem_indicado' ? 'Sem indicado' :
+                               indicados.find(i => i.uid === indicadoFilter)?.nome || 'Indicado'}
+                            </span>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos" className="text-xs sm:text-sm">Todos</SelectItem>
+                          <SelectItem value="sem_indicado" className="text-xs sm:text-sm">Sem indicado</SelectItem>
+                          {indicados.map(indicado => (
+                            <SelectItem key={indicado.uid} value={indicado.uid} className="text-xs sm:text-sm">
+                              {indicado.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     
                     {/* Botão Limpar Filtros */}
-                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dataInicio || dataFim || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos' || nivelFavoritoFilter !== 'todos' || respostaFilter !== 'todos' || showArquivadas) && (
+                    {(statusFilter !== 'todos' || urgenciaFilter !== 'todos' || dataInicio || dataFim || searchTerm || tipoDemandaFilter !== 'todos' || cidadeFilter !== 'todos' || bairroFilter !== 'todos' || nivelFavoritoFilter !== 'todos' || respostaFilter !== 'todos' || indicadoFilter !== 'todos' || showArquivadas) && (
                       <div className="ml-auto">
                         <Button 
                           variant="ghost" 
@@ -813,6 +860,7 @@ export function DemandasRuas() {
                             setBairroFilter('todos');
                             setNivelFavoritoFilter('todos');
                             setRespostaFilter('todos');
+                            setIndicadoFilter('todos');
                             setPastaFilter('todas');
                             setShowArquivadas(false);
                           }}
@@ -1265,7 +1313,7 @@ export function DemandasRuas() {
       </div>
 
       {/* Botão flutuante de configurações para mobile */}
-      <div className="md:hidden fixed bottom-20 right-4 z-50">
+      <div className="md:hidden fixed bottom-6 right-4 z-40">
         <button
           onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
           className="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"

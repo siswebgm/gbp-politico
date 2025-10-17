@@ -50,6 +50,8 @@ export default function AgendaPage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('calendar');
   const [initialDate, setInitialDate] = useState<Date | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const selectedEventRef = useRef<HTMLDivElement>(null);
   
   const { user } = useAuth();
@@ -157,6 +159,19 @@ export default function AgendaPage() {
 
     return filtered;
   }, [events, selectedPeriod]);
+
+  // Paginação
+  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
+  const paginatedEvents = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredEvents.slice(startIndex, endIndex);
+  }, [filteredEvents, currentPage, itemsPerPage]);
+
+  // Reset página quando filtro mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedPeriod]);
 
   const exportToExcel = () => {
     const eventsToExport = filteredEvents.map(event => ({
@@ -308,8 +323,15 @@ export default function AgendaPage() {
 
   const handleEventClick = (event: any) => {
     setSelectedDate(new Date(event.start_time));
-    setSelectedEventId(event.id);
+    setSelectedEventId(event.uid);
     setActiveTab('list');
+    
+    // Calcular em qual página o evento está
+    const eventIndex = filteredEvents.findIndex(e => e.uid === event.uid);
+    if (eventIndex !== -1) {
+      const pageNumber = Math.floor(eventIndex / itemsPerPage) + 1;
+      setCurrentPage(pageNumber);
+    }
     
     // Pequeno delay para garantir que a lista foi renderizada
     setTimeout(() => {
@@ -408,7 +430,7 @@ export default function AgendaPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 px-2 sm:px-4">
               <TabsList className="h-auto p-1">
                 <TabsTrigger value="calendar" className="flex items-center gap-2 data-[state=active]:bg-blue-100">
                   <CalendarViewIcon className="w-4 h-4" />
@@ -566,7 +588,14 @@ export default function AgendaPage() {
                           {dayEvents?.length > 0 && (
                             <div className="absolute hidden group-hover:block bg-white border rounded-md p-2 z-20 w-48 shadow-lg top-full left-0 mt-1">
                               {dayEvents.map((event, idx) => (
-                                <div key={idx} className="mb-2 last:mb-0">
+                                <div 
+                                  key={idx} 
+                                  className="mb-2 last:mb-0 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEventClick(event);
+                                  }}
+                                >
                                   <p className="font-medium text-sm">{event.title}</p>
                                   <p className="text-gray-600 text-xs">
                                     {format(new Date(event.start_time), "HH:mm")}
@@ -582,10 +611,10 @@ export default function AgendaPage() {
                 </div>
               </TabsContent>
               <TabsContent value="list" className="m-0">
-                <div className="bg-white rounded-lg border shadow-sm">
-                  <ScrollArea className="h-[calc(100vh-280px)]">
+                <div className="bg-white rounded-lg border shadow-sm flex flex-col">
+                  <ScrollArea className="flex-1 h-[calc(100vh-280px)]">
                     {isLoading ? (
-                      <div className="p-4 space-y-4">
+                      <div className="p-2 sm:p-4 flex flex-col gap-3 sm:gap-4">
                         {[...Array(5)].map((_, i) => (
                           <div key={i} className="p-4 rounded-lg border bg-gray-50 animate-pulse">
                             <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
@@ -594,9 +623,11 @@ export default function AgendaPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="p-4 space-y-4">
-                        {filteredEvents.map((event) => {
+                      <>
+                        <div className="p-2 sm:p-4 flex flex-col gap-3 sm:gap-4">
+                          {paginatedEvents.map((event) => {
                           const eventDate = new Date(event.start_time);
+                          const endDate = new Date(event.end_time);
                           const { isExpired: isEventPast, isToday: isEventToday } = getEventStatus(event);
                           
                           return (
@@ -604,42 +635,130 @@ export default function AgendaPage() {
                               key={event.uid}
                               ref={selectedEventId === event.uid ? selectedEventRef : null}
                               className={cn(
-                                "p-4 rounded-lg border transition-colors",
-                                isEventToday ? "bg-blue-50 border-blue-200" :
-                                isEventPast ? "bg-gray-50 border-gray-200" :
-                                "bg-emerald-50 border-emerald-200",
-                                selectedEventId === event.uid && "ring-2 ring-primary"
+                                "p-5 rounded-xl border-2 transition-all hover:shadow-lg cursor-pointer",
+                                isEventToday ? "bg-gradient-to-br from-blue-50 to-blue-100 border-blue-300" :
+                                isEventPast ? "bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300" :
+                                "bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-300",
+                                selectedEventId === event.uid && "ring-2 ring-offset-2 ring-primary shadow-xl"
                               )}
                               onClick={() => handleEventClick(event)}
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <h3 className="font-medium text-lg">{event.title}</h3>
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                    <Clock className="h-4 w-4" />
-                                    <span>
-                                      {format(eventDate, "dd 'de' MMMM', às' HH:mm", { locale: ptBR })}
-                                    </span>
-                                  </div>
-                                  {event.location && (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                      <MapPin className="h-4 w-4" />
-                                      <span>{event.location}</span>
-                                    </div>
+                              {/* Cabeçalho do Card */}
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-bold text-lg sm:text-xl text-gray-800 mb-1 break-words">{event.title}</h3>
+                                  {event.usuario_nome && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="font-medium">Criado por:</span> {event.usuario_nome}
+                                    </p>
                                   )}
                                 </div>
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "ml-2",
-                                    isEventToday ? "border-blue-200 text-blue-700" :
-                                    isEventPast ? "border-gray-200 text-gray-700" :
-                                    "border-emerald-200 text-emerald-700"
+                                <div className="flex gap-2 flex-wrap sm:justify-end">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "font-semibold",
+                                      isEventToday ? "bg-blue-200 border-blue-400 text-blue-900" :
+                                      isEventPast ? "bg-gray-200 border-gray-400 text-gray-900" :
+                                      "bg-emerald-200 border-emerald-400 text-emerald-900"
+                                    )}
+                                  >
+                                    {event.type}
+                                  </Badge>
+                                  {event.prioridade && (
+                                    <Badge
+                                      className={cn(
+                                        "font-semibold",
+                                        getPriorityVariant(event.prioridade)
+                                      )}
+                                    >
+                                      {event.prioridade}
+                                    </Badge>
                                   )}
-                                >
-                                  {event.type}
-                                </Badge>
+                                </div>
                               </div>
+
+                              {/* Descrição */}
+                              {event.description && (
+                                <div className="mb-3 p-3 bg-white/60 rounded-lg border border-gray-200">
+                                  <p className="text-sm text-gray-700 line-clamp-2">{event.description}</p>
+                                </div>
+                              )}
+
+                              {/* Informações Principais */}
+                              <div className="flex flex-col sm:grid sm:grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                {/* Data e Hora */}
+                                <div className="flex items-start gap-2 text-sm bg-white/60 p-2.5 rounded-lg border border-gray-200">
+                                  <Clock className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-gray-800">Início:</p>
+                                    <p className="text-gray-700">{format(eventDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                                    <p className="font-semibold text-gray-800 mt-1">Término:</p>
+                                    <p className="text-gray-700">{format(endDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                                  </div>
+                                </div>
+
+                                {/* Local */}
+                                {event.location && (
+                                  <div className="flex items-start gap-2 text-sm bg-white/60 p-2.5 rounded-lg border border-gray-200">
+                                    <MapPin className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0 break-words">
+                                      <p className="font-semibold text-gray-800">Local:</p>
+                                      <p className="text-gray-700">{event.location}</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Informações Adicionais */}
+                              <div className="flex flex-col sm:grid sm:grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Status da Tarefa */}
+                                {event.task_status && (
+                                  <div className="flex items-center gap-2 text-sm bg-white/60 p-2.5 rounded-lg border border-gray-200">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold text-gray-800">Status:</p>
+                                      <Badge className={cn(
+                                        "mt-1",
+                                        event.task_status === 'PENDENTE' && "bg-yellow-100 text-yellow-800 border-yellow-300",
+                                        event.task_status === 'EM_ANDAMENTO' && "bg-blue-100 text-blue-800 border-blue-300",
+                                        event.task_status === 'CONCLUIDO' && "bg-green-100 text-green-800 border-green-300"
+                                      )}>
+                                        {event.task_status.replace(/_/g, ' ')}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Responsável */}
+                                {event.task_responsible && (
+                                  <div className="flex items-start gap-2 text-sm bg-white/60 p-2.5 rounded-lg border border-gray-200">
+                                    <Users className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0 break-words">
+                                      <p className="font-semibold text-gray-800">Responsável:</p>
+                                      <p className="text-gray-700">{event.task_responsible}</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Participantes */}
+                              {event.attendees && Array.isArray(event.attendees) && event.attendees.length > 0 && (
+                                <div className="mt-3 p-3 bg-white/60 rounded-lg border border-gray-200">
+                                  <div className="flex items-start gap-2">
+                                    <Users className="h-5 w-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                      <p className="font-semibold text-gray-800 text-sm mb-2">Participantes:</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {event.attendees.map((attendee: any, idx: number) => (
+                                          <Badge key={idx} variant="outline" className="bg-indigo-100 text-indigo-800 border-indigo-300">
+                                            {attendee.name}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -651,6 +770,40 @@ export default function AgendaPage() {
                           </div>
                         )}
                       </div>
+                      
+                      {/* Paginação */}
+                      {filteredEvents.length > 0 && totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-2 px-4 py-2 border-t bg-gray-50">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentPage === 1}
+                              className="h-8 w-8 p-0 text-gray-600 hover:text-gray-900 hover:bg-gray-200"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            
+                            <div className="flex items-center gap-1 mx-2">
+                              <span className="text-xs text-gray-500">{currentPage}</span>
+                              <span className="text-xs text-gray-400">/</span>
+                              <span className="text-xs text-gray-500">{totalPages}</span>
+                            </div>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentPage === totalPages}
+                              className="h-8 w-8 p-0 text-gray-600 hover:text-gray-900 hover:bg-gray-200"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      </>
                     )}
                   </ScrollArea>
                 </div>
