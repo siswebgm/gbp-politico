@@ -172,7 +172,7 @@ export default function WhatsAppPage() {
 
     try {
       setIsGenerating(true);
-      await axios.post('https://whkn8n.guardia.work/webhook/gbp_sincronizar', {
+      await axios.post('https://whkn8n.guardia.work/webhook/60f7502d-2fa3-4036-b853-e03758576699', {
         acao: 'sincronizar',
         empresaUid: company.uid
       });
@@ -197,10 +197,9 @@ export default function WhatsAppPage() {
 
     try {
       setIsGenerating(true);
-      await axios.post('https://whkn8n.guardia.work/webhook/gbpdesconectar', {
-        instancia: company.nome,
-        empresa: company.uid,
-        acao: 'desconectar'
+      await axios.post('https://whkn8n.guardia.work/webhook/60f7502d-2fa3-4036-b853-e03758576699', {
+        acao: 'desconectar',
+        empresaUid: company.uid
       });
       
       // Buscar estado atual após desconexão

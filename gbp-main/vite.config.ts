@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => ({
@@ -9,32 +10,14 @@ export default defineConfig(({ command, mode }) => ({
     host: true
   },
   resolve: {
-    alias: [
-      {
-        find: '@',
-        replacement: './src'
-      },
-      {
-        find: '@components',
-        replacement: './src/components'
-      },
-      {
-        find: '@hooks',
-        replacement: './src/hooks'
-      },
-      {
-        find: '@lib',
-        replacement: './src/lib'
-      },
-      {
-        find: '@pages',
-        replacement: './src/pages'
-      },
-      {
-        find: '@services',
-        replacement: './src/services'
-      }
-    ]
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@components': path.resolve(__dirname, './src/components'),
+      '@hooks': path.resolve(__dirname, './src/hooks'),
+      '@lib': path.resolve(__dirname, './src/lib'),
+      '@pages': path.resolve(__dirname, './src/pages'),
+      '@services': path.resolve(__dirname, './src/services')
+    }
   },
   optimizeDeps: {
     esbuildOptions: {
