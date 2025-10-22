@@ -627,6 +627,18 @@ export function Users() {
                         placeholder="Nome completo"
                         {...register('nome')}
                         className={errors.nome ? 'border-red-500' : ''}
+                        onChange={(e) => {
+                          const preposicoes = ['de', 'da', 'das', 'do', 'dos', 'e'];
+                          const palavras = e.target.value.toLowerCase().split(' ');
+                          const formatado = palavras.map((palavra, index) => {
+                            if (index === 0 || !preposicoes.includes(palavra)) {
+                              return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+                            }
+                            return palavra;
+                          }).join(' ');
+                          e.target.value = formatado;
+                          register('nome').onChange(e);
+                        }}
                       />
                       {errors.nome && (
                         <p className="text-sm text-red-500">{errors.nome.message}</p>
@@ -661,6 +673,15 @@ export function Users() {
                         placeholder="(00) 00000-0000"
                         {...register('contato')}
                         className={errors.contato ? 'border-red-500' : ''}
+                        maxLength={15}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const formatted = value.length <= 10
+                            ? value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
+                            : value.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+                          e.target.value = formatted;
+                          register('contato').onChange(e);
+                        }}
                       />
                       {errors.contato && (
                         <p className="text-sm text-red-500">{errors.contato.message}</p>

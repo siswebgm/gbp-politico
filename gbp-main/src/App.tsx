@@ -15,6 +15,7 @@ import { UpdateAlert } from './components/UpdateAlert';
 import { VendasPage } from './pages/Vendas';
 import ClientesPage from './pages/Clientes';
 import { Toaster } from './components/ui/toaster';
+import { Toaster as HotToaster } from 'react-hot-toast';
 import { NovaDemanda } from './pages/public/NovaDemanda';
 import { DemandaSucesso } from './pages/public/DemandaSucesso';
 import { TermosUso } from './pages/public/TermosUso';
@@ -71,6 +72,7 @@ export function App() {
                   <PlanoProvider>
                     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                       <Toaster />
+                      <HotToaster position="top-right" />
                       <Routes>
                       {/* Rotas públicas */}
                       <Route path="/demanda/:empresa_uid" element={

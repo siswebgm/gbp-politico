@@ -224,7 +224,7 @@ export function DemandasRuas() {
       (respostaFilter === 'nao_respondidas' && !demanda.tem_resposta_whatsapp);
     const matchesIndicado = indicadoFilter === 'todos' || 
       (indicadoFilter === 'sem_indicado' && !demanda.indicado_uid) ||
-      demanda.indicado_uid === indicadoFilter;
+      (indicadoFilter !== 'sem_indicado' && demanda.indicado_uid === indicadoFilter);
     // Filtro de arquivadas: 
     // se showArquivadas = true, mostra APENAS arquivadas
     // se showArquivadas = false, mostra APENAS não arquivadas
@@ -831,14 +831,19 @@ export function DemandasRuas() {
                             </span>
                           </div>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px] overflow-y-auto">
                           <SelectItem value="todos" className="text-xs sm:text-sm">Todos</SelectItem>
                           <SelectItem value="sem_indicado" className="text-xs sm:text-sm">Sem indicado</SelectItem>
-                          {indicados.map(indicado => (
-                            <SelectItem key={indicado.uid} value={indicado.uid} className="text-xs sm:text-sm">
-                              {indicado.nome}
-                            </SelectItem>
-                          ))}
+                          {indicados
+                            .filter(indicado => {
+                              // Mostrar apenas indicados que têm pelo menos uma demanda
+                              return demandas.some(d => d.indicado_uid === indicado.uid);
+                            })
+                            .map(indicado => (
+                              <SelectItem key={indicado.uid} value={indicado.uid} className="text-xs sm:text-sm">
+                                {indicado.nome}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

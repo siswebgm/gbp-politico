@@ -46,17 +46,58 @@ export function useAppVersion() {
     localStorage.setItem(CACHE_KEY, serverVersion.version);
   }, [serverVersion]);
 
-  const forceUpdate = () => {
-    // Limpa o cache do service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        registrations.forEach((registration) => {
-          registration.unregister();
+  const forceUpdate = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+
+        // Solicita ao SW instalado/aguardando que assuma imediatamente
+        await Promise.all(
+          registrations.map(async (registration) => {
+            if (registration.waiting) {
+              registration.waiting.postMessage?.({ type: 'SKIP_WAITING' });
+            } else if (registration.installing) {
+              await new Promise<void>((resolve) => {
+                const sw = registration.installing!;
+                sw.addEventListener('statechange', () => {
+                  if (sw.state === 'installed') {
+                    sw.postMessage?.({ type: 'SKIP_WAITING' });
+                    resolve();
+                  }
+                });
+              });
+            } else {
+              // Força verificação de atualização
+              try { await registration.update(); } catch {}
+            }
+          })
+        );
+
+        // Limpa todos os caches sem tocar em localStorage/session (mantém login)
+        if ('caches' in window) {
+          try {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          } catch (err) {
+            console.warn('Falha ao limpar caches:', err);
+          }
+        }
+
+        // Aguarda a troca de controller para garantir que a nova versão esteja ativa
+        await new Promise<void>((resolve) => {
+          let done = false;
+          const finish = () => { if (!done) { done = true; resolve(); } };
+          navigator.serviceWorker.addEventListener('controllerchange', finish);
+          // Fallback para ambientes onde não há SW em dev
+          setTimeout(finish, 1000);
         });
-      });
+      }
+    } catch (e) {
+      console.error('Erro durante atualização forçada:', e);
+    } finally {
+      // Recarrega a página usando a sessão existente
+      window.location.reload();
     }
-    // Recarrega a página
-    window.location.reload();
   };
 
   return { needsUpdate, forceUpdate };

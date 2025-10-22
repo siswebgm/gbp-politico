@@ -86,6 +86,7 @@ export function Layout() {
   const [companyPlan, setCompanyPlan] = useState<string | null>(null);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [versionInfo, setVersionInfo] = useState<{ version: string; buildDate: string } | null>(null);
   const { user } = useAuth();
   const company = useCompanyStore((state) => state.company);
   const navigate = useNavigate();
@@ -106,6 +107,14 @@ export function Layout() {
   }, []);
 
   useNotificationSetup();
+
+  useEffect(() => {
+    // Buscar informações de versão
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersionInfo(data))
+      .catch(() => setVersionInfo(null));
+  }, []);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -355,6 +364,15 @@ export function Layout() {
                       Sair da conta
                     </button>
                   </div>
+
+                  {/* Versão discreta no rodapé */}
+                  {versionInfo && (
+                    <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500 font-mono text-center">
+                        v1.0.0 • {new Date(versionInfo.buildDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

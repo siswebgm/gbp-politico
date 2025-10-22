@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabaseClient } from '@/lib/supabase';
-import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip } from 'lucide-react';
+import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip, Download, MoreVertical } from 'lucide-react';
+import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -18,6 +19,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { demandasRuasService, type DemandaRua } from '@/services/demandasRuasService';
 
 interface MensagemWhatsApp {
@@ -64,6 +73,7 @@ export function DetalhesDemanda() {
   const [error, setError] = useState<string | null>(null);
   const [novaObservacao, setNovaObservacao] = useState('');
   const [isFavorito, setIsFavorito] = useState(false);
+  const [nivelFavorito, setNivelFavorito] = useState<number>(0);
   const [demandaConcluida, setDemandaConcluida] = useState(false);
   // Initialize with 'recebido' as default status to prevent validation errors
   const [novoStatus, setNovoStatus] = useState<DemandaRua['status']>('recebido');
@@ -93,6 +103,8 @@ export function DetalhesDemanda() {
   const [mensagemWhatsApp, setMensagemWhatsApp] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
   const [anexoWhatsApp, setAnexoWhatsApp] = useState<File | null>(null);
+  const [indicadoNome, setIndicadoNome] = useState<string | null>(null);
+  const [gerandoPDF, setGerandoPDF] = useState(false);
   const MAX_CARACTERES = 1000;
 
   const sugestoesMensagens = [
@@ -736,6 +748,465 @@ export function DetalhesDemanda() {
     }
   }, [toast]);
 
+  const gerarPDF = async () => {
+    if (!demanda) return;
+    
+    try {
+      setGerandoPDF(true);
+      const doc = new jsPDF();
+      
+      // Configurações
+      const margemEsquerda = 15;
+      const margemDireita = 15;
+      let yPos = 12;
+      const larguraPagina = doc.internal.pageSize.getWidth();
+      const larguraUtil = larguraPagina - margemEsquerda - margemDireita;
+      const alturaMaxima = doc.internal.pageSize.getHeight() - 15;
+      
+      // Função para adicionar nova página se necessário
+      const verificarNovaPagina = (espacoNecessario: number) => {
+        if (yPos + espacoNecessario > alturaMaxima) {
+          doc.addPage();
+          yPos = 15;
+          // Adicionar rodapé em cada página
+          adicionarRodape();
+        }
+      };
+      
+      // Função para adicionar rodapé
+      const adicionarRodape = () => {
+        const rodapeY = doc.internal.pageSize.getHeight() - 10;
+        doc.setFontSize(7);
+        doc.setTextColor(150, 150, 150);
+        doc.text('GBP Político - Sistema de Gestão para gabinete político', larguraPagina / 2, rodapeY, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+      };
+      
+      // Cabeçalho simples e limpo
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(41, 98, 255);
+      doc.text('DETALHES DA DEMANDA', larguraPagina / 2, yPos, { align: 'center' });
+      
+      doc.setTextColor(0, 0, 0);
+      yPos += 6;
+      
+      // Linha separadora
+      doc.setDrawColor(41, 98, 255);
+      doc.setLineWidth(0.8);
+      doc.line(margemEsquerda, yPos, larguraPagina - margemDireita, yPos);
+      yPos += 8;
+      
+      // Protocolo em destaque e Status
+      // Caixa de destaque para o protocolo
+      if (demanda.numero_protocolo) {
+        const protocoloTexto = `#${String(demanda.numero_protocolo).padStart(6, '0')}`;
+        
+        // Fundo azul claro para o protocolo
+        doc.setFillColor(230, 240, 255);
+        doc.roundedRect(margemEsquerda, yPos - 2, 50, 10, 2, 2, 'F');
+        
+        // Borda azul
+        doc.setDrawColor(41, 98, 255);
+        doc.setLineWidth(0.5);
+        doc.roundedRect(margemEsquerda, yPos - 2, 50, 10, 2, 2, 'S');
+        
+        // Texto do protocolo
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(41, 98, 255);
+        doc.text('Protocolo:', margemEsquerda + 2, yPos + 5);
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(protocoloTexto, margemEsquerda + 25, yPos + 5);
+        
+        doc.setTextColor(0, 0, 0);
+      }
+      
+      // Status
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Status:', larguraPagina - margemDireita - 60, yPos + 5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(demanda.status, larguraPagina - margemDireita - 40, yPos + 5);
+      
+      yPos += 14;
+    
+    // Informações do Requerente
+    verificarNovaPagina(40);
+    
+    // Título da seção com fundo
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informações do Requerente', margemEsquerda + 2, yPos + 5);
+    yPos += 12;
+    
+    // Organizar em 2 linhas com 2 colunas cada
+    doc.setFontSize(9);
+    const coluna1X = margemEsquerda;
+    const coluna2X = margemEsquerda + (larguraUtil / 2);
+    
+    // LINHA 1: Nome e CPF
+    let yPosLinha1 = yPos;
+    
+    // Nome (coluna 1)
+    if (demanda.requerente_nome) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Nome:', coluna1X, yPosLinha1);
+      doc.setFont('helvetica', 'normal');
+      const nomeMaxWidth = (larguraUtil / 2) - 20;
+      const nomeText = demanda.requerente_nome;
+      if (doc.getTextWidth(nomeText) > nomeMaxWidth) {
+        const nomeAbreviado = nomeText.substring(0, 25) + '...';
+        doc.text(nomeAbreviado, coluna1X + 13, yPosLinha1);
+      } else {
+        doc.text(nomeText, coluna1X + 13, yPosLinha1);
+      }
+    }
+    
+    // CPF (coluna 2)
+    if (demanda.requerente_cpf) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('CPF:', coluna2X, yPosLinha1);
+      doc.setFont('helvetica', 'normal');
+      doc.text(demanda.requerente_cpf, coluna2X + 10, yPosLinha1);
+    }
+    
+    yPos += 5;
+    
+    // LINHA 2: WhatsApp e Indicado
+    let yPosLinha2 = yPos;
+    
+    // WhatsApp (coluna 1)
+    if (demanda.requerente_whatsapp) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('WhatsApp:', coluna1X, yPosLinha2);
+      doc.setFont('helvetica', 'normal');
+      doc.text(demanda.requerente_whatsapp, coluna1X + 22, yPosLinha2);
+    }
+    
+    // Indicado (coluna 2)
+    if (indicadoNome) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Indicado:', coluna2X, yPosLinha2);
+      doc.setFont('helvetica', 'normal');
+      const indicadoMaxWidth = (larguraUtil / 2) - 25;
+      if (doc.getTextWidth(indicadoNome) > indicadoMaxWidth) {
+        const indicadoAbreviado = indicadoNome.substring(0, 20) + '...';
+        doc.text(indicadoAbreviado, coluna2X + 20, yPosLinha2);
+      } else {
+        doc.text(indicadoNome, coluna2X + 20, yPosLinha2);
+      }
+    }
+    
+    yPos += 8;
+    
+    // Tipo de Demanda e Nível de Urgência na mesma linha
+    verificarNovaPagina(15);
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Tipo de Demanda e Nível de Urgência', margemEsquerda + 2, yPos + 5);
+    yPos += 12;
+    
+    // Organizar em 2 colunas
+    const colTipoX = margemEsquerda;
+    const colUrgenciaX = margemEsquerda + (larguraUtil / 2);
+    
+    // Coluna 1: Tipo de Demanda
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Tipo:', colTipoX, yPos);
+    doc.setFont('helvetica', 'normal');
+    const tipoMaxWidth = (larguraUtil / 2) - 15;
+    const tipoText = demanda.tipo_de_demanda || 'Não informado';
+    const linhasTipo = doc.splitTextToSize(tipoText, tipoMaxWidth);
+    doc.text(linhasTipo, colTipoX, yPos + 4);
+    
+    // Coluna 2: Nível de Urgência
+    doc.setFont('helvetica', 'bold');
+    doc.text('Urgência:', colUrgenciaX, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(demanda.nivel_de_urgencia || 'Não informado', colUrgenciaX, yPos + 4);
+    
+    yPos += Math.max(linhasTipo.length * 4 + 4, 8) + 3;
+    
+    // Endereço
+    verificarNovaPagina(30);
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Endereço', margemEsquerda + 2, yPos + 5);
+    yPos += 12;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    const enderecoCompleto = [
+      demanda.logradouro && demanda.numero ? `${demanda.logradouro}, ${demanda.numero}` : demanda.logradouro,
+      demanda.bairro,
+      demanda.cidade && demanda.uf ? `${demanda.cidade}/${demanda.uf}` : demanda.cidade || demanda.uf,
+      demanda.cep ? `CEP: ${demanda.cep}` : null,
+      demanda.referencia ? `Ref.: ${demanda.referencia}` : null
+    ].filter(Boolean).join(' - ');
+    
+    const linhasEndereco = doc.splitTextToSize(enderecoCompleto || 'Não informado', larguraUtil);
+    doc.text(linhasEndereco, margemEsquerda, yPos);
+    yPos += linhasEndereco.length * 5 + 8;
+    
+    // Descrição do Problema
+    if (demanda.descricao_do_problema) {
+      verificarNovaPagina(25);
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Descrição do Problema', margemEsquerda + 2, yPos + 5);
+      yPos += 12;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const linhasDescricao = doc.splitTextToSize(demanda.descricao_do_problema, larguraUtil);
+      doc.text(linhasDescricao, margemEsquerda, yPos);
+      yPos += linhasDescricao.length * 5 + 8;
+    }
+    
+    // Observações
+    if (demanda.observação_resposta && demanda.observação_resposta.length > 0) {
+      verificarNovaPagina(25);
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Observações', margemEsquerda + 2, yPos + 5);
+      yPos += 12;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      
+      demanda.observação_resposta.forEach((obs) => {
+        verificarNovaPagina(15);
+        const linhasObs = doc.splitTextToSize(`• ${obs}`, larguraUtil - 5);
+        doc.text(linhasObs, margemEsquerda + 5, yPos);
+        yPos += linhasObs.length * 5 + 3;
+      });
+      yPos += 5;
+    }
+    
+    // Link da Demanda e Datas na mesma seção
+    verificarNovaPagina(25);
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Link da Demanda e Datas', margemEsquerda + 2, yPos + 5);
+    yPos += 12;
+    
+    // Organizar em 2 colunas
+    const colLinkX = margemEsquerda;
+    const colDatasX = margemEsquerda + (larguraUtil / 2);
+    const yPosInicio = yPos;
+    
+    // Coluna 1: Link da Demanda
+    if (demanda.link_da_demanda) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Link:', colLinkX, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 255);
+      const linkMaxWidth = (larguraUtil / 2) - 15;
+      const linhasLink = doc.splitTextToSize(demanda.link_da_demanda, linkMaxWidth);
+      doc.text(linhasLink, colLinkX, yPos + 5);
+      doc.setTextColor(0, 0, 0);
+    }
+    
+    // Coluna 2: Datas
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Datas:', colDatasX, yPosInicio);
+    doc.setFont('helvetica', 'normal');
+    let yPosDatas = yPosInicio + 5;
+    
+    if (demanda.criado_em) {
+      doc.text(`Abertura: ${formatDate(demanda.criado_em)}`, colDatasX, yPosDatas);
+      yPosDatas += 4;
+    }
+    if (demanda.atualizado_em) {
+      doc.text(`Atualização: ${formatDate(demanda.atualizado_em)}`, colDatasX, yPosDatas);
+    }
+    
+    yPos += 18;
+    
+    // Histórico de Mensagens
+    if (mensagens && mensagens.length > 0) {
+      verificarNovaPagina(25);
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Histórico de Mensagens', margemEsquerda + 2, yPos + 5);
+      yPos += 12;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      
+      // Mostrar apenas as últimas 10 mensagens para não sobrecarregar o PDF
+      const mensagensParaPDF = mensagens.slice(0, 10);
+      
+      mensagensParaPDF.forEach((msg, index) => {
+        verificarNovaPagina(20);
+        
+        // Cabeçalho da mensagem (data e usuário)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        const dataMensagem = msg.data_envio ? formatDate(msg.data_envio) : 'Data não disponível';
+        const remetente = msg.usuario_nome || 'Sistema';
+        doc.text(`${dataMensagem} - ${remetente}`, margemEsquerda, yPos);
+        yPos += 5;
+        
+        // Conteúdo da mensagem
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        const linhasMensagem = doc.splitTextToSize(msg.mensagem || '', larguraUtil - 5);
+        doc.text(linhasMensagem, margemEsquerda + 3, yPos);
+        yPos += linhasMensagem.length * 4 + 5;
+        
+        // Linha separadora entre mensagens
+        if (index < mensagensParaPDF.length - 1) {
+          doc.setDrawColor(220, 220, 220);
+          doc.setLineWidth(0.2);
+          doc.line(margemEsquerda, yPos, larguraPagina - margemDireita, yPos);
+          yPos += 3;
+        }
+      });
+      
+      // Indicar se há mais mensagens
+      if (mensagens.length > 10) {
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`... e mais ${mensagens.length - 10} mensagem(ns)`, margemEsquerda, yPos);
+        yPos += 5;
+      }
+      
+      doc.setTextColor(0, 0, 0);
+      yPos += 8;
+    }
+    
+    // Fotos do Problema
+    const fotosDoProblema = demanda.fotos_do_problema || [];
+    if (fotosDoProblema.length > 0) {
+      verificarNovaPagina(25);
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margemEsquerda, yPos, larguraUtil, 7, 'F');
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Fotos do Problema', margemEsquerda + 2, yPos + 5);
+      yPos += 14;
+      
+      // Adicionar imagens em grid 2x2
+      const larguraImagem = 40; // Largura reduzida pela metade
+      const alturaImagem = 30; // Altura proporcional
+      const espacoEntreImagens = 8;
+      let coluna = 0;
+      
+      for (let i = 0; i < fotosDoProblema.length; i++) {
+        try {
+          const imgUrl = fotosDoProblema[i];
+          
+          // Carregar imagem como base64
+          const response = await fetch(imgUrl);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          
+          await new Promise((resolve) => {
+            reader.onloadend = () => {
+              const base64data = reader.result as string;
+              
+              // Calcular posição X baseado na coluna
+              const xPos = margemEsquerda + (coluna * (larguraImagem + espacoEntreImagens));
+              
+              // Verificar se precisa de nova página (apenas no início de uma nova linha)
+              if (coluna === 0) {
+                verificarNovaPagina(40);
+              }
+              
+              // Adicionar imagem ao PDF com tamanho reduzido
+              try {
+                // Adicionar borda ao redor da imagem
+                doc.setDrawColor(200, 200, 200);
+                doc.rect(xPos - 1, yPos - 1, larguraImagem + 2, alturaImagem + 2);
+                
+                doc.addImage(base64data, 'JPEG', xPos, yPos, larguraImagem, alturaImagem);
+                
+                // Adicionar legenda
+                doc.setFontSize(7);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Foto ${i + 1}`, xPos + larguraImagem / 2, yPos + alturaImagem + 4, { align: 'center' });
+                doc.setTextColor(0, 0, 0);
+              } catch (err) {
+                console.error('Erro ao adicionar imagem:', err);
+                doc.setFontSize(8);
+                doc.text(`Foto ${i + 1}: Erro`, xPos, yPos);
+              }
+              
+              // Atualizar coluna e yPos
+              coluna++;
+              if (coluna >= 2) { // 2 imagens por linha
+                coluna = 0;
+                yPos += alturaImagem + 8; // Altura da imagem + legenda + espaço
+              }
+              
+              resolve(null);
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error(`Erro ao processar foto ${i + 1}:`, error);
+          const xPos = margemEsquerda + (coluna * (larguraImagem + espacoEntreImagens));
+          doc.setFontSize(8);
+          doc.text(`Foto ${i + 1}: Não disponível`, xPos, yPos);
+          
+          coluna++;
+          if (coluna >= 2) {
+            coluna = 0;
+            yPos += 10;
+          }
+        }
+      }
+      
+      // Se terminou em uma linha incompleta, avançar yPos
+      if (coluna > 0) {
+        yPos += alturaImagem + 8;
+      }
+    }
+    
+    // Adicionar rodapé na última página
+    adicionarRodape();
+    
+    // Salvar PDF
+    const nomeArquivo = `Demanda_${demanda.numero_protocolo || demanda.uid.substring(0, 8)}.pdf`;
+    doc.save(nomeArquivo);
+    
+    toast({
+      title: 'PDF gerado com sucesso!',
+      description: `O arquivo ${nomeArquivo} foi baixado.`,
+      className: 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/30 dark:border-green-800 dark:text-green-200',
+    });
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast({
+        title: 'Erro ao gerar PDF',
+        description: 'Não foi possível gerar o arquivo PDF.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGerandoPDF(false);
+    }
+  };
+
   const carregarDemanda = async (id: string) => {
     try {
       setCarregando(true);
@@ -744,7 +1215,34 @@ export function DetalhesDemanda() {
         setDemanda(demandaCarregada);
         setNovoStatus(getValidStatus(demandaCarregada.status));
         setIsFavorito(demandaCarregada.favorito || false);
+        setNivelFavorito(demandaCarregada.nivel_favorito || 0);
         setDemandaConcluida(demandaCarregada.status === 'concluido');
+        
+        // Buscar nome do indicado se existir
+        console.log('Demanda carregada:', demandaCarregada);
+        console.log('indicado_uid:', demandaCarregada.indicado_uid);
+        
+        if (demandaCarregada.indicado_uid) {
+          try {
+            const { data: indicado, error } = await supabaseClient
+              .from('gbp_indicado')
+              .select('nome')
+              .eq('uid', demandaCarregada.indicado_uid)
+              .single();
+            
+            console.log('Resultado busca indicado:', { indicado, error });
+            
+            if (indicado) {
+              console.log('Nome do indicado encontrado:', indicado.nome);
+              setIndicadoNome(indicado.nome);
+            }
+          } catch (error) {
+            console.error('Erro ao buscar indicado:', error);
+          }
+        } else {
+          console.log('Demanda não tem indicado_uid');
+        }
+        
         // Carregar mensagens quando a demanda for carregada
         await carregarMensagens(id);
       } else {
@@ -818,7 +1316,6 @@ export function DetalhesDemanda() {
       if (sucesso) {
         setIsFavorito(novoStatusFavorito);
         setDemanda({ ...demanda, favorito: novoStatusFavorito });
-        
         toast({
           title: novoStatusFavorito ? 'Adicionado aos favoritos' : 'Removido dos favoritos',
           description: novoStatusFavorito 
@@ -839,6 +1336,30 @@ export function DetalhesDemanda() {
     }
   };
 
+  const alterarNivelFavorito = async (nivel: number) => {
+    if (!demanda) return;
+    
+    try {
+      const sucesso = await demandasRuasService.setNivelFavorito(demanda.uid, nivel);
+      if (sucesso) {
+        setNivelFavorito(nivel);
+        setIsFavorito(nivel > 0);
+        setDemanda({ ...demanda, nivel_favorito: nivel, favorito: nivel > 0 });
+        toast({
+          title: nivel === 0 ? 'Favorito removido' : `Nível de favorito: ${nivel}`,
+          description: nivel === 0 ? 'A demanda não está mais marcada como favorita.' : `A demanda foi marcada com nível ${nivel} de prioridade.`,
+          className: 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/30 dark:border-green-800 dark:text-green-200',
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar nível de favorito:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível atualizar o nível de favorito.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const atualizarDemanda = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1135,20 +1656,51 @@ export function DetalhesDemanda() {
                       {demanda.status}
                     </span>
                   </div>
-                  <Button 
-                    variant={isFavorito ? 'default' : 'outline'} 
-                    size="icon"
-                    onClick={toggleFavorito}
-                    className={cn(
-                      'h-10 w-10 sm:h-10 sm:w-10 rounded-full transition-all duration-200 flex-shrink-0',
-                      'flex items-center justify-center', // Center icon
-                      isFavorito 
-                        ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-md hover:shadow-lg hover:shadow-amber-500/20 dark:from-amber-500 dark:to-amber-600' 
-                        : 'border-2 border-amber-200 bg-white text-amber-500 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-800 dark:bg-gray-800 dark:hover:bg-amber-900/20 dark:text-amber-400'
-                    )}
-                  >
-                    <Star className={`h-5 w-5 sm:h-4 sm:w-4 ${isFavorito ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 sm:h-10 sm:w-10 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <MoreVertical className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={gerarPDF} disabled={gerandoPDF}>
+                        {gerandoPDF ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="mr-2 h-4 w-4" />
+                        )}
+                        Baixar PDF
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Nível de Favorito</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => alterarNivelFavorito(0)}>
+                        <Star className={cn("mr-2 h-4 w-4", nivelFavorito === 0 && "fill-amber-500 text-amber-500")} />
+                        Sem favorito
+                      </DropdownMenuItem>
+                      {[1, 2, 3, 4, 5].map((nivel) => (
+                        <DropdownMenuItem key={nivel} onClick={() => alterarNivelFavorito(nivel)}>
+                          <div className="flex items-center mr-2">
+                            {Array.from({ length: nivel }).map((_, i) => (
+                              <Star 
+                                key={i} 
+                                className={cn(
+                                  "h-3 w-3",
+                                  nivelFavorito === nivel ? "fill-amber-500 text-amber-500" : "text-gray-400"
+                                )} 
+                              />
+                            ))}
+                          </div>
+                          Nível {nivel}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </div>
@@ -1173,7 +1725,7 @@ export function DetalhesDemanda() {
                 </CardHeader>
                 <CardContent className="pt-4 sm:pt-6 space-y-4 sm:space-y-6">
                   {/* Informações do Requerente */}
-                  {(demanda.requerente_nome || demanda.requerente_whatsapp || demanda.requerente_cpf) && (
+                  {(demanda.requerente_nome || demanda.requerente_whatsapp || demanda.requerente_cpf || indicadoNome) && (
                     <div className="bg-gray-50 dark:bg-gray-800/30 p-3 sm:p-4 rounded-md border border-gray-100 dark:border-gray-700">
                       <h3 className="font-medium text-sm sm:text-base mb-2 sm:mb-3 text-gray-700 dark:text-gray-300">
                         Informações do Requerente
@@ -1195,6 +1747,12 @@ export function DetalhesDemanda() {
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">CPF</Label>
                             <p className="text-sm sm:text-base font-mono">{demanda.requerente_cpf}</p>
+                          </div>
+                        )}
+                        {indicadoNome && (
+                          <div className="space-y-0.5">
+                            <Label className="text-xs sm:text-sm text-muted-foreground">Indicado</Label>
+                            <p className="text-sm sm:text-base font-medium break-words">{indicadoNome}</p>
                           </div>
                         )}
                       </div>

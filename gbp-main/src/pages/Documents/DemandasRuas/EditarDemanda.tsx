@@ -15,16 +15,6 @@ export function EditarDemanda() {
   const [loading, setLoading] = useState(true);
   const [demanda, setDemanda] = useState<DemandaRua | null>(null);
   
-  // Estilo para o container principal
-  const containerStyle = {
-    minHeight: '100vh',
-    backgroundColor: 'white',
-    padding: '2rem',
-    width: '100%',
-    maxWidth: '100%',
-    margin: 0,
-    boxSizing: 'border-box' as const
-  };
 
   // Carregar os dados da demanda
   useEffect(() => {
@@ -73,7 +63,7 @@ export function EditarDemanda() {
 
   if (loading) {
     return (
-      <div style={containerStyle} className="flex items-center justify-center">
+      <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -81,26 +71,20 @@ export function EditarDemanda() {
 
   if (!demanda) {
     return (
-      <div style={containerStyle} className="flex flex-col items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground">Demanda não encontrada.</p>
-          <Button 
-            variant="outline" 
-            className="mt-4"
-            onClick={() => navigate('/app/documentos/demandas-ruas')}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar para a lista de demandas
-          </Button>
-        </div>
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">Demanda não encontrada</p>
+        <Button onClick={() => navigate('/app/documentos/demandas-ruas')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
+        </Button>
       </div>
     );
   }
 
   return (
-    <div style={containerStyle}>
-      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="w-full px-2 pt-2 pb-4 sm:px-4 sm:pt-4 sm:pb-8 flex-1">
+        <div className="max-w-7xl mx-auto">
           <Button 
             variant="outline" 
             className="mb-4"
@@ -110,10 +94,10 @@ export function EditarDemanda() {
             Voltar para a lista
           </Button>
           
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Editar Demanda</h1>
-              <p className="text-muted-foreground">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Editar Demanda</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Protocolo: #{demanda.numero_protocolo?.toString().padStart(6, '0') || '--'}
               </p>
             </div>
@@ -123,6 +107,7 @@ export function EditarDemanda() {
               onSave={handleSave}
               onCancel={() => navigate('/app/documentos/demandas-ruas')}
               loading={loading}
+              empresaUid={company?.uid || ''}
             />
           </div>
         </div>

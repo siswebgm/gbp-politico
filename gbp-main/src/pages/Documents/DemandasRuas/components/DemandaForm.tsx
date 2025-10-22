@@ -14,7 +14,7 @@ import { Loader2, Save, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 
 const formSchema = z.object({
-  cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+  requerente_cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
   tipo_de_demanda: z.string().min(1, 'O tipo de demanda é obrigatório'),
   descricao_do_problema: z.string().min(10, 'A descrição deve ter pelo menos 10 caracteres'),
   nivel_de_urgencia: z.enum(['baixa', 'média', 'alta']),
@@ -28,7 +28,7 @@ const formSchema = z.object({
   boletim_ocorrencia: z.enum(['sim', 'não']),
   link_da_demanda: z.string().url('URL inválida').or(z.literal('')),  
   aceite_termos: z.boolean().refine(val => val === true, { message: 'Você deve aceitar os termos para continuar' }),
-  status: z.enum(['pendente', 'em_andamento', 'concluido', 'cancelado']),
+  status: z.enum(['recebido', 'feito_oficio', 'protocolado', 'aguardando', 'concluido', 'cancelado']),
   observacoes: z.string().optional(),
   anexar_boletim_de_correncia: z.string().optional(),
   documento_protocolado: z.string().optional(),
@@ -55,28 +55,54 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      cpf: demanda?.cpf || cpfInicial || '',
-      tipo_de_demanda: demanda?.tipo_de_demanda || '',
-      descricao_do_problema: demanda?.descricao_do_problema || '',
-      nivel_de_urgencia: demanda?.nivel_de_urgencia || 'média',
-      logradouro: demanda?.logradouro || '',
-      numero: demanda?.numero || '',
-      bairro: demanda?.bairro || '',
-      cidade: demanda?.cidade || '',
-      uf: demanda?.uf || '',
-      cep: demanda?.cep || '',
-      referencia: demanda?.referencia || '',
-      boletim_ocorrencia: (demanda?.boletim_ocorrencia as 'sim' | 'não') || 'não',
-      link_da_demanda: demanda?.link_da_demanda || '',
-      aceite_termos: demanda?.aceite_termos || false,
-      status: demanda?.status || 'pendente',
-      observacoes: demanda?.observacoes || '',
-      anexar_boletim_de_correncia: demanda?.anexar_boletim_de_correncia || '',
-      documento_protocolado: demanda?.documento_protocolado || '',
-      observação_resposta: demanda?.observação_resposta || [],
+      requerente_cpf: '',
+      tipo_de_demanda: '',
+      descricao_do_problema: '',
+      nivel_de_urgencia: 'média',
+      logradouro: '',
+      numero: '',
+      bairro: '',
+      cidade: '',
+      uf: '',
+      cep: '',
+      referencia: '',
+      boletim_ocorrencia: 'não',
+      link_da_demanda: '',
+      aceite_termos: false,
+      status: 'recebido',
+      observacoes: '',
+      anexar_boletim_de_correncia: '',
+      documento_protocolado: '',
+      observação_resposta: [],
     },
   });
 
+  // Atualizar formulário quando a demanda for carregada
+  useEffect(() => {
+    if (demanda) {
+      form.reset({
+        requerente_cpf: demanda.requerente_cpf || cpfInicial || '',
+        tipo_de_demanda: demanda.tipo_de_demanda || '',
+        descricao_do_problema: demanda.descricao_do_problema || '',
+        nivel_de_urgencia: demanda.nivel_de_urgencia || 'média',
+        logradouro: demanda.logradouro || '',
+        numero: demanda.numero || '',
+        bairro: demanda.bairro || '',
+        cidade: demanda.cidade || '',
+        uf: demanda.uf || '',
+        cep: demanda.cep || '',
+        referencia: demanda.referencia || '',
+        boletim_ocorrencia: (demanda.boletim_ocorrencia as 'sim' | 'não') || 'não',
+        link_da_demanda: demanda.link_da_demanda || '',
+        aceite_termos: demanda.aceite_termos ?? true,
+        status: demanda.status || 'recebido',
+        observacoes: demanda.observacoes || '',
+        anexar_boletim_de_correncia: demanda.anexar_boletim_de_correncia || '',
+        documento_protocolado: demanda.documento_protocolado || '',
+        observação_resposta: demanda.observação_resposta || [],
+      });
+    }
+  }, [demanda, cpfInicial, form]);
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
@@ -116,7 +142,7 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
-                name="cpf"
+                name="requerente_cpf"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>CPF do Solicitante</FormLabel>
@@ -160,7 +186,7 @@ export function DemandaForm({ demanda, onSave, onCancel, loading, empresaUid, cp
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger></FormControl><SelectContent><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="em_andamento">Em Andamento</SelectItem><SelectItem value="concluido">Concluído</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger></FormControl><SelectContent><SelectItem value="recebido">Recebido</SelectItem><SelectItem value="feito_oficio">Feito Ofício</SelectItem><SelectItem value="protocolado">Protocolado</SelectItem><SelectItem value="aguardando">Aguardando</SelectItem><SelectItem value="concluido">Concluído</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select>
                   <FormMessage />
                 </FormItem>
               )}

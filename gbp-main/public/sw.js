@@ -39,6 +39,14 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Permite que o app solicite a ativação imediata de uma nova versão
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // Estratégia de cache com verificação de versão
 self.addEventListener('fetch', (event) => {
   // Verifica se é uma requisição do version.json
