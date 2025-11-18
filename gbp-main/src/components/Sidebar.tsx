@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -15,8 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider';
+import { useCompanyStore } from '../store/useCompanyStore';
+import { demandasRuasService } from '../services/demandasRuasService';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -62,6 +65,7 @@ const navigation: NavigationItem[] = [
     ]
   },
   { name: 'Documentos', href: '/app/documentos', icon: FileText },
+  { name: 'Demandas Ruas', href: '/app/documentos/demandas-ruas', icon: AlertTriangle },
   { name: 'Disparo de Mídia', href: '/app/disparo-de-midia', icon: MessageSquare },
   { name: 'Mapa Eleitoral', href: '/app/mapa-eleitoral', icon: Map },
   { name: 'Estratégia', href: '/app/strategy', icon: Target },
@@ -77,6 +81,7 @@ interface MenuItemProps {
   expanded: boolean;
   onToggle: (e: React.MouseEvent) => void;
   onClick: () => void;
+  badge?: number;
 }
 
 const MenuItem = React.memo(function MenuItem({ 
@@ -86,7 +91,8 @@ const MenuItem = React.memo(function MenuItem({
   isParent, 
   expanded, 
   onToggle, 
-  onClick 
+  onClick,
+  badge
 }: MenuItemProps) {
   return (
     <div className="mb-1">
@@ -104,7 +110,7 @@ const MenuItem = React.memo(function MenuItem({
         <Link
           to={item.href}
           onClick={onClick}
-          className={`flex-1 flex items-center ${item.parent ? 'pl-8' : ''}`}
+          className={`flex-1 flex items-center ${item.parent ? 'pl-8' : ''} relative`}
         >
           <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-transform duration-200 ${
             isActive 
@@ -117,6 +123,19 @@ const MenuItem = React.memo(function MenuItem({
             <span className="truncate flex-1 ml-3">
               {item.name}
             </span>
+          )}
+          {badge !== undefined && badge > 0 && (
+            <>
+              {!isCollapsed ? (
+                <span className="ml-2 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">
+                  {badge}
+                </span>
+              ) : (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-blue-500 text-white dark:bg-blue-600 shadow-sm">
+                  {badge}
+                </span>
+              )}
+            </>
           )}
         </Link>
         
@@ -141,22 +160,111 @@ const MenuItem = React.memo(function MenuItem({
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
+  const { company } = useCompanyStore();
   const isAdmin = user?.nivel_acesso === 'admin';
+  const [demandasHoje, setDemandasHoje] = useState<number>(0);
+  
+  // Planos que têm acesso ao módulo de Demandas Ruas
+  const planosComAcessoDemandasRuas = [
+    'Inter 2.0', 
+    'Pró Max 3.0', 
+    'Básico Plus 0.4', 
+    'Básico 1.0'
+  ];
+  
+  const temAcessoDemandasRuas = company?.plano 
+    ? planosComAcessoDemandasRuas.includes(company.plano) 
+    : false;
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Set<string>>(new Set(['/app/pesquisas']));
+
+  // Buscar contagem de demandas do dia atual
+  useEffect(() => {
+    const fetchDemandasHoje = async () => {
+      console.log('🔍 Verificando acesso a Demandas Ruas:', temAcessoDemandasRuas);
+      console.log('🔍 Plano da empresa:', company?.plano);
+      console.log('🔍 UID da empresa:', company?.uid);
+      
+      if (!temAcessoDemandasRuas) {
+        console.log('❌ Sem acesso ao módulo de Demandas Ruas');
+        return;
+      }
+      
+      if (!company?.uid) {
+        console.log('⏳ Aguardando carregamento da empresa...');
+        return;
+      }
+      
+      try {
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const amanha = new Date(hoje);
+        amanha.setDate(amanha.getDate() + 1);
+
+        console.log('📅 Buscando demandas entre:', hoje.toISOString(), 'e', amanha.toISOString());
+
+        const demandas = await demandasRuasService.getDemandas(company.uid);
+        console.log('📋 Total de demandas:', demandas.length);
+        
+        const demandasDoDia = demandas.filter(demanda => {
+          const dataCriacao = new Date(demanda.criado_em);
+          const isDoDia = dataCriacao >= hoje && dataCriacao < amanha;
+          if (isDoDia) {
+            console.log('✅ Demanda do dia encontrada:', demanda.uid, dataCriacao.toISOString());
+          }
+          return isDoDia;
+        });
+        
+        console.log('📊 Demandas do dia:', demandasDoDia.length);
+        setDemandasHoje(demandasDoDia.length);
+      } catch (error) {
+        console.error('❌ Erro ao buscar demandas do dia:', error);
+      }
+    };
+
+    fetchDemandasHoje();
+    // Atualizar a cada 5 minutos
+    const interval = setInterval(fetchDemandasHoje, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [temAcessoDemandasRuas, company?.plano, company?.uid]);
 
   const toggleItem = useCallback((href: string) => {
     setExpandedItems(prev => new Set(prev.has(href) ? [...prev].filter(item => item !== href) : [...prev, href]));
   }, []);
 
   const filteredNavigation = useMemo(() => {
-    if (isAdmin) return navigation;
+    let filtered = navigation;
     
-    return navigation.filter(item => 
-      !RESTRICTED_PATHS.includes(item.href) && 
-      !RESTRICTED_PATHS.some(path => item.href.startsWith(path))
-    );
-  }, [isAdmin]);
+    // Filtrar por nível de acesso admin
+    if (!isAdmin) {
+      filtered = filtered.filter(item => 
+        !RESTRICTED_PATHS.includes(item.href) && 
+        !RESTRICTED_PATHS.some(path => item.href.startsWith(path))
+      );
+    }
+    
+    // Filtrar Documentos para visitantes
+    filtered = filtered.filter(item => {
+      if (item.href === '/app/documentos') {
+        // Ocultar Documentos se o usuário for visitante
+        return user?.nivel_acesso !== 'visitante';
+      }
+      return true;
+    });
+
+    // Filtrar Demandas Ruas por plano e nível de acesso
+    filtered = filtered.filter(item => {
+      if (item.href === '/app/documentos/demandas-ruas') {
+        const niveisPermitidos = ['admin', 'coordenador', 'analista'];
+        const temNivelAcesso = user?.nivel_acesso && niveisPermitidos.includes(user.nivel_acesso);
+        return temNivelAcesso && temAcessoDemandasRuas;
+      }
+      return true;
+    });
+    
+    return filtered;
+  }, [isAdmin, user?.nivel_acesso, temAcessoDemandasRuas]);
 
   const handleMobileClose = useCallback(() => {
     if (window.innerWidth < 1024) {
@@ -194,9 +302,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className={`flex-1 overflow-y-auto py-4 ${isCollapsed ? 'px-2' : 'px-3'}`}>
             <div className={isCollapsed ? 'space-y-2' : 'space-y-1'}>
               {filteredNavigation.map((item) => {
-                const isActive = item.href === '/app' 
-                  ? location.pathname === '/app' || location.pathname === '/app/'
-                  : location.pathname.startsWith(item.href);
+                // Lógica especial para evitar conflito entre Documentos e Demandas Ruas
+                let isActive = false;
+                if (item.href === '/app') {
+                  isActive = location.pathname === '/app' || location.pathname === '/app/';
+                } else if (item.href === '/app/documentos') {
+                  // Documentos só fica ativo se não for a rota de demandas-ruas
+                  isActive = location.pathname.startsWith('/app/documentos') && 
+                             !location.pathname.startsWith('/app/documentos/demandas-ruas');
+                } else {
+                  isActive = location.pathname.startsWith(item.href);
+                }
 
                 const isParent = navigation.some(navItem => navItem.parent === item.href);
 
@@ -214,6 +330,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       toggleItem(item.href);
                     }}
                     onClick={handleMobileClose}
+                    badge={item.href === '/app/documentos/demandas-ruas' ? demandasHoje : undefined}
                   />
                 );
               })}

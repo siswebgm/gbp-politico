@@ -147,6 +147,9 @@ export function Eleitores() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const { data: categorias } = useCategories();
+  
+  // Verifica se é visitante
+  const isVisitante = user?.nivel_acesso === 'visitante';
 
   useEffect(() => {
     const handleResize = () => {
@@ -156,6 +159,20 @@ export function Eleitores() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+  
+  // Para visitantes, adiciona automaticamente o filtro de responsável
+  // EXCETO quando há uma busca ativa (permite buscar eleitores de outros usuários)
+  const effectiveFilters = useMemo(() => {
+    const hasSearch = filters.nome && filters.nome.trim() !== '';
+    
+    if (isVisitante && user?.uid && !hasSearch) {
+      return {
+        ...filters,
+        responsavel: user.uid
+      };
+    }
+    return filters;
+  }, [filters, isVisitante, user?.uid]);
 
   const { 
     eleitores, 
@@ -163,7 +180,7 @@ export function Eleitores() {
     error: eleitoresError,
     total: totalEleitores 
   } = useEleitores({ 
-    filters,
+    filters: effectiveFilters,
     page: currentPage,
     pageSize 
   });
@@ -322,6 +339,9 @@ export function Eleitores() {
     }).filter(Boolean);
   };
 
+  // Para visitantes, sempre mostra o grid (com seus próprios eleitores)
+  const hasActiveSearch = searchTerm.trim() !== '' || Object.values(filters).some(value => value && value !== '');
+
   return (
     <div className="bg-gray-50 dark:bg-gray-900">
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -345,31 +365,35 @@ export function Eleitores() {
                     <div>
                       <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
                         Eleitores
-                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                          {totalEleitores}
-                        </span>
+                        {!isVisitante && (
+                          <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                            {totalEleitores}
+                          </span>
+                        )}
                       </h1>
                       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Gerenciar base de eleitores
+                        {isVisitante ? 'Meus eleitores cadastrados' : 'Gerenciar base de eleitores'}
                       </p>
                     </div>
                   </div>
 
                   {/* Grupo de Botões */}
                   <div className="hidden md:flex items-center gap-3">
-                    {/* Botão Filtro */}
-                    <button
-                      onClick={() => setShowFilters(true)}
-                      className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
-                    >
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filtros
-                      {Object.values(filters).some(value => value) && (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                          Ativos
-                        </span>
-                      )}
-                    </button>
+                    {/* Botão Filtro - oculto para visitantes */}
+                    {!isVisitante && (
+                      <button
+                        onClick={() => setShowFilters(true)}
+                        className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
+                      >
+                        <Filter className="h-4 w-4 mr-2" />
+                        Filtros
+                        {Object.values(filters).some(value => value) && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                            Ativos
+                          </span>
+                        )}
+                      </button>
+                    )}
 
                     {/* Botão Exportar - apenas para admin */}
                     {user?.nivel_acesso === 'admin' && (
@@ -436,36 +460,40 @@ export function Eleitores() {
                 }}
               />
             </div>
-            <div className="hidden md:block w-16">
-              <InicialDropdown
-                onSelect={(letra) => {
-                  setFilters(prev => ({ ...prev, inicial: letra }));
-                  setCurrentPage(1); // Volta para a primeira página ao mudar o filtro
-                }}
-                letraSelecionada={filters.inicial}
-              />
-            </div>
+            {!isVisitante && (
+              <>
+                <div className="hidden md:block w-16">
+                  <InicialDropdown
+                    onSelect={(letra) => {
+                      setFilters(prev => ({ ...prev, inicial: letra }));
+                      setCurrentPage(1); // Volta para a primeira página ao mudar o filtro
+                    }}
+                    letraSelecionada={filters.inicial}
+                  />
+                </div>
 
-            {/* Dropdown de filtro por data */}
-            <select
-              value={periodFilter}
-              onChange={(e) => {
-                const newPeriod = e.target.value as EleitorFilters['periodo'];
-                setFilters(prev => ({ ...prev, periodo: newPeriod }));
-                setPeriodFilter(newPeriod);
-                setCurrentPage(1); // Volta para a primeira página ao mudar o filtro
-              }}
-              className="w-24 appearance-none px-2 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-            >
-              <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Período</option>
-              <option value="all" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Todos</option>
-              <option value="today" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Hoje</option>
-              <option value="7days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">7 dias</option>
-              <option value="30days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">30 dias</option>
-              <option value="60days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">60 dias</option>
-              <option value="90days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">90 dias</option>
-            </select>
+                {/* Dropdown de filtro por data */}
+                <select
+                  value={periodFilter}
+                  onChange={(e) => {
+                    const newPeriod = e.target.value as EleitorFilters['periodo'];
+                    setFilters(prev => ({ ...prev, periodo: newPeriod }));
+                    setPeriodFilter(newPeriod);
+                    setCurrentPage(1); // Volta para a primeira página ao mudar o filtro
+                  }}
+                  className="w-24 appearance-none px-2 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                >
+                  <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Período</option>
+                  <option value="all" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Todos</option>
+                  <option value="today" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">Hoje</option>
+                  <option value="7days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">7 dias</option>
+                  <option value="30days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">30 dias</option>
+                  <option value="60days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">60 dias</option>
+                  <option value="90days" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">90 dias</option>
+                </select>
+              </>
+            )}
 
             {/* Botão de IA - Oculto */}
           </div>
@@ -518,16 +546,18 @@ export function Eleitores() {
             {isMobileMenuOpen && (
               <div className="flex flex-col gap-3 mb-3 animate-slide-up">
 
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setShowFilters(true);
-                  }}
-                  className="h-10 pl-4 pr-5 bg-indigo-500 text-white rounded-full shadow-lg hover:bg-indigo-600 transition-all duration-200 flex items-center gap-2 group"
-                >
-                  <Filter className="h-4 w-4" />
-                  <span className="text-sm font-medium">Filtros</span>
-                </button>
+                {!isVisitante && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setShowFilters(true);
+                    }}
+                    className="h-10 pl-4 pr-5 bg-indigo-500 text-white rounded-full shadow-lg hover:bg-indigo-600 transition-all duration-200 flex items-center gap-2 group"
+                  >
+                    <Filter className="h-4 w-4" />
+                    <span className="text-sm font-medium">Filtros</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);

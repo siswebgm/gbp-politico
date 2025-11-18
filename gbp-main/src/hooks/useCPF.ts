@@ -32,27 +32,47 @@ export function useCPF() {
 
   const checkExistingVoter = async (cpf: string): Promise<{ existingVoter: any; existsInOtherCompany: boolean }> => {
     if (!user?.empresa_uid) {
-      console.error('Empresa não selecionada');
+      console.error('❌ Empresa não selecionada');
       return { existingVoter: null, existsInOtherCompany: false };
     }
 
     const cleanCPF = cpf.replace(/\D/g, '');
     
+    console.log('=== VERIFICAÇÃO DE CPF ===');
+    console.log('🔍 CPF Original:', cpf);
+    console.log('🔍 CPF Limpo:', cleanCPF);
+    console.log('🔍 Empresa UID:', user.empresa_uid);
+    console.log('🔍 Comprimento:', cleanCPF.length);
+    
     try {
-      // Verifica se existe na empresa atual
+      // Verifica se existe na empresa atual (busca apenas dígitos)
+      // Usando limit(1) para pegar o primeiro caso haja duplicatas
+      console.log('📡 Executando query no Supabase...');
       const { data: existingInCompany, error: companyError } = await supabase
         .from('gbp_eleitores')
-        .select('uid, nome')
+        .select('uid, nome, cpf')
         .eq('cpf', cleanCPF)
         .eq('empresa_uid', user.empresa_uid)
-        .maybeSingle();
+        .limit(1)
+        .single();
+
+      console.log('📊 Resposta do banco:', { 
+        encontrado: !!existingInCompany, 
+        erro: companyError,
+        dados: existingInCompany 
+      });
 
       if (companyError) {
-        console.error('Erro ao consultar banco de dados:', companyError);
+        console.error('❌ Erro ao consultar banco de dados:', companyError);
         return { existingVoter: null, existsInOtherCompany: false };
       }
 
       if (existingInCompany) {
+        console.log('✅ CPF ENCONTRADO!');
+        console.log('   - Nome:', existingInCompany.nome);
+        console.log('   - CPF no banco:', existingInCompany.cpf);
+        console.log('   - CPF buscado:', cleanCPF);
+        console.log('   - Match:', existingInCompany.cpf === cleanCPF);
         toast({
           title: "⚠️ Atenção",
           description: "Este CPF já está cadastrado nesta empresa!",
@@ -64,12 +84,16 @@ export function useCPF() {
         return { existingVoter: existingInCompany, existsInOtherCompany: false };
       }
 
+      console.log('ℹ️ CPF não encontrado na empresa atual');
+
       // Verifica se existe em outras empresas
       const { data: existingInOthers, error: othersError } = await supabase
         .from('gbp_eleitores')
-        .select('uid, nome, empresa_uid')
+        .select('uid, nome, empresa_uid, cpf')
         .eq('cpf', cleanCPF)
         .neq('empresa_uid', user.empresa_uid);
+      
+      console.log('🔍 CPF em outras empresas:', existingInOthers?.length || 0);
 
       if (othersError) {
         console.error('Erro ao consultar outras empresas:', othersError);

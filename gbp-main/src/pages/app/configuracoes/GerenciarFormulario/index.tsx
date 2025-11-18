@@ -116,7 +116,8 @@ const fields: Field[] = [
   { id: 'bairro', label: 'Bairro' },
   { id: 'numero', label: 'Número' },
   { id: 'complemento', label: 'Complemento' },
-  { id: 'nome_mae', label: 'Nome da Mãe' }
+  { id: 'nome_mae', label: 'Nome da Mãe' },
+  { id: 'indicado', label: 'Indicado' }
 ];
 
 const documentosDisponiveis = [
@@ -422,7 +423,36 @@ export default function GerenciarFormulario() {
         }
 
         if (existingConfig) {
-          setPendingChanges(existingConfig as FormConfig);
+          // Garantir que todos os campos da lista fields existam no campos_config
+          const existingFieldIds = new Set(
+            existingConfig.campos_config.map(configStr => {
+              try {
+                return JSON.parse(configStr).id;
+              } catch {
+                return null;
+              }
+            }).filter(Boolean)
+          );
+
+          const updatedCamposConfig = [...existingConfig.campos_config];
+          
+          // Adicionar campos que não existem
+          fields.forEach(field => {
+            if (!existingFieldIds.has(field.id)) {
+              updatedCamposConfig.push(JSON.stringify({
+                id: field.id,
+                visivel: false,
+                obrigatorio: false
+              }));
+            }
+          });
+
+          const configWithAllFields = {
+            ...existingConfig,
+            campos_config: updatedCamposConfig
+          };
+
+          setPendingChanges(configWithAllFields as FormConfig);
           setFormularioAtivo(existingConfig.form_status);
           setLimiteCadastros(existingConfig.registration_limit);
           setFormTitle(existingConfig.form_title || 'Formulário de Cadastro');
@@ -508,7 +538,36 @@ export default function GerenciarFormulario() {
         setFormSlug('');
         setFormUrl(`${baseUrl}/cadastro/${newId}`);
       } else if (configs) {
-        setPendingChanges(configs);
+        // Garantir que todos os campos da lista fields existam no campos_config
+        const existingFieldIds = new Set(
+          configs.campos_config.map(configStr => {
+            try {
+              return JSON.parse(configStr).id;
+            } catch {
+              return null;
+            }
+          }).filter(Boolean)
+        );
+
+        const updatedCamposConfig = [...configs.campos_config];
+        
+        // Adicionar campos que não existem
+        fields.forEach(field => {
+          if (!existingFieldIds.has(field.id)) {
+            updatedCamposConfig.push(JSON.stringify({
+              id: field.id,
+              visivel: false,
+              obrigatorio: false
+            }));
+          }
+        });
+
+        const configWithAllFields = {
+          ...configs,
+          campos_config: updatedCamposConfig
+        };
+
+        setPendingChanges(configWithAllFields);
         // Extrair o slug personalizado do url_slug
         const customSlug = extractSlugFromUrlSlug(configs.url_slug, configs.id);
         setFormSlug(customSlug);

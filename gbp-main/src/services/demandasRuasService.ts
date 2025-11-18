@@ -79,6 +79,7 @@ export interface DemandaRua {
   requerente_whatsapp?: string;
   requerente_cpf?: string;
   documento_protocolado?: string;
+  protocolado_por_nome?: string; // Nome do usuário que protocolou a demanda
   observação_resposta?: string[];
   favorito?: boolean;
   nivel_favorito?: number; // 0 = não favorito, 1-5 = níveis de prioridade

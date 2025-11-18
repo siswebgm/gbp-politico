@@ -499,6 +499,10 @@ export function FormularioPublico() {
           if (field.anexo) {
             return !uploadedFiles[field.id]?.length;
           }
+          // Validação especial para o campo indicado
+          if (field.id === 'indicado') {
+            return !selectedIndicado;
+          }
           return !formData[field.id as keyof typeof formData];
         })
         .map(field => field.id);
@@ -679,6 +683,8 @@ export function FormularioPublico() {
       };
 
       console.log('Dados para inserção:', dataToSubmit);
+      console.log('selectedIndicado:', selectedIndicado);
+      console.log('indicado_uid que será enviado:', selectedIndicado || null);
 
       setSubmitProgress(80);
       setSubmitStatus('Enviando suas informações...');
@@ -1981,7 +1987,7 @@ export function FormularioPublico() {
           )}
 
           {/* Indicado */}
-          {indicados.length > 0 && (
+          {indicados.length > 0 && isFieldVisible('indicado') && (
             <FormSection>
               <SectionTitle>
                 <PersonIcon sx={{ color: 'primary.main' }} />
@@ -1993,10 +1999,12 @@ export function FormularioPublico() {
                   <StyledTextField
                     select
                     fullWidth
-                    label="Quem te indicou? (Opcional)"
+                    label="Quem te indicou?"
                     value={selectedIndicado}
                     onChange={(e) => setSelectedIndicado(e.target.value)}
-                    helperText="Selecione a pessoa que te indicou para este cadastro"
+                    required={isFieldRequired('indicado')}
+                    error={isFieldInvalid('indicado')}
+                    helperText={isFieldInvalid('indicado') ? 'Campo obrigatório' : 'Selecione a pessoa que te indicou para este cadastro'}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">

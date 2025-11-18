@@ -24,6 +24,7 @@ interface NewEventModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialDate: Date | null;
+  eventToEdit?: any;
 }
 
 const eventTypes: { value: EventType; label: string }[] = [
@@ -41,7 +42,7 @@ const priorities: { value: EventPriority; label: string }[] = [
   { value: 'URGENTE', label: 'Urgente' },
 ];
 
-export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModalProps) {
+export function NewEventModal({ open, onOpenChange, initialDate, eventToEdit }: NewEventModalProps) {
   const { toast } = useToast();
   const { user } = useAuthStore();
   const { company } = useCompanyStore();
@@ -60,11 +61,39 @@ export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModal
   const [taskResponsible, setTaskResponsible] = useState('');
 
   useEffect(() => {
-    if (initialDate) {
+    if (initialDate && !eventToEdit) {
       setStartDate(initialDate);
       setEndDate(addHours(initialDate, 1));
     }
-  }, [initialDate]);
+  }, [initialDate, eventToEdit]);
+
+  // Preencher campos quando houver evento para editar
+  useEffect(() => {
+    if (eventToEdit) {
+      setTitle(eventToEdit.title || '');
+      setDescription(eventToEdit.description || '');
+      setType(eventToEdit.type || 'REUNIAO');
+      setPriority(eventToEdit.prioridade || 'MEDIA');
+      setStartDate(new Date(eventToEdit.start_time));
+      setEndDate(new Date(eventToEdit.end_time));
+      setLocation(eventToEdit.location || '');
+      setTaskResponsible(eventToEdit.task_responsible || '');
+      
+      // Parse attendees se for string JSON
+      if (eventToEdit.attendees) {
+        try {
+          const attendeesData = typeof eventToEdit.attendees === 'string' 
+            ? JSON.parse(eventToEdit.attendees) 
+            : eventToEdit.attendees;
+          setParticipants(Array.isArray(attendeesData) ? attendeesData.map((a: any) => a.name || a) : []);
+        } catch (e) {
+          setParticipants([]);
+        }
+      }
+    } else {
+      resetForm();
+    }
+  }, [eventToEdit]);
 
   const resetForm = () => {
     setTitle('');
@@ -117,7 +146,7 @@ export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModal
         return;
       }
 
-      const newEvent = {
+      const eventData = {
         title: title.trim(),
         description: description?.trim() || null,
         type,
@@ -127,17 +156,42 @@ export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModal
         location: location?.trim() || null,
         attendees: participants.length > 0 ? participants.map(name => ({ name, confirmed: false })) : null,
         all_day: false,
-        status: 'PENDENTE',
-        created_by: user.uid,
-        empresa_uid: company.uid,
-        usuario_nome: user.nome,
-        usuarios_uid: user.uid,
-        // is_recurring: isRecurring, // Coluna não existe na tabela
-        // reminder_sent: reminder, // Coluna não existe na tabela
-        // task_responsible: taskResponsible.trim() || null, // Coluna não existe na tabela
+        task_responsible: taskResponsible.trim() || null,
       };
 
-      const { error } = await supabaseClient.from('gbp_agendamentos').insert([newEvent]);
+      let error;
+
+      if (eventToEdit) {
+        // Atualizar evento existente
+        const updateData = {
+          ...eventData,
+          updated_by: user.uid,
+          updated_at: new Date().toISOString(),
+        };
+        
+        const result = await supabaseClient
+          .from('gbp_agendamentos')
+          .update(updateData)
+          .eq('uid', eventToEdit.uid);
+        
+        error = result.error;
+      } else {
+        // Criar novo evento
+        const newEvent = {
+          ...eventData,
+          status: 'PENDENTE',
+          created_by: user.uid,
+          empresa_uid: company.uid,
+          usuario_nome: user.nome,
+          usuarios_uid: user.uid,
+        };
+
+        const result = await supabaseClient
+          .from('gbp_agendamentos')
+          .insert([newEvent]);
+        
+        error = result.error;
+      }
 
       if (error) {
         console.error('Erro ao salvar o compromisso:', error);
@@ -145,7 +199,11 @@ export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModal
         return;
       }
 
-      toast({ title: 'Sucesso!', description: 'Agenda salva com sucesso!', variant: 'success' });
+      toast({ 
+        title: 'Sucesso!', 
+        description: eventToEdit ? 'Agendamento atualizado com sucesso!' : 'Agenda salva com sucesso!', 
+        variant: 'success' 
+      });
       resetForm();
       onOpenChange(false);
     } catch (error) {
@@ -158,9 +216,16 @@ export function NewEventModal({ open, onOpenChange, initialDate }: NewEventModal
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[800px] p-0">
         <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="text-lg sm:text-xl">Nova Agenda</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">
+            {eventToEdit ? 'Editar Agendamento' : 'Nova Agenda'}
+          </DialogTitle>
           <DialogDescription className="text-sm sm:text-base">
-            {initialDate ? `Criar agenda para ${format(initialDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}` : 'Preencha os dados da nova agenda'}
+            {eventToEdit 
+              ? 'Atualize as informações do agendamento' 
+              : initialDate 
+                ? `Criar agenda para ${format(initialDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}` 
+                : 'Preencha os dados da nova agenda'
+            }
           </DialogDescription>
         </DialogHeader>
         

@@ -130,10 +130,30 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
   const [oficioToProtocol, setOficioToProtocol] = useState<Oficio | null>(null);
   const [isUploadingProtocolo, setIsUploadingProtocolo] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'folder'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'folder'>('folder');
   const [expandedYears, setExpandedYears] = useState<string[]>([]);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderYear, setNewFolderYear] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [folderNames, setFolderNames] = useState<Record<string, string>>({});
+
+  // Carregar nomes de pastas do localStorage
+  useEffect(() => {
+    const loadedNames: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('folder_name_')) {
+        const ano = key.replace('folder_name_', '');
+        const name = localStorage.getItem(key);
+        if (name) {
+          loadedNames[ano] = name;
+        }
+      }
+    }
+    setFolderNames(loadedNames);
+  }, []);
 
   // Função para formatar a data atual
   const formatDateFilter = (date: Date) => {
@@ -1728,17 +1748,22 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                 <div className="flex-[0_0_auto] min-w-[160px] max-w-[200px]">
                   <button
                     onClick={() => setShowNewFolderModal(true)}
-                    className="w-full text-left"
+                    className="w-full text-left group"
                   >
-                    <div className="flex flex-col items-center p-3 hover:bg-gray-50 rounded transition-colors">
-                      <svg className="w-16 h-16 text-gray-300 mb-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path
-                          d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"
-                          fill="currentColor"
-                        />
-                        <path d="M12 10v6m-3-3h6" stroke="#D1D5DB" strokeWidth="2"/>
-                      </svg>
-                      <span className="text-sm font-medium text-gray-600">Nova Pasta</span>
+                    <div className="flex flex-col items-center p-3 hover:bg-blue-50 rounded-lg transition-all border-2 border-dashed border-gray-300 hover:border-blue-400">
+                      <div className="relative">
+                        <svg className="w-16 h-16 text-gray-300 group-hover:text-gray-400 mb-2 transition-colors" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path
+                            d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                        {/* Ícone + grande e destacado */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Plus className="w-8 h-8 text-blue-500 group-hover:text-blue-600 transition-colors" strokeWidth={2.5} />
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-600 transition-colors">Nova Pasta</span>
                     </div>
                   </button>
                 </div>
@@ -1753,26 +1778,71 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                 )
                 .sort(([anoA], [anoB]) => Number(anoB) - Number(anoA))
                 .map(([ano, oficios]) => (
-                  <div key={ano} className="flex-[0_0_auto] min-w-[160px] max-w-[200px]">
-                    <button
-                      onClick={() => navigate(`/app/documentos/oficios/${ano}`)}
-                      className="w-full text-left"
-                    >
-                      <div className="flex flex-col items-center p-3 hover:bg-gray-50 rounded transition-colors">
-                        <svg className="w-16 h-16 text-yellow-400 mb-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path
-                            d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                        <div className="flex flex-col items-center text-center">
-                          <span className="text-lg font-medium text-gray-900">{ano}</span>
-                          <span className="mt-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
-                            {oficios.length} {oficios.length === 1 ? 'ofício' : 'ofícios'}
-                          </span>
+                  <div key={ano} className="flex-[0_0_auto] min-w-[160px] max-w-[200px] group">
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          if (editingFolder !== ano) {
+                            navigate(`/app/documentos/oficios/${ano}`);
+                          }
+                        }}
+                        className="w-full text-left"
+                      >
+                        <div className="flex flex-col items-center p-3 hover:bg-gray-50 rounded transition-colors">
+                          <svg className="w-16 h-16 text-yellow-400 mb-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path
+                              d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                          <div className="flex flex-col items-center text-center w-full">
+                            {editingFolder === ano ? (
+                              <input
+                                type="text"
+                                value={editingFolderName}
+                                onChange={(e) => setEditingFolderName(e.target.value)}
+                                onBlur={() => {
+                                  if (editingFolderName.trim()) {
+                                    setFolderNames({ ...folderNames, [ano]: editingFolderName });
+                                    localStorage.setItem(`folder_name_${ano}`, editingFolderName);
+                                  }
+                                  setEditingFolder(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.currentTarget.blur();
+                                  } else if (e.key === 'Escape') {
+                                    setEditingFolder(null);
+                                  }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                autoFocus
+                                className="text-lg font-medium text-gray-900 bg-white border border-blue-500 rounded px-2 py-1 text-center focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                              />
+                            ) : (
+                              <span className="text-lg font-medium text-gray-900">
+                                {folderNames[ano] || ano}
+                              </span>
+                            )}
+                            <span className="mt-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                              {oficios.length} {oficios.length === 1 ? 'ofício' : 'ofícios'}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                      {/* Botão de editar - sempre visível */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingFolder(ano);
+                          setEditingFolderName(folderNames[ano] || ano);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:bg-gray-100 transition-colors"
+                        title="Renomear pasta"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-gray-600" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2503,8 +2573,8 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Ano da Pasta
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ano da Pasta *
                 </label>
                 <input
                   type="text"
@@ -2513,12 +2583,31 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: 2025"
                 />
+                <p className="text-xs text-gray-500 mt-1">Este será o ano usado nos ofícios</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome da Pasta (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: Novembro 2025"
+                />
+                <p className="text-xs text-gray-500 mt-1">Nome personalizado para identificar a pasta</p>
               </div>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => setShowNewFolderModal(false)}
+                onClick={() => {
+                  setShowNewFolderModal(false);
+                  setNewFolderYear('');
+                  setNewFolderName('');
+                }}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 Cancelar
@@ -2526,12 +2615,19 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
               <button
                 onClick={() => {
                   if (newFolderYear) {
+                    // Salvar nome personalizado se fornecido
+                    if (newFolderName) {
+                      localStorage.setItem(`folder_name_${newFolderYear}`, newFolderName);
+                      setFolderNames({ ...folderNames, [newFolderYear]: newFolderName });
+                    }
                     navigate(`/app/documentos/oficios/${newFolderYear}`);
                     setShowNewFolderModal(false);
                     setNewFolderYear('');
+                    setNewFolderName('');
                   }
                 }}
-                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                disabled={!newFolderYear}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Criar Pasta
               </button>

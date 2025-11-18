@@ -54,9 +54,21 @@ export function EleitoresTable({
   const [eleitorToDelete, setEleitorToDelete] = useState<Eleitor | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const { softDeleteEleitor } = useEleitores({});
-  const { isAdmin } = usePermissions();
+  const { isAdmin, user } = usePermissions();
+  const isVisitante = user?.nivel_acesso === 'visitante';
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Função para mascarar dados sensíveis
+  const maskCPF = (cpf: string) => {
+    if (!cpf || cpf === 'Não') return 'Não';
+    return cpf.replace(/(\d{3})\d{6}(\d{2})/, '$1.***.**-$2');
+  };
+
+  const maskWhatsApp = (whatsapp: string) => {
+    if (!whatsapp || whatsapp === 'Não') return 'Não';
+    return whatsapp.replace(/(\d{2})(\d{5})\d{4}/, '($1) $2-****');
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -133,20 +145,22 @@ export function EleitoresTable({
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500 hidden sm:block"
-                      checked={selectedEleitores.includes(eleitor.uid || '')}
-                      onChange={() => onSelectEleitor(eleitor.uid || '')}
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                    {!isVisitante && (
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500 hidden sm:block"
+                        checked={selectedEleitores.includes(eleitor.uid || '')}
+                        onChange={() => onSelectEleitor(eleitor.uid || '')}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
                     <div className="min-w-0">
                       <h3 className="font-medium text-gray-900 dark:text-white truncate">
                         {eleitor.nome || 'Não'}
                       </h3>
                       {eleitor.cpf && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                          CPF: {eleitor.cpf || 'Não'}
+                          CPF: {isVisitante ? maskCPF(eleitor.cpf || 'Não') : (eleitor.cpf || 'Não')}
                         </p>
                       )}
                     </div>
@@ -197,7 +211,7 @@ export function EleitoresTable({
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400">WhatsApp</span>
-                      {eleitor.whatsapp && (
+                      {eleitor.whatsapp && !isVisitante && (
                         <a 
                           href={`https://wa.me/${eleitor.whatsapp.replace(/\D/g, '')}`}
                           className="text-primary-600 hover:text-primary-700"
@@ -212,7 +226,7 @@ export function EleitoresTable({
                       )}
                     </div>
                     <span className="text-sm text-gray-900 dark:text-gray-200 mt-1">
-                      {eleitor.whatsapp || 'Não'}
+                      {isVisitante ? maskWhatsApp(eleitor.whatsapp || 'Não') : (eleitor.whatsapp || 'Não')}
                     </span>
                   </div>
                   
@@ -279,8 +293,9 @@ export function EleitoresTable({
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th scope="col" className="w-10">
-                <div className="px-3 relative">
+              {!isVisitante && (
+                <th scope="col" className="w-10">
+                  <div className="px-3 relative">
                   <div className="flex items-center">
                     <div className="relative">
                       <input
@@ -394,6 +409,7 @@ export function EleitoresTable({
                   </div>
                 </div>
               </th>
+              )}
               <th scope="col" className="py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 <div className="px-4">Nome</div>
               </th>
@@ -436,24 +452,30 @@ export function EleitoresTable({
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                   onClick={() => onRowClick(eleitor)}
                 >
-                  <td className="w-10" onClick={(e) => e.stopPropagation()}>
-                    <div className="px-3">
-                      <input
-                        type="checkbox"
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={selectedEleitores.includes(eleitor.uid || '')}
-                        onChange={() => onSelectEleitor(eleitor.uid || '')}
-                      />
-                    </div>
-                  </td>
+                  {!isVisitante && (
+                    <td className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <div className="px-3">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          checked={selectedEleitores.includes(eleitor.uid || '')}
+                          onChange={() => onSelectEleitor(eleitor.uid || '')}
+                        />
+                      </div>
+                    </td>
+                  )}
                   <td className="py-4">
                     <div className="text-sm font-medium text-gray-900 dark:text-white px-4">{eleitor.nome || 'Não'}</div>
                   </td>
                   <td className="py-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-300 px-4">{eleitor.cpf || 'Não'}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-300 px-4">
+                      {isVisitante ? maskCPF(eleitor.cpf || 'Não') : (eleitor.cpf || 'Não')}
+                    </div>
                   </td>
                   <td className="py-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-300 px-4">{eleitor.whatsapp || 'Não'}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-300 px-4">
+                      {isVisitante ? maskWhatsApp(eleitor.whatsapp || 'Não') : (eleitor.whatsapp || 'Não')}
+                    </div>
                   </td>
                   <td className="py-4">
                     <div className="text-sm text-gray-500 dark:text-gray-300 px-4">{eleitor.bairro || 'Não'}</div>

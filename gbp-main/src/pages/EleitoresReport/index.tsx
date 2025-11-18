@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCompanyStore } from '../../store/useCompanyStore';
-import { eleitorStatsService, EleitorStats } from '../../services/eleitorStats';
+import { eleitorStatsService, EleitorStats, CidadeCrescimento, IndicadoCrescimento, CategoriaCrescimento, BairroCrescimento, ZonaSecaoCrescimento, ConfiabilidadeCrescimento, UsuarioCrescimento } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag } from 'lucide-react';
+import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
@@ -59,6 +59,20 @@ export function EleitoresReport() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<EleitorStats | null>(null);
+  const [crescimentoCidades, setCrescimentoCidades] = useState<CidadeCrescimento[]>([]);
+  const [crescimentoIndicados, setCrescimentoIndicados] = useState<IndicadoCrescimento[]>([]);
+  const [crescimentoCategorias, setCrescimentoCategorias] = useState<CategoriaCrescimento[]>([]);
+  const [crescimentoBairros, setCrescimentoBairros] = useState<BairroCrescimento[]>([]);
+  const [crescimentoZonasSecoes, setCrescimentoZonasSecoes] = useState<ZonaSecaoCrescimento[]>([]);
+  const [crescimentoConfiabilidade, setCrescimentoConfiabilidade] = useState<ConfiabilidadeCrescimento[]>([]);
+  const [crescimentoUsuarios, setCrescimentoUsuarios] = useState<UsuarioCrescimento[]>([]);
+  const [loadingCrescimento, setLoadingCrescimento] = useState(false);
+  const [loadingCrescimentoIndicados, setLoadingCrescimentoIndicados] = useState(false);
+  const [loadingCrescimentoCategorias, setLoadingCrescimentoCategorias] = useState(false);
+  const [loadingCrescimentoBairros, setLoadingCrescimentoBairros] = useState(false);
+  const [loadingCrescimentoZonasSecoes, setLoadingCrescimentoZonasSecoes] = useState(false);
+  const [loadingCrescimentoConfiabilidade, setLoadingCrescimentoConfiabilidade] = useState(false);
+  const [loadingCrescimentoUsuarios, setLoadingCrescimentoUsuarios] = useState(false);
   const [bairroPages, setBairroPages] = useState<Record<string, number>>({});
   const [openMenuBairro, setOpenMenuBairro] = useState<string | null>(null);
   const [openMenuCidade, setOpenMenuCidade] = useState<string | null>(null);
@@ -116,6 +130,13 @@ export function EleitoresReport() {
     }
     loadStats();
     loadCategorias();
+    loadCrescimento();
+    loadCrescimentoIndicados();
+    loadCrescimentoCategorias();
+    loadCrescimentoBairros();
+    loadCrescimentoZonasSecoes();
+    loadCrescimentoConfiabilidade();
+    loadCrescimentoUsuarios();
   }, [company?.uid, canAccess]);
 
   // Carregar aniversariantes quando o mês mudar
@@ -166,6 +187,104 @@ export function EleitoresReport() {
       // toast.error('Erro ao carregar estatísticas');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCrescimento = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimento(true);
+      const data = await eleitorStatsService.getCrescimentoPorCidade(company.uid);
+      setCrescimentoCidades(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento:', error);
+    } finally {
+      setLoadingCrescimento(false);
+    }
+  };
+
+  const loadCrescimentoIndicados = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoIndicados(true);
+      const data = await eleitorStatsService.getCrescimentoPorIndicado(company.uid);
+      setCrescimentoIndicados(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de indicados:', error);
+    } finally {
+      setLoadingCrescimentoIndicados(false);
+    }
+  };
+
+  const loadCrescimentoCategorias = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoCategorias(true);
+      const data = await eleitorStatsService.getCrescimentoPorCategoria(company.uid);
+      setCrescimentoCategorias(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de categorias:', error);
+    } finally {
+      setLoadingCrescimentoCategorias(false);
+    }
+  };
+
+  const loadCrescimentoBairros = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoBairros(true);
+      const data = await eleitorStatsService.getCrescimentoPorBairro(company.uid);
+      setCrescimentoBairros(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de bairros:', error);
+    } finally {
+      setLoadingCrescimentoBairros(false);
+    }
+  };
+
+  const loadCrescimentoZonasSecoes = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoZonasSecoes(true);
+      const data = await eleitorStatsService.getCrescimentoPorZonaSecao(company.uid);
+      setCrescimentoZonasSecoes(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de zonas e seções:', error);
+    } finally {
+      setLoadingCrescimentoZonasSecoes(false);
+    }
+  };
+
+  const loadCrescimentoConfiabilidade = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoConfiabilidade(true);
+      const data = await eleitorStatsService.getCrescimentoPorConfiabilidade(company.uid);
+      setCrescimentoConfiabilidade(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de confiabilidade:', error);
+    } finally {
+      setLoadingCrescimentoConfiabilidade(false);
+    }
+  };
+
+  const loadCrescimentoUsuarios = async () => {
+    if (!company?.uid) return;
+
+    try {
+      setLoadingCrescimentoUsuarios(true);
+      const data = await eleitorStatsService.getCrescimentoPorUsuario(company.uid);
+      setCrescimentoUsuarios(data);
+    } catch (error) {
+      console.error('Erro ao carregar crescimento de usuários:', error);
+    } finally {
+      setLoadingCrescimentoUsuarios(false);
     }
   };
 
@@ -1671,48 +1790,171 @@ export function EleitoresReport() {
             </Card>
           </div>
 
-          {/* Distribuição por Cidade */}
+          {/* Distribuição por Cidade com Análise de Crescimento */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Cidade</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total de cidades: {stats.porCidade.length}</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-center">
-                  Maior: {stats.porCidade[0]?.cidade} ({stats.porCidade[0]?.total})
-                </span>
-                <span className="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded text-center">
-                  Menor: {stats.porCidade[stats.porCidade.length - 1]?.cidade} ({stats.porCidade[stats.porCidade.length - 1]?.total})
-                </span>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Distribuição por Cidade
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Total: {stats.porCidade.length} cidades • Análise de crescimento mensal e anual
+                </p>
               </div>
             </div>
+
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimento && crescimentoCidades.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoCidades[0]?.cidade || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoCidades[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoCidades[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoCidades[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.cidade || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoCidades.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoCidades.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={setupHorizontalScroll}>
-              <table style={{ minWidth: '600px', width: '100%' }}>
+              <table style={{ minWidth: '900px', width: '100%' }}>
                   <thead>
                     <tr className="border-b dark:border-gray-700">
                       <th className="text-left py-2 text-gray-900 dark:text-white">Cidade</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                       <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getPaginatedData(stats.porCidade, cidadePage).map(({ cidade, total }, index) => {
                       const percentage = (total / stats.totalEleitores) * 100;
+                      const crescimento = crescimentoCidades.find(c => c.cidade === cidade);
                       return (
                         <tr key={cidade} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
-                          <td className="py-2 text-gray-900 dark:text-white">{cidade}</td>
+                          <td className="py-2 text-gray-900 dark:text-white font-medium">{cidade}</td>
                           <td className="text-right py-2 text-gray-900 dark:text-white">{total}</td>
                           <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
-                          <td className="px-4 py-2">
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                              <div
-                                className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
-                                style={{ width: `${percentage}%` }}
-                              ></div>
-                            </div>
+                          
+                          {/* Novos no Mês */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_mes_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_mes_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Mensal */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_mensal > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_mensal < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                  ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Novos no Ano */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_ano_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_ano_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Anual */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_anual > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_anual < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                  ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="py-2">
                             <div className="relative flex items-center justify-center">
@@ -1772,50 +2014,336 @@ export function EleitoresReport() {
             />
           </Card>
 
-          {/* Distribuição por Indicado */}
+          {/* REMOVIDO: Seção duplicada - Integrada em "Distribuição por Cidade" */}
+          {false && <Card className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Análise de Crescimento Estratégico
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Comparativo mensal e anual de novos cadastros por cidade
+                </p>
+              </div>
+            </div>
+
+            {loadingCrescimento ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              </div>
+            ) : crescimentoCidades.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                Nenhum dado de crescimento disponível
+              </div>
+            ) : (
+              <>
+                {/* Cards de Destaques */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* Maior Crescimento Anual */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Maior Crescimento Anual
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                      {crescimentoCidades[0]?.cidade || '-'}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      +{crescimentoCidades[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                      ({crescimentoCidades[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoCidades[0]?.crescimento_anual} cadastros)
+                    </div>
+                  </div>
+
+                  {/* Maior Crescimento Mensal */}
+                  <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Maior Crescimento Mensal
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                      {[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.cidade || '-'}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      +{[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                      ({[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoCidades].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal} este mês)
+                    </div>
+                  </div>
+
+                  {/* Total de Novos Cadastros Este Ano */}
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Novos Este Ano
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                      {crescimentoCidades.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      vs {crescimentoCidades.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} no ano anterior
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabela de Crescimento */}
+                <div ref={setupHorizontalScroll}>
+                  <table style={{ minWidth: '900px', width: '100%' }}>
+                    <thead>
+                      <tr className="border-b dark:border-gray-700">
+                        <th className="text-left py-2 text-gray-900 dark:text-white">Cidade</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Novos (Mês)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Cresc. Mensal</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Novos (Ano)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white">Cresc. Anual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {crescimentoCidades.slice(0, 10).map((cidade, index) => (
+                        <tr key={cidade.cidade} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-green-50 dark:bg-green-900/30' : ''}`}>
+                          <td className="py-2 text-gray-900 dark:text-white font-medium">{cidade.cidade}</td>
+                          <td className="text-right py-2 text-gray-900 dark:text-white">{cidade.total_atual}</td>
+                          <td className="text-right py-2">
+                            <span className="text-gray-900 dark:text-white">
+                              {cidade.novos_mes_atual}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                              (vs {cidade.novos_mes_anterior})
+                            </span>
+                          </td>
+                          <td className="text-right py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              {cidade.crescimento_mensal > 0 ? (
+                                <TrendingUp className="w-4 h-4 text-green-600" />
+                              ) : cidade.crescimento_mensal < 0 ? (
+                                <TrendingDown className="w-4 h-4 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                cidade.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                cidade.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {cidade.crescimento_mensal > 0 ? '+' : ''}{cidade.crescimento_mensal}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                ({cidade.crescimento_mensal_percentual > 0 ? '+' : ''}{cidade.crescimento_mensal_percentual.toFixed(1)}%)
+                              </span>
+                            </div>
+                          </td>
+                          <td className="text-right py-2">
+                            <span className="text-gray-900 dark:text-white">
+                              {cidade.novos_ano_atual}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                              (vs {cidade.novos_ano_anterior})
+                            </span>
+                          </td>
+                          <td className="text-right py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              {cidade.crescimento_anual > 0 ? (
+                                <TrendingUp className="w-4 h-4 text-green-600" />
+                              ) : cidade.crescimento_anual < 0 ? (
+                                <TrendingDown className="w-4 h-4 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                cidade.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                cidade.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {cidade.crescimento_anual > 0 ? '+' : ''}{cidade.crescimento_anual}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                ({cidade.crescimento_anual_percentual > 0 ? '+' : ''}{cidade.crescimento_anual_percentual.toFixed(1)}%)
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {crescimentoCidades.length > 10 && (
+                  <div className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Mostrando top 10 cidades com maior crescimento anual
+                  </div>
+                )}
+              </>
+            )}
+          </Card>}
+
+          {/* Distribuição por Indicado com Análise de Crescimento */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Indicado</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Distribuição por Indicado
+                </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total de indicados: {stats.porIndicado.length}
+                  Total: {stats.porIndicado.length} indicados • Análise de crescimento mensal e anual
                 </p>
               </div>
-              {stats.porIndicado.length > 0 && (
-                <div className="text-sm w-full sm:w-auto">
-                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
-                    Maior: {stats.porIndicado[0]?.indicado_nome} ({stats.porIndicado[0]?.total})
-                  </span>
-                </div>
-              )}
             </div>
 
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoIndicados && crescimentoIndicados.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoIndicados[0]?.indicado_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoIndicados[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoIndicados[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoIndicados[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoIndicados].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.indicado_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoIndicados].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoIndicados].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoIndicados].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoIndicados.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoIndicados.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={setupHorizontalScroll}>
-              <table style={{ minWidth: '600px', width: '100%' }}>
+              <table style={{ minWidth: '900px', width: '100%' }}>
                 <thead>
                   <tr className="border-b dark:border-gray-700">
                     <th className="text-left py-2 text-gray-900 dark:text-white">Indicado</th>
                     <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                     <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                    <th className="px-4 py-2 text-gray-900 dark:text-white">Distribuição</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                     <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {getPaginatedData(stats.porIndicado, indicadoPage).map((item, index) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
+                    const crescimento = crescimentoIndicados.find(c => c.indicado_nome === item.indicado_nome);
                     return (
                       <tr key={item.indicado_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
-                        <td className="py-2 text-gray-900 dark:text-white">{item.indicado_nome}</td>
+                        <td className="py-2 text-gray-900 dark:text-white font-medium">{item.indicado_nome}</td>
                         <td className="text-right py-2 text-gray-900 dark:text-white">{item.total}</td>
                         <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
-                        <td className="px-4 py-2">
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                            <div
-                              className={`h-2.5 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-blue-400'}`}
-                              style={{ width: `${percentage}%` }}
-                            ></div>
-                          </div>
+                        
+                        {/* Novos no Mês */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <>
+                              <span className="text-gray-900 dark:text-white font-medium">
+                                {crescimento.novos_mes_atual}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                (vs {crescimento.novos_mes_anterior})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Crescimento Mensal */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {crescimento.crescimento_mensal > 0 ? (
+                                <TrendingUp className="w-3 h-3 text-green-600" />
+                              ) : crescimento.crescimento_mensal < 0 ? (
+                                <TrendingDown className="w-3 h-3 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Novos no Ano */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <>
+                              <span className="text-gray-900 dark:text-white font-medium">
+                                {crescimento.novos_ano_atual}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                (vs {crescimento.novos_ano_anterior})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Crescimento Anual */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {crescimento.crescimento_anual > 0 ? (
+                                <TrendingUp className="w-3 h-3 text-green-600" />
+                              ) : crescimento.crescimento_anual < 0 ? (
+                                <TrendingDown className="w-3 h-3 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="py-2">
                           <div className="relative flex items-center justify-center">
@@ -1875,14 +2403,72 @@ export function EleitoresReport() {
             />
           </Card>
 
-          {/* Distribuição por Categoria */}
+          {/* Distribuição por Categoria com Análise de Crescimento */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Categoria</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total de categorias: {categorias.length}</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Distribuição por Categoria
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Total: {categorias.length} categorias • Análise de crescimento mensal e anual
+                </p>
               </div>
             </div>
+
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoCategorias && crescimentoCategorias.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoCategorias[0]?.categoria_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoCategorias[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoCategorias[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoCategorias[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoCategorias].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.categoria_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoCategorias].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoCategorias].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoCategorias].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoCategorias.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoCategorias.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
+
             {loadingCategorias ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1890,23 +2476,28 @@ export function EleitoresReport() {
             ) : (
               <>
                 <div ref={setupHorizontalScroll}>
-                  <table style={{ minWidth: '600px', width: '100%' }}>
+                  <table style={{ minWidth: '1200px', width: '100%' }}>
                     <thead>
                       <tr className="border-b dark:border-gray-700">
                         <th className="text-left py-2 text-gray-900 dark:text-white">Categoria</th>
                         <th className="text-left py-2 text-gray-900 dark:text-white">Tipo</th>
                         <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                         <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                        <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                        <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                         <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getPaginatedData(categorias, categoriaPage).map((categoria, index) => {
                         const percentage = stats ? (categoria.total / stats.totalEleitores) * 100 : 0;
+                        const crescimento = crescimentoCategorias.find(c => c.categoria_nome === categoria.nome);
                         return (
                           <tr key={categoria.categoria_uid} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
-                            <td className="py-2 text-gray-900 dark:text-white">
+                            <td className="py-2 text-gray-900 dark:text-white font-medium">
                               <div className="flex items-center gap-2">
                                 <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                                 {categoria.nome}
@@ -1924,6 +2515,84 @@ export function EleitoresReport() {
                                   style={{ width: `${Math.min(percentage, 100)}%` }}
                                 ></div>
                               </div>
+                            </td>
+                            
+                            {/* Novos no Mês */}
+                            <td className="text-right py-2 text-xs">
+                              {crescimento ? (
+                                <>
+                                  <span className="text-gray-900 dark:text-white font-medium">
+                                    {crescimento.novos_mes_atual}
+                                  </span>
+                                  <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                    (vs {crescimento.novos_mes_anterior})
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            
+                            {/* Crescimento Mensal */}
+                            <td className="text-right py-2 text-xs">
+                              {crescimento ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  {crescimento.crescimento_mensal > 0 ? (
+                                    <TrendingUp className="w-3 h-3 text-green-600" />
+                                  ) : crescimento.crescimento_mensal < 0 ? (
+                                    <TrendingDown className="w-3 h-3 text-red-600" />
+                                  ) : null}
+                                  <span className={`font-medium ${
+                                    crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                    crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                    'text-gray-600 dark:text-gray-400'
+                                  }`}>
+                                    {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                    ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            
+                            {/* Novos no Ano */}
+                            <td className="text-right py-2 text-xs">
+                              {crescimento ? (
+                                <>
+                                  <span className="text-gray-900 dark:text-white font-medium">
+                                    {crescimento.novos_ano_atual}
+                                  </span>
+                                  <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                    (vs {crescimento.novos_ano_anterior})
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            
+                            {/* Crescimento Anual */}
+                            <td className="text-right py-2 text-xs">
+                              {crescimento ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  {crescimento.crescimento_anual > 0 ? (
+                                    <TrendingUp className="w-3 h-3 text-green-600" />
+                                  ) : crescimento.crescimento_anual < 0 ? (
+                                    <TrendingDown className="w-3 h-3 text-red-600" />
+                                  ) : null}
+                                  <span className={`font-medium ${
+                                    crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                    crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                    'text-gray-600 dark:text-gray-400'
+                                  }`}>
+                                    {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                    ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
                             </td>
                             <td className="py-2">
                               <div className="relative flex items-center justify-center">
@@ -1979,21 +2648,71 @@ export function EleitoresReport() {
             )}
           </Card>
 
-          {/* Distribuição por Bairro */}
+          {/* Distribuição por Bairro com Análise de Crescimento */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Bairro</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Distribuição por Bairro
+                </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total de bairros: {stats.porBairro.length} em {new Set(stats.porBairro.map(b => b.cidade)).size} cidades
+                  Total: {stats.porBairro.length} bairros em {new Set(stats.porBairro.map(b => b.cidade)).size} cidades • Análise de crescimento mensal e anual
                 </p>
               </div>
-              <div className="text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
-                  Maior: {stats.porBairro[0]?.bairro} ({stats.porBairro[0]?.total})
-                </span>
-              </div>
             </div>
+
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoBairros && crescimentoBairros.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoBairros[0]?.bairro || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    {crescimentoBairros[0]?.cidade} • +{crescimentoBairros[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoBairros[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoBairros[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoBairros].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.bairro || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    {[...crescimentoBairros].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.cidade} • +{[...crescimentoBairros].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoBairros].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoBairros].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoBairros.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoBairros.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-6">
               {getPaginatedData(
@@ -2030,14 +2749,17 @@ export function EleitoresReport() {
 
                     {/* Tabela de Bairros */}
                     <div ref={setupHorizontalScroll}>
-                        <table style={{ minWidth: '600px', width: '100%' }}>
+                        <table style={{ minWidth: '1200px', width: '100%' }}>
                           <thead>
                             <tr className="border-b dark:border-gray-700">
                               <th className="text-left py-2 text-gray-900 dark:text-white">Bairro</th>
                               <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white">% da Cidade</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white">% Total</th>
-                              <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white">% Cidade</th>
+                              <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                               <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                             </tr>
                           </thead>
@@ -2045,6 +2767,7 @@ export function EleitoresReport() {
                             {paginatedBairros.map((bairro, index) => {
                               const percentageTotal = (bairro.total / stats.totalEleitores) * 100;
                               const percentageCidade = (bairro.total / cidadeTotal) * 100;
+                              const crescimento = crescimentoBairros.find(c => c.cidade === bairro.cidade && c.bairro === bairro.bairro);
 
                               return (
                                 <tr
@@ -2053,10 +2776,9 @@ export function EleitoresReport() {
                                     index === 0 ? 'bg-green-50/50 dark:bg-green-900/30' : ''
                                   }`}
                                 >
-                                  <td className="py-2 text-gray-900 dark:text-white">{bairro.bairro}</td>
+                                  <td className="py-2 text-gray-900 dark:text-white font-medium">{bairro.bairro}</td>
                                   <td className="text-right py-2 text-gray-900 dark:text-white">{bairro.total}</td>
                                   <td className="text-right py-2 text-gray-900 dark:text-white">{percentageCidade.toFixed(1)}%</td>
-                                  <td className="text-right py-2 text-gray-900 dark:text-white">{percentageTotal.toFixed(1)}%</td>
                                   <td className="px-4 py-2">
                                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                                       <div
@@ -2066,6 +2788,84 @@ export function EleitoresReport() {
                                         style={{ width: `${percentageCidade}%` }}
                                       ></div>
                                     </div>
+                                  </td>
+                                  
+                                  {/* Novos no Mês */}
+                                  <td className="text-right py-2 text-xs">
+                                    {crescimento ? (
+                                      <>
+                                        <span className="text-gray-900 dark:text-white font-medium">
+                                          {crescimento.novos_mes_atual}
+                                        </span>
+                                        <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                          (vs {crescimento.novos_mes_anterior})
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Crescimento Mensal */}
+                                  <td className="text-right py-2 text-xs">
+                                    {crescimento ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        {crescimento.crescimento_mensal > 0 ? (
+                                          <TrendingUp className="w-3 h-3 text-green-600" />
+                                        ) : crescimento.crescimento_mensal < 0 ? (
+                                          <TrendingDown className="w-3 h-3 text-red-600" />
+                                        ) : null}
+                                        <span className={`font-medium ${
+                                          crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                          crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                          'text-gray-600 dark:text-gray-400'
+                                        }`}>
+                                          {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                          ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Novos no Ano */}
+                                  <td className="text-right py-2 text-xs">
+                                    {crescimento ? (
+                                      <>
+                                        <span className="text-gray-900 dark:text-white font-medium">
+                                          {crescimento.novos_ano_atual}
+                                        </span>
+                                        <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                          (vs {crescimento.novos_ano_anterior})
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
+                                  
+                                  {/* Crescimento Anual */}
+                                  <td className="text-right py-2 text-xs">
+                                    {crescimento ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        {crescimento.crescimento_anual > 0 ? (
+                                          <TrendingUp className="w-3 h-3 text-green-600" />
+                                        ) : crescimento.crescimento_anual < 0 ? (
+                                          <TrendingDown className="w-3 h-3 text-red-600" />
+                                        ) : null}
+                                        <span className={`font-medium ${
+                                          crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                          crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                          'text-gray-600 dark:text-gray-400'
+                                        }`}>
+                                          {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                          ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
                                   </td>
                                   <td className="py-2">
                                     <div className="relative flex items-center justify-center">
@@ -2143,33 +2943,85 @@ export function EleitoresReport() {
             </div>
           </Card>
 
-          {/* Distribuição por Zona e Seção */}
+          {/* Distribuição por Zona e Seção com Análise de Crescimento */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Zona e Seção</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Distribuição por Zona e Seção
+                </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total de zonas/seções: {stats.porZonaSecao.length}
+                  Total: {stats.porZonaSecao.length} zonas/seções • Análise de crescimento mensal e anual
                 </p>
               </div>
-              {stats.porZonaSecao.length > 0 && (
-                <div className="text-sm w-full sm:w-auto">
-                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded block text-center">
-                    Maior: Zona {stats.porZonaSecao[0]?.zona} Seção {stats.porZonaSecao[0]?.secao} ({stats.porZonaSecao[0]?.total})
-                  </span>
-                </div>
-              )}
             </div>
 
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoZonasSecoes && crescimentoZonasSecoes.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    Zona {crescimentoZonasSecoes[0]?.zona} - Seção {crescimentoZonasSecoes[0]?.secao}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoZonasSecoes[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoZonasSecoes[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoZonasSecoes[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    Zona {[...crescimentoZonasSecoes].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.zona} - Seção {[...crescimentoZonasSecoes].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.secao}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoZonasSecoes].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoZonasSecoes].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoZonasSecoes].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoZonasSecoes.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoZonasSecoes.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={setupHorizontalScroll}>
-              <table style={{ minWidth: '600px', width: '100%' }}>
+              <table style={{ minWidth: '1200px', width: '100%' }}>
                 <thead>
                   <tr className="border-b dark:border-gray-700">
                     <th className="text-left py-2 text-gray-900 dark:text-white">Zona</th>
                     <th className="text-left py-2 text-gray-900 dark:text-white">Seção</th>
                     <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                     <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                    <th className="px-4 py-2 text-gray-900 dark:text-white">Distribuição</th>
+                    <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                    <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                     <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                   </tr>
                 </thead>
@@ -2177,10 +3029,11 @@ export function EleitoresReport() {
                   {getPaginatedData(stats.porZonaSecao, zonaPage).map((item, index) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
                     const zonaSecaoKey = `${item.zona}-${item.secao}`;
+                    const crescimento = crescimentoZonasSecoes.find(c => c.zona === item.zona && c.secao === item.secao);
                     return (
                       <tr key={zonaSecaoKey} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
-                        <td className="py-2 text-gray-900 dark:text-white">{item.zona}</td>
-                        <td className="py-2 text-gray-900 dark:text-white">{item.secao}</td>
+                        <td className="py-2 text-gray-900 dark:text-white font-medium">{item.zona}</td>
+                        <td className="py-2 text-gray-900 dark:text-white font-medium">{item.secao}</td>
                         <td className="text-right py-2 text-gray-900 dark:text-white">{item.total}</td>
                         <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                         <td className="px-4 py-2">
@@ -2190,6 +3043,84 @@ export function EleitoresReport() {
                               style={{ width: `${percentage}%` }}
                             ></div>
                           </div>
+                        </td>
+                        
+                        {/* Novos no Mês */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <>
+                              <span className="text-gray-900 dark:text-white font-medium">
+                                {crescimento.novos_mes_atual}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                (vs {crescimento.novos_mes_anterior})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Crescimento Mensal */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {crescimento.crescimento_mensal > 0 ? (
+                                <TrendingUp className="w-3 h-3 text-green-600" />
+                              ) : crescimento.crescimento_mensal < 0 ? (
+                                <TrendingDown className="w-3 h-3 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Novos no Ano */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <>
+                              <span className="text-gray-900 dark:text-white font-medium">
+                                {crescimento.novos_ano_atual}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                (vs {crescimento.novos_ano_anterior})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        
+                        {/* Crescimento Anual */}
+                        <td className="text-right py-2 text-xs">
+                          {crescimento ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {crescimento.crescimento_anual > 0 ? (
+                                <TrendingUp className="w-3 h-3 text-green-600" />
+                              ) : crescimento.crescimento_anual < 0 ? (
+                                <TrendingDown className="w-3 h-3 text-red-600" />
+                              ) : null}
+                              <span className={`font-medium ${
+                                crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="py-2">
                           <div className="relative flex items-center justify-center">
@@ -2319,20 +3250,78 @@ export function EleitoresReport() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
-                  <ThumbsUp className="w-5 h-5 text-gray-900 dark:text-white" />
+                  <TrendingUp className="w-5 h-5 text-green-600" />
                   Confiabilidade do Voto
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Distribuição dos eleitores por nível de confiabilidade</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Total: {stats.porConfiabilidade.length} níveis • Análise de crescimento mensal e anual
+                </p>
               </div>
             </div>
+
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoConfiabilidade && crescimentoConfiabilidade.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoConfiabilidade[0]?.confiabilidade || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoConfiabilidade[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoConfiabilidade[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoConfiabilidade[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoConfiabilidade].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.confiabilidade || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoConfiabilidade].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoConfiabilidade].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoConfiabilidade].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoConfiabilidade.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoConfiabilidade.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={setupHorizontalScroll}>
-                <table style={{ minWidth: '600px', width: '100%' }}>
+                <table style={{ minWidth: '1200px', width: '100%' }}>
                   <thead>
                     <tr className="border-b dark:border-gray-700">
                       <th className="text-left py-2 text-gray-900 dark:text-white">Nível</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                       <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
@@ -2344,10 +3333,11 @@ export function EleitoresReport() {
                         icon: '❓',
                         description: 'Não definido'
                       };
+                      const crescimento = crescimentoConfiabilidade.find(c => c.confiabilidade === confiabilidade);
                       
                       return (
                         <tr key={confiabilidade} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                          <td className="py-2 flex items-center gap-2 text-gray-900 dark:text-white">
+                          <td className="py-2 flex items-center gap-2 text-gray-900 dark:text-white font-medium">
                             <span>{config.icon}</span>
                             {confiabilidade}
                           </td>
@@ -2360,6 +3350,84 @@ export function EleitoresReport() {
                                 style={{ width: `${percentage}%` }}
                               ></div>
                             </div>
+                          </td>
+                          
+                          {/* Novos no Mês */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_mes_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_mes_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Mensal */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_mensal > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_mensal < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                  ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Novos no Ano */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_ano_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_ano_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Anual */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_anual > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_anual < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                  ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="py-2">
                             <div className="relative flex items-center justify-center">
@@ -2835,32 +3903,89 @@ export function EleitoresReport() {
           <Card className="p-4 mb-8 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cadastros por Usuário</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total de usuários ativos: {stats.porUsuario.length}</p>
-              </div>
-              <div className="text-sm w-full sm:w-auto">
-                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded block text-center">
-                  Líder: {stats.porUsuario[0]?.usuario_nome} ({stats.porUsuario[0]?.total})
-                </span>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Cadastros por Usuário
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Total: {stats.porUsuario.length} usuários ativos • Análise de crescimento mensal e anual
+                </p>
               </div>
             </div>
+
+            {/* Cards de Destaques de Crescimento */}
+            {!loadingCrescimentoUsuarios && crescimentoUsuarios.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Anual
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                    {crescimentoUsuarios[0]?.usuario_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{crescimentoUsuarios[0]?.crescimento_anual_percentual.toFixed(1)}% 
+                    ({crescimentoUsuarios[0]?.crescimento_anual > 0 ? '+' : ''}{crescimentoUsuarios[0]?.crescimento_anual})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Maior Crescimento Mensal
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {[...crescimentoUsuarios].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.usuario_nome || '-'}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    +{[...crescimentoUsuarios].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal_percentual.toFixed(1)}%
+                    ({[...crescimentoUsuarios].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal > 0 ? '+' : ''}{[...crescimentoUsuarios].sort((a, b) => b.crescimento_mensal_percentual - a.crescimento_mensal_percentual)[0]?.crescimento_mensal})
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Novos Este Ano
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    {crescimentoUsuarios.reduce((sum, c) => sum + c.novos_ano_atual, 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    vs {crescimentoUsuarios.reduce((sum, c) => sum + c.novos_ano_anterior, 0).toLocaleString()} ano anterior
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={setupHorizontalScroll}>
-                <table style={{ minWidth: '600px', width: '100%' }}>
+                <table style={{ minWidth: '1200px', width: '100%' }}>
                   <thead>
                     <tr className="border-b dark:border-gray-700">
                       <th className="text-left py-2 text-gray-900 dark:text-white">Usuário</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
                       <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                      <th className="px-4 py-2 w-1/3 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
+                      <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
                       <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getPaginatedData(stats.porUsuario, usuarioPage).map(({ usuario_nome, total }, index) => {
                       const percentage = (total / stats.totalEleitores) * 100;
+                      const crescimento = crescimentoUsuarios.find(c => c.usuario_nome === usuario_nome);
                       return (
                         <tr key={usuario_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
-                          <td className="py-2 text-gray-900 dark:text-white">{usuario_nome}</td>
+                          <td className="py-2 text-gray-900 dark:text-white font-medium">{usuario_nome}</td>
                           <td className="text-right py-2 text-gray-900 dark:text-white">{total}</td>
                           <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
                           <td className="px-4 py-2">
@@ -2870,6 +3995,84 @@ export function EleitoresReport() {
                                 style={{ width: `${percentage}%` }}
                               ></div>
                             </div>
+                          </td>
+                          
+                          {/* Novos no Mês */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_mes_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_mes_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Mensal */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_mensal > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_mensal < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_mensal > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_mensal < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_mensal > 0 ? '+' : ''}{crescimento.crescimento_mensal}
+                                  ({crescimento.crescimento_mensal_percentual > 0 ? '+' : ''}{crescimento.crescimento_mensal_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Novos no Ano */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <>
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {crescimento.novos_ano_atual}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                  (vs {crescimento.novos_ano_anterior})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          
+                          {/* Crescimento Anual */}
+                          <td className="text-right py-2 text-xs">
+                            {crescimento ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {crescimento.crescimento_anual > 0 ? (
+                                  <TrendingUp className="w-3 h-3 text-green-600" />
+                                ) : crescimento.crescimento_anual < 0 ? (
+                                  <TrendingDown className="w-3 h-3 text-red-600" />
+                                ) : null}
+                                <span className={`font-medium ${
+                                  crescimento.crescimento_anual > 0 ? 'text-green-600 dark:text-green-400' :
+                                  crescimento.crescimento_anual < 0 ? 'text-red-600 dark:text-red-400' :
+                                  'text-gray-600 dark:text-gray-400'
+                                }`}>
+                                  {crescimento.crescimento_anual > 0 ? '+' : ''}{crescimento.crescimento_anual}
+                                  ({crescimento.crescimento_anual_percentual > 0 ? '+' : ''}{crescimento.crescimento_anual_percentual.toFixed(0)}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="py-2">
                             <div className="relative flex items-center justify-center">

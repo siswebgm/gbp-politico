@@ -1,0 +1,19 @@
+docker build `
+  --build-arg VITE_SUPABASE_URL='https://studio.gbppolitico.com' `
+  --build-arg VITE_SUPABASE_API_URL='https://studio.gbppolitico.com/rest/v1' `
+  --build-arg VITE_SUPABASE_AUTH_URL='https://studio.gbppolitico.com/auth/v1' `
+  --build-arg VITE_SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzM2MzkxNjAwLAogICJleHAiOiAxODk0MTU4MDAwCn0.6Djbu2O_EC7CNlJRKRmPMrCDw2hKdyn4oF5EWzWS2cA' `
+  --build-arg VITE_SERPRO_CPF_API_KEY='seu_token_aqui' `
+  --build-arg VITE_SERPRO_CPF_API_URL='https://gateway.apiserpro.serpro.gov.br/consulta-cpf-df-trial/v1' `
+  --build-arg VITE_MINIO_ENDPOINT='https://s3.gbppolitico.com' `
+  --build-arg VITE_MINIO_ACCESS_KEY='PSWNbqNJCX6XZoTb3xYg' `
+  --build-arg VITE_MINIO_SECRET_KEY='BMDY9KZI4mEyGySRISik5wsnfX4Fi0m4mmgsTXYH' `
+  --build-arg VITE_MINIO_BUCKET='gbp-politico' `
+  --build-arg VITE_ASAAS_API_KEY='seu_token_aqui' `
+  --build-arg VITE_ASAAS_ENV='production' `
+  --build-arg VITE_ASAAS_WEBHOOK_SECRET='seu_webhook_secret' `
+  --build-arg VITE_APP_URL='https://seu-site.com' `
+  --build-arg VITE_STRIPE_PUBLIC_KEY='pk_test_51S2Pcs6ASvUfmfy6Nty14Sxrf9Q88peX5xe31Aa4uNXUbNr8c9Um7JPgFvULx6ao60rj3IHPMiqltWzRu0qr9tQJ00z1WZvLEw' `
+  -f Dockerfile.env `
+  -t siswebgm/gbp-politico:2.3 `
+  .

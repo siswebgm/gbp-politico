@@ -55,6 +55,46 @@ import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
+// Helper para adicionar scroll horizontal com touch
+const setupHorizontalScroll = (el: HTMLDivElement | null) => {
+  if (!el) return;
+  
+  el.style.cssText = 'overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; width: 100%; position: relative;';
+  
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let isHorizontalScroll = false;
+  
+  el.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].pageX - el.offsetLeft;
+    startY = e.touches[0].pageY;
+    scrollLeft = el.scrollLeft;
+    isHorizontalScroll = false;
+  });
+  
+  el.addEventListener('touchmove', (e) => {
+    const x = e.touches[0].pageX - el.offsetLeft;
+    const y = e.touches[0].pageY;
+    const deltaX = Math.abs(x - startX);
+    const deltaY = Math.abs(y - startY);
+    
+    if (!isHorizontalScroll && deltaX < 10 && deltaY < 10) {
+      return;
+    }
+    
+    if (!isHorizontalScroll) {
+      isHorizontalScroll = deltaX > deltaY;
+    }
+    
+    if (isHorizontalScroll) {
+      e.preventDefault();
+      const walk = (x - startX) * 2;
+      el.scrollLeft = scrollLeft - walk;
+    }
+  }, { passive: false });
+};
+
 // Interface para a tabela gbp_disparo
 interface Disparo {
   uid: string;
@@ -224,9 +264,40 @@ export function RelatorioDisparo() {
             return null;
           }
 
-          // Calcular estatísticas
-          const total = relatorios?.length || 0;
-          const perdidas = relatorios?.filter(r => r.perdida === 'SIM').length || 0;
+          // Calcular estatísticas - AGRUPANDO POR CONTATO ÚNICO
+          // Agrupar por whatsapp + nome para contar contatos únicos
+          const contatosUnicos = new Map<string, {
+            whatsapp: string;
+            nome: string;
+            mensagensRecebidas: number;
+            perdida: boolean;
+          }>();
+          
+          relatorios?.forEach(r => {
+            const chave = `${r.whatsapp}_${r.eleitor_nome}`;
+            const existente = contatosUnicos.get(chave);
+            
+            if (existente) {
+              // Incrementar contador de mensagens
+              existente.mensagensRecebidas++;
+              // Se alguma foi perdida, marcar como perdida
+              if (r.perdida === 'SIM') {
+                existente.perdida = true;
+              }
+            } else {
+              // Adicionar novo contato
+              contatosUnicos.set(chave, {
+                whatsapp: r.whatsapp,
+                nome: r.eleitor_nome,
+                mensagensRecebidas: 1,
+                perdida: r.perdida === 'SIM'
+              });
+            }
+          });
+          
+          // Calcular estatísticas baseadas em contatos únicos
+          const total = contatosUnicos.size;
+          const perdidas = Array.from(contatosUnicos.values()).filter(c => c.perdida).length;
           const enviadas = total - perdidas;
           const taxaSucesso = total > 0 ? ((enviadas / total) * 100) : 0;
 
@@ -300,18 +371,40 @@ export function RelatorioDisparo() {
       doc.text(mensagemLinhas, 14, 112);
     }
     
-    // Tabela de relatórios
+    // Tabela de relatórios - AGRUPAR POR CONTATO ÚNICO
     if (grupo.relatorios && grupo.relatorios.length > 0) {
-      const tableData = grupo.relatorios.map(rel => [
-        rel.eleitor_nome || 'N/A',
-        rel.whatsapp || 'N/A',
-        rel.cidade || 'N/A',
-        rel.perdida === 'SIM' ? 'Perdida' : 'Enviada'
+      // Agrupar por contato único
+      const contatosAgrupados = new Map<string, { nome: string; whatsapp: string; cidade: string; mensagens: number; perdida: boolean }>();
+      
+      grupo.relatorios.forEach(rel => {
+        const chave = `${rel.whatsapp}_${rel.eleitor_nome}`;
+        const existente = contatosAgrupados.get(chave);
+        
+        if (existente) {
+          existente.mensagens++;
+          if (rel.perdida === 'SIM') existente.perdida = true;
+        } else {
+          contatosAgrupados.set(chave, {
+            nome: rel.eleitor_nome || 'N/A',
+            whatsapp: rel.whatsapp || 'N/A',
+            cidade: rel.cidade || 'N/A',
+            mensagens: 1,
+            perdida: rel.perdida === 'SIM'
+          });
+        }
+      });
+      
+      const tableData = Array.from(contatosAgrupados.values()).map(contato => [
+        contato.nome,
+        contato.whatsapp,
+        contato.cidade,
+        `${contato.mensagens}x`,
+        contato.perdida ? 'Perdida' : 'Enviada'
       ]);
       
       (doc as any).autoTable({
         startY: grupo.disparo.mensagem ? 135 : 105,
-        head: [['Eleitor', 'WhatsApp', 'Cidade', 'Status']],
+        head: [['Eleitor', 'WhatsApp', 'Cidade', 'Msgs', 'Status']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [66, 139, 202] },
@@ -333,17 +426,41 @@ export function RelatorioDisparo() {
       'WhatsApp',
       'Cidade',
       'Bairro',
+      'Mensagens Recebidas',
       'Status',
     ];
 
-    const data = grupo.relatorios.map(rel => ({
+    // Agrupar por contato único
+    const contatosAgrupados = new Map<string, { nome: string; whatsapp: string; cidade: string; bairro: string; mensagens: number; perdida: boolean }>();
+    
+    grupo.relatorios.forEach(rel => {
+      const chave = `${rel.whatsapp}_${rel.eleitor_nome}`;
+      const existente = contatosAgrupados.get(chave);
+      
+      if (existente) {
+        existente.mensagens++;
+        if (rel.perdida === 'SIM') existente.perdida = true;
+      } else {
+        contatosAgrupados.set(chave, {
+          nome: rel.eleitor_nome || 'N/A',
+          whatsapp: rel.whatsapp || 'N/A',
+          cidade: rel.cidade || 'N/A',
+          bairro: rel.bairro || 'N/A',
+          mensagens: 1,
+          perdida: rel.perdida === 'SIM'
+        });
+      }
+    });
+
+    const data = Array.from(contatosAgrupados.values()).map(contato => ({
       'Data do Disparo': format(new Date(grupo.disparo.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }),
       'Usuário': grupo.disparo.usuario_nome || 'Não informado',
-      'Nome do Eleitor': rel.eleitor_nome || 'N/A',
-      'WhatsApp': rel.whatsapp || 'N/A',
-      'Cidade': rel.cidade || 'N/A',
-      'Bairro': rel.bairro || 'N/A',
-      'Status': rel.perdida === 'SIM' ? 'Perdida' : 'Enviada',
+      'Nome do Eleitor': contato.nome,
+      'WhatsApp': contato.whatsapp,
+      'Cidade': contato.cidade,
+      'Bairro': contato.bairro,
+      'Mensagens Recebidas': contato.mensagens,
+      'Status': contato.perdida ? 'Perdida' : 'Enviada',
     }));
 
     const ws = XLSXUtils.aoa_to_sheet([headers, ...data]);
@@ -582,7 +699,7 @@ export function RelatorioDisparo() {
                   Disponibilidade dos Relatórios
                 </h3>
                 <p className="text-sm text-blue-800">
-                  Os relatórios de campanhas ficam disponíveis por <strong>30 dias</strong> após a criação. 
+                  Os relatórios de campanhas ficam disponíveis por <strong>15 dias</strong> após a criação. 
                   Após este período, serão automaticamente arquivados.
                 </p>
               </div>
@@ -654,33 +771,6 @@ export function RelatorioDisparo() {
               </div>
             </div>
           </Card>
-
-          {/* Paginação Superior */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mb-3">
-            <div className="flex items-center space-x-1.5 text-xs text-gray-400">
-              <span className="hidden sm:inline">Mostrando página</span>
-              <span className="sm:hidden">Pág.</span>
-              <span className="font-medium text-gray-500">{page}</span>
-              <span>de</span>
-              <span className="font-medium text-gray-500">{totalPages}</span>
-            </div>
-            <div className="flex items-center space-x-1.5 w-full sm:w-auto">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex-1 sm:flex-none text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex-1 sm:flex-none text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Próxima
-              </button>
-            </div>
-          </div>
 
           {/* Lista de Disparos */}
           <div className="space-y-4">
@@ -990,8 +1080,34 @@ export function RelatorioDisparo() {
                   const paginaAtualRelatorio = paginasRelatorio[grupo.disparo.uid] || 1;
                   const ordenacao = ordenacaoRelatorio[grupo.disparo.uid] || { campo: 'eleitor_nome', direcao: 'asc' };
                   
-                  // Ordenar relatórios
-                  const relatoriosOrdenados = [...grupo.relatorios].sort((a, b) => {
+                  // AGRUPAR POR CONTATO ÚNICO (whatsapp + nome)
+                  const contatosAgrupados = new Map<string, RelatorioItem & { mensagensRecebidas: number }>();
+                  
+                  grupo.relatorios.forEach(r => {
+                    const chave = `${r.whatsapp}_${r.eleitor_nome}`;
+                    const existente = contatosAgrupados.get(chave);
+                    
+                    if (existente) {
+                      // Incrementar contador de mensagens
+                      existente.mensagensRecebidas++;
+                      // Se alguma foi perdida, manter como perdida
+                      if (r.perdida === 'SIM') {
+                        existente.perdida = 'SIM';
+                      }
+                    } else {
+                      // Adicionar novo contato com contador
+                      contatosAgrupados.set(chave, {
+                        ...r,
+                        mensagensRecebidas: 1
+                      });
+                    }
+                  });
+                  
+                  // Converter Map para array
+                  const relatoriosUnicos = Array.from(contatosAgrupados.values());
+                  
+                  // Ordenar relatórios únicos
+                  const relatoriosOrdenados = [...relatoriosUnicos].sort((a, b) => {
                     let valorA: any = '';
                     let valorB: any = '';
                     
@@ -1059,7 +1175,10 @@ export function RelatorioDisparo() {
                       </div>
                     ) : (
                       <>
-                        <div className="overflow-x-auto">
+                        <div 
+                          ref={setupHorizontalScroll}
+                          className="overflow-x-auto"
+                        >
                           <div className="inline-block min-w-full align-middle">
                             <div className="overflow-hidden">
                               <table className="min-w-full divide-y divide-gray-200">
@@ -1104,6 +1223,12 @@ export function RelatorioDisparo() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                                   Tipo
                                 </th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider">
+                                  <div className="flex items-center justify-center">
+                                    <MessageSquare className="w-4 h-4 mr-1" />
+                                    Msgs Recebidas
+                                  </div>
+                                </th>
                                 <th 
                                   className="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors select-none"
                                   onClick={() => toggleOrdenacao('status')}
@@ -1146,6 +1271,12 @@ export function RelatorioDisparo() {
                                     {relatorio.tipo || 'N/A'}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-center">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                      <MessageSquare className="w-3 h-3 mr-1" />
+                                      {relatorio.mensagensRecebidas}x
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-center">
                                     {relatorio.perdida === 'SIM' ? (
                                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                         <XCircle className="w-3 h-3 mr-1" />
@@ -1168,34 +1299,25 @@ export function RelatorioDisparo() {
                         
                         {/* Paginação dos Relatórios */}
                         {totalPaginasRelatorio > 1 && (
-                          <div className="px-6 py-4 bg-white border-t border-gray-200">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm text-gray-500">
-                                Mostrando {indiceInicio + 1} a {Math.min(indiceFim, totalRelatorios)} de {totalRelatorios} registros
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setPaginasRelatorio(prev => ({ ...prev, [grupo.disparo.uid]: Math.max(1, paginaAtualRelatorio - 1) }))}
-                                  disabled={paginaAtualRelatorio === 1}
-                                  className="h-8"
-                                >
-                                  Anterior
-                                </Button>
-                                <span className="text-sm text-gray-700">
-                                  Página {paginaAtualRelatorio} de {totalPaginasRelatorio}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setPaginasRelatorio(prev => ({ ...prev, [grupo.disparo.uid]: Math.min(totalPaginasRelatorio, paginaAtualRelatorio + 1) }))}
-                                  disabled={paginaAtualRelatorio === totalPaginasRelatorio}
-                                  className="h-8"
-                                >
-                                  Próxima
-                                </Button>
-                              </div>
+                          <div className="px-6 py-2 bg-gray-50 border-t border-gray-200">
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => setPaginasRelatorio(prev => ({ ...prev, [grupo.disparo.uid]: Math.max(1, paginaAtualRelatorio - 1) }))}
+                                disabled={paginaAtualRelatorio === 1}
+                                className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Anterior
+                              </button>
+                              <span className="text-xs text-gray-500">
+                                Pág. {paginaAtualRelatorio} de {totalPaginasRelatorio}
+                              </span>
+                              <button
+                                onClick={() => setPaginasRelatorio(prev => ({ ...prev, [grupo.disparo.uid]: Math.min(totalPaginasRelatorio, paginaAtualRelatorio + 1) }))}
+                                disabled={paginaAtualRelatorio === totalPaginasRelatorio}
+                                className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Próxima
+                              </button>
                             </div>
                           </div>
                         )}
@@ -1210,30 +1332,24 @@ export function RelatorioDisparo() {
           </div>
 
           {/* Paginação Inferior */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mt-3">
-            <div className="flex items-center space-x-1.5 text-xs text-gray-400">
-              <span className="hidden sm:inline">Mostrando página</span>
-              <span className="sm:hidden">Pág.</span>
-              <span className="font-medium text-gray-500">{page}</span>
-              <span>de</span>
-              <span className="font-medium text-gray-500">{totalPages}</span>
-            </div>
-            <div className="flex items-center space-x-1.5 w-full sm:w-auto">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex-1 sm:flex-none text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex-1 sm:flex-none text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Próxima
-              </button>
-            </div>
+          <div className="flex items-center justify-center gap-3 mt-3 py-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Anterior
+            </button>
+            <span className="text-xs text-gray-500">
+              Pág. {page} de {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Próxima
+            </button>
           </div>
         </div>
       </div>

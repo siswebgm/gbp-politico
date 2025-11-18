@@ -23,7 +23,10 @@ import {
   CalendarDays,
   CalendarRange,
   List,
-  ArrowRight
+  ArrowRight,
+  Pencil,
+  Trash2,
+  Users
 } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 import {
@@ -53,9 +56,12 @@ export default function AgendaPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const selectedEventRef = useRef<HTMLDivElement>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<any>(null);
+  const [eventToEdit, setEventToEdit] = useState<any>(null);
   
   const { user } = useAuth();
-  const { events, isLoading } = useAgenda();
+  const { events, isLoading, deleteEvent } = useAgenda();
 
   const getEventStatus = (event: any) => {
     const now = new Date();
@@ -83,6 +89,12 @@ export default function AgendaPage() {
 
   const filteredEvents = useMemo(() => {
     if (!events) return [];
+
+    // Se houver um evento selecionado, mostrar apenas ele
+    if (selectedEventId && activeTab === 'list') {
+      const selectedEvent = events.find(e => e.uid === selectedEventId);
+      return selectedEvent ? [selectedEvent] : [];
+    }
 
     let filtered = [...events];
     const now = new Date();
@@ -158,7 +170,7 @@ export default function AgendaPage() {
     });
 
     return filtered;
-  }, [events, selectedPeriod]);
+  }, [events, selectedPeriod, selectedEventId, activeTab]);
 
   // Paginação
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
@@ -322,18 +334,17 @@ export default function AgendaPage() {
   };
 
   const handleEventClick = (event: any) => {
-    setSelectedDate(new Date(event.start_time));
+    const eventDate = new Date(event.start_time);
+    setSelectedDate(eventDate);
     setSelectedEventId(event.uid);
     setActiveTab('list');
     
-    // Calcular em qual página o evento está
-    const eventIndex = filteredEvents.findIndex(e => e.uid === event.uid);
-    if (eventIndex !== -1) {
-      const pageNumber = Math.floor(eventIndex / itemsPerPage) + 1;
-      setCurrentPage(pageNumber);
-    }
+    // Definir período como 'all' para mostrar apenas o evento selecionado
+    // O filtro será aplicado no useMemo de filteredEvents
+    setSelectedPeriod('all');
+    setCurrentPage(1);
     
-    // Pequeno delay para garantir que a lista foi renderizada
+    // Scroll para o evento após renderização
     setTimeout(() => {
       selectedEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
@@ -341,6 +352,31 @@ export default function AgendaPage() {
 
   const handleDateClick = (date: Date) => {
     setInitialDate(date);
+    setIsNewEventModalOpen(true);
+  };
+
+  const handleDeleteClick = (event: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEventToDelete(event);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (eventToDelete) {
+      try {
+        await deleteEvent.mutateAsync(eventToDelete.uid);
+        setShowDeleteModal(false);
+        setEventToDelete(null);
+        setSelectedEventId(null);
+      } catch (error) {
+        console.error('Erro ao deletar evento:', error);
+      }
+    }
+  };
+
+  const handleEditClick = (event: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEventToEdit(event);
     setIsNewEventModalOpen(true);
   };
 
@@ -442,7 +478,10 @@ export default function AgendaPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <Select value={selectedPeriod} onValueChange={(value: any) => setSelectedPeriod(value)}>
+              <Select value={selectedPeriod} onValueChange={(value: any) => {
+                setSelectedPeriod(value);
+                setSelectedEventId(null); // Limpar seleção ao mudar período
+              }}>
                 <SelectTrigger className="flex-1 min-w-[120px] sm:w-[180px] border-gray-200 hover:border-gray-300 focus:ring-blue-100 bg-white">
                   <SelectValue placeholder="Selecione o período" />
                 </SelectTrigger>
@@ -653,7 +692,24 @@ export default function AgendaPage() {
                                     </p>
                                   )}
                                 </div>
-                                <div className="flex gap-2 flex-wrap sm:justify-end">
+                                <div className="flex gap-2 flex-wrap sm:justify-end items-start">
+                                  {/* Botões de Ação */}
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={(e) => handleEditClick(event, e)}
+                                      className="p-2 text-blue-600 hover:bg-blue-100 transition-colors"
+                                      title="Editar agendamento"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleDeleteClick(event, e)}
+                                      className="p-2 text-red-600 hover:bg-red-100 transition-colors"
+                                      title="Deletar agendamento"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                   <Badge
                                     variant="outline"
                                     className={cn(
@@ -829,9 +885,58 @@ export default function AgendaPage() {
 
       <NewEventModal 
         open={isNewEventModalOpen} 
-        onOpenChange={setIsNewEventModalOpen}
+        onOpenChange={(open) => {
+          setIsNewEventModalOpen(open);
+          if (!open) setEventToEdit(null);
+        }}
         initialDate={initialDate}
+        eventToEdit={eventToEdit}
       />
+
+      {/* Modal de Confirmação de Exclusão */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-800">Confirmar Exclusão</h2>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-slate-600">
+                Tem certeza que deseja excluir o agendamento <strong>"{eventToDelete?.title}"</strong>?
+              </p>
+              <p className="text-sm text-slate-500 mt-2">
+                Esta ação não poderá ser desfeita.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setEventToDelete(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-800 transition-colors"
+                disabled={deleteEvent.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteEvent.isPending}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleteEvent.isPending ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

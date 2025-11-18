@@ -458,6 +458,40 @@ export const NovoEleitor: React.FC = () => {
 
       setIsLoading(true);
 
+      // Verificar duplicidade de CPF antes de inserir
+      const cpfLimpo = watch('cpf').replace(/\D/g, '');
+      if (cpfLimpo && cpfLimpo.length === 11 && company?.uid) {
+        console.log('🔍 Verificando duplicidade no submit - CPF:', cpfLimpo, 'Empresa:', company.uid);
+        
+        const { data: existingCPF, error: checkError } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('uid, nome, cpf')
+          .eq('cpf', cpfLimpo)
+          .eq('empresa_uid', company.uid)
+          .limit(1)
+          .single();
+
+        if (checkError) {
+          console.error('❌ Erro ao verificar CPF:', checkError);
+        }
+
+        console.log('📊 Resultado da busca:', existingCPF ? `Encontrado: ${existingCPF.nome}` : 'Não encontrado');
+
+        if (existingCPF) {
+          setIsLoading(false);
+          toast({
+            title: "⚠️ CPF Duplicado",
+            description: `Este CPF já está cadastrado para ${existingCPF.nome}. Redirecionando...`,
+            className: "bg-yellow-50 border-yellow-200 text-yellow-800",
+            duration: 3000,
+          });
+          setTimeout(() => {
+            navigate(`/app/eleitores/${existingCPF.uid}`);
+          }, 1500);
+          return;
+        }
+      }
+
       // Pega todos os valores atuais diretamente dos inputs
       const currentValues = {
         nome: watch('nome'),
@@ -730,7 +764,7 @@ export const NovoEleitor: React.FC = () => {
         </header>
 
         {/* Formulário */}
-        <form onSubmit={handleSubmit(onSubmit)} className="mx-auto max-w-7xl px-4 py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="px-4 py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
           {/* Dados Pessoais */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm rounded-lg overflow-hidden">
             <div className="p-6">
@@ -991,6 +1025,43 @@ export const NovoEleitor: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Confiabilidade do Voto */}
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Confiabilidade do Voto
+                    </label>
+                    <div className="relative">
+                      <select
+                        {...register('confiabilidade_do_voto')}
+                        className="w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 pr-10 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
+                        style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                      >
+                        <option value="">Selecione a confiabilidade</option>
+                        <option value="frio">🔵 Frio 🧊 – Pouco engajado, dificilmente votará</option>
+                        <option value="indeciso">🟡 Indeciso 🤔 – Ainda não definiu seu voto, precisa de convencimento</option>
+                        <option value="morno">🟠 Morno 🌥️ – Demonstra interesse, mas não está totalmente convencido</option>
+                        <option value="quente">🔴 Quente 🔥 – Alta chance de votar, mas ainda requer atenção</option>
+                        <option value="convicto">🟢 Convicto 🏆 – Já decidiu e apoia publicamente</option>
+                        <option value="fiel">🟣 Fiel ✅ – Já vota e defende a candidatura</option>
+                        <option value="multiplicador">🚀 Multiplicador – Além de votar, influencia outras pessoas</option>
+                      </select>
+                      {watch('confiabilidade_do_voto') && (
+                        <button
+                          type="button"
+                          onClick={() => setValue('confiabilidade_do_voto', '')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          title="Limpar seleção"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1153,27 +1224,6 @@ export const NovoEleitor: React.FC = () => {
                         className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
                         style={globalStyles.input}
                       />
-                    </div>
-
-                    {/* Confiabilidade do Voto */}
-                    <div className="col-span-full">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                        Confiabilidade do Voto
-                      </label>
-                      <select
-                        {...register('confiabilidade_do_voto')}
-                        className="w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
-                        style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-                      >
-                        <option value="">Selecione a confiabilidade</option>
-                        <option value="frio">🔵 Frio 🧊 – Pouco engajado, dificilmente votará</option>
-                        <option value="indeciso">🟡 Indeciso 🤔 – Ainda não definiu seu voto, precisa de convencimento</option>
-                        <option value="morno">🟠 Morno 🌥️ – Demonstra interesse, mas não está totalmente convencido</option>
-                        <option value="quente">🔴 Quente 🔥 – Alta chance de votar, mas ainda requer atenção</option>
-                        <option value="convicto">🟢 Convicto 🏆 – Já decidiu e apoia publicamente</option>
-                        <option value="fiel">🟣 Fiel ✅ – Já vota e defende a candidatura</option>
-                        <option value="multiplicador">🚀 Multiplicador – Além de votar, influencia outras pessoas</option>
-                      </select>
                     </div>
                   </div>
                 </div>

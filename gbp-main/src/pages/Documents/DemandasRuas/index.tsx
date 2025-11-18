@@ -57,6 +57,8 @@ export function DemandasRuas() {
   const [indicados, setIndicados] = useState<Indicado[]>([]);
   const [showArquivadas, setShowArquivadas] = useState(false); // mostrar arquivadas
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 9;
   const [demandaToDelete, setDemandaToDelete] = useState<DemandaRua | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -234,6 +236,17 @@ export function DemandasRuas() {
 
     return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesIndicado && matchesArquivadas && matchesPasta;
   });
+
+  // Calcular paginação
+  const totalPages = Math.ceil(filteredDemandas.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedDemandas = filteredDemandas.slice(startIndex, endIndex);
+
+  // Resetar para página 1 quando os filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, urgenciaFilter, dataInicio, dataFim, searchTerm, tipoDemandaFilter, cidadeFilter, bairroFilter, nivelFavoritoFilter, respostaFilter, indicadoFilter, showArquivadas]);
 
   // Formatar data
   const handleToggleFavorito = async (e: React.MouseEvent, demanda: DemandaRua) => {
@@ -819,12 +832,12 @@ export function DemandasRuas() {
                     </div>
 
                     {/* Filtro de Indicado */}
-                    <div className="flex-1 min-w-[150px]">
+                    <div className="flex-1 min-w-[150px] max-w-full overflow-hidden">
                       <Select value={indicadoFilter} onValueChange={setIndicadoFilter}>
                         <SelectTrigger className="w-full text-xs sm:text-sm h-9">
-                          <div className="flex items-center gap-2">
-                            <User className="h-3.5 w-3.5 text-gray-400" />
-                            <span className="truncate">
+                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                            <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                            <span className="truncate block overflow-hidden text-ellipsis whitespace-nowrap">
                               {indicadoFilter === 'todos' ? 'Indicado' : 
                                indicadoFilter === 'sem_indicado' ? 'Sem indicado' :
                                indicados.find(i => i.uid === indicadoFilter)?.nome || 'Indicado'}
@@ -908,7 +921,7 @@ export function DemandasRuas() {
                 <div className="space-y-8">
                   {filteredDemandas.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-6 lg:gap-8 pt-4">
-                      {filteredDemandas.map((demanda) => (
+                      {paginatedDemandas.map((demanda) => (
                         <div 
                           key={demanda.uid}
                           className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-sm transition-all duration-200 bg-white dark:bg-gray-800 flex flex-col h-full"
@@ -1296,17 +1309,33 @@ export function DemandasRuas() {
                 </div>
               </CardContent>
               <CardFooter className="bg-gray-50 px-4 py-2 border-t mb-6">
-                <div className="w-full flex flex-row justify-between items-center">
-                  <div className="flex flex-row items-center gap-x-2 text-xs text-muted-foreground">
+                <div className="w-full flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center">
+                  <div className="flex flex-row items-center gap-x-2 text-xs text-muted-foreground flex-wrap">
                     <span>Total: <span className="font-medium text-foreground">{demandas.length}</span></span>
                     <span className="text-gray-300">•</span>
-                    <span>Exibindo: <span className="font-medium text-foreground">{filteredDemandas.length}</span></span>
+                    <span>Filtradas: <span className="font-medium text-foreground">{filteredDemandas.length}</span></span>
+                    <span className="text-gray-300">•</span>
+                    <span>Exibindo: <span className="font-medium text-foreground">{startIndex + 1}-{Math.min(endIndex, filteredDemandas.length)}</span></span>
+                    <span className="text-gray-300">•</span>
+                    <span>Página: <span className="font-medium text-foreground">{currentPage}/{totalPages || 1}</span></span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <Button variant="ghost" size="sm" disabled={true} className="h-7 px-2 text-xs">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      disabled={currentPage === 1} 
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      className="h-7 px-2 text-xs"
+                    >
                       Anterior
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={true} className="h-7 px-2 text-xs">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      disabled={currentPage >= totalPages} 
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      className="h-7 px-2 text-xs"
+                    >
                       Próximo
                     </Button>
                   </div>

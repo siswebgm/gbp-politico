@@ -1,34 +1,18 @@
-import { FileText, BookOpen, FileSpreadsheet, DollarSign, AlertTriangle } from 'lucide-react';
+import { FileText, BookOpen, FileSpreadsheet, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentCounts } from '../../../hooks/useDocumentCounts';
 import { useAuth } from '../../../providers/AuthProvider';
-import { useCompanyStore } from '../../../store/useCompanyStore';
 
 export function DocumentCards() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { company } = useCompanyStore();
   const { 
     oficiosCount, 
     projetosLeiCount, 
     requerimentosCount, 
-    emendasCount, 
-    demandasRuasCount,
+    emendasCount,
     isLoading 
   } = useDocumentCounts();
-  
-  // Planos que têm acesso ao módulo de Demandas Ruas
-  const planosComAcesso = [
-    'Inter 2.0', 
-    'Pró Max 3.0', 
-    'Básico Plus 0.4', 
-    'Básico 1.0'
-  ];
-  
-  // Verifica se o plano atual tem acesso ao módulo usando o plano do store
-  const temAcessoDemandasRuas = company?.plano 
-    ? planosComAcesso.includes(company.plano) 
-    : false;
 
   const cards = [
     {
@@ -78,19 +62,6 @@ export function DocumentCards() {
       hoverBg: 'hover:bg-amber-50/80',
       count: emendasCount,
       onClick: () => navigate('/app/documentos/emendas-parlamentares')
-    },
-    {
-      title: 'Demandas Ruas',
-      description: 'Registro e acompanhamento de demandas urbanas',
-      icon: AlertTriangle,
-      color: 'text-pink-600',
-      bgColor: 'bg-pink-50',
-      gradientFrom: 'from-pink-500',
-      gradientTo: 'to-pink-600',
-      hoverBg: 'hover:bg-pink-50/80',
-      count: demandasRuasCount,
-      onClick: () => navigate('/app/documentos/demandas-ruas'),
-      requerPlanoEspecifico: true
     }
   ];
 
@@ -101,14 +72,6 @@ export function DocumentCards() {
           // Filtra por nível de acesso
           if (['Projetos de Lei', 'Requerimentos', 'Emendas Parlamentares'].includes(card.title)) {
             return user?.nivel_acesso === 'admin';
-          }
-          // Filtra por plano e nível de acesso para o card de Demandas Ruas
-          if (card.requerPlanoEspecifico) {
-            const niveisPermitidos = ['admin', 'coordenador', 'analista'];
-            const temNivelAcesso = user?.nivel_acesso && niveisPermitidos.includes(user.nivel_acesso);
-            
-            // Valida nível de acesso E plano (ambos disponíveis instantaneamente no store)
-            return temNivelAcesso && temAcessoDemandasRuas;
           }
           return true;
         })

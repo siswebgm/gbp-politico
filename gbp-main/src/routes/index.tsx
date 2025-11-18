@@ -13,6 +13,7 @@ import { Users } from '../pages/Users';
 import WhatsAppPage from '../pages/WhatsApp';
 import { Suspense, lazy } from 'react';
 import TiposDemanda from '../pages/Settings/TiposDemanda';
+import { CadastroMoradores } from '../pages/CadastroMoradores';
 
 // Importando o componente da página de clientes com lazy loading
 const ClientesPage = lazy(() => import('../pages/Clientes'));
@@ -58,6 +59,11 @@ export const router = createBrowserRouter([
         <ClientesPage />
       </Suspense>
     )
+  },
+  // Rota pública de cadastro de moradores
+  {
+    path: '/cadastro-moradores',
+    element: <CadastroMoradores />
   },
   {
     path: '/',

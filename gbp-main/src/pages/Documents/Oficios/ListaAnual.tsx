@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ChevronLeft, 
@@ -19,8 +19,14 @@ import {
   CircleDot,
   ChevronRight,
   FileText,
-  Trash2
+  Trash2,
+  Download,
+  FileSpreadsheet,
+  FolderInput
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { supabaseClient } from '../../../lib/supabase';
 import { useCompanyStore } from '../../../store/useCompanyStore';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -93,6 +99,11 @@ const ListaAnualOficios: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [oficioToMove, setOficioToMove] = useState<Oficio | null>(null);
+  const [targetYear, setTargetYear] = useState('');
+  const [newYearInput, setNewYearInput] = useState('');
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [selectedTipoDemanda, setSelectedTipoDemanda] = useState<string>('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
@@ -117,7 +128,7 @@ const ListaAnualOficios: React.FC = () => {
   });
   const [editUploadFile, setEditUploadFile] = useState<File | null>(null);
   const [isEditUploading, setIsEditUploading] = useState(false);
-  const itemsPerPage = 10;
+  const itemsPerPage = 9;
 
   // Calcula o total de páginas
   const totalPages = Math.ceil(filteredOficios.length / itemsPerPage);
@@ -129,8 +140,193 @@ const ListaAnualOficios: React.FC = () => {
     return filteredOficios.slice(startIndex, endIndex);
   };
 
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Função para exportar um ofício individual em PDF
+  const exportarOficioPDF = (oficio: Oficio) => {
+    const doc = new jsPDF();
+    
+    // Título
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Ofício Nº ${oficio.numero_oficio}`, 14, 20);
+    
+    // Informações do ofício
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    
+    const dados = [
+      ['Data de Solicitação', formatDate(oficio.data_solicitacao)],
+      ['Status', oficio.status_solicitacao],
+      ['Tipo de Demanda', oficio.tipo_de_demanda],
+      ['Nível de Urgência', oficio.nivel_de_urgencia || '-'],
+      ['Requerente', oficio.requerente_nome || '-'],
+      ['Logradouro', oficio.logradouro || '-'],
+      ['Bairro', oficio.bairro || '-'],
+      ['Cidade', oficio.cidade || '-'],
+      ['Responsável', oficio.responsavel_nome || '-'],
+      ['Descrição', oficio.descricao_do_problema || '-']
+    ];
+    
+    // Adiciona URL do ofício protocolado se existir
+    if (oficio.url_oficio_protocolado) {
+      dados.push(['Arquivo Protocolado', oficio.url_oficio_protocolado]);
+    }
+    
+    // Adiciona fotos do problema se existirem
+    if (oficio.fotos_do_problema && oficio.fotos_do_problema.length > 0) {
+      oficio.fotos_do_problema.forEach((foto, index) => {
+        dados.push([`Foto ${index + 1}`, foto]);
+      });
+    }
+    
+    (doc as any).autoTable({
+      startY: 30,
+      head: [['Campo', 'Valor']],
+      body: dados,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235] },
+      styles: { fontSize: 9 },
+      columnStyles: {
+        1: { cellWidth: 'auto' }
+      }
+    });
+    
+    doc.save(`Oficio_${oficio.numero_oficio.replace('/', '-')}.pdf`);
+    toast.success('PDF gerado com sucesso!');
+  };
+
+  // Função para exportar todos os ofícios em PDF
+  const exportarTodosPDF = () => {
+    const doc = new jsPDF();
+    
+    // Título
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Ofícios de ${ano}`, 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total: ${filteredOficios.length} ofícios`, 14, 28);
+    
+    // Preparar dados para a tabela
+    const dados = filteredOficios.map(oficio => [
+      oficio.numero_oficio,
+      formatDate(oficio.data_solicitacao),
+      oficio.tipo_de_demanda,
+      oficio.status_solicitacao,
+      oficio.requerente_nome || '-'
+    ]);
+    
+    (doc as any).autoTable({
+      startY: 35,
+      head: [['Nº Ofício', 'Data', 'Tipo', 'Status', 'Requerente']],
+      body: dados,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235] },
+      styles: { fontSize: 8 }
+    });
+    
+    doc.save(`Oficios_${ano}.pdf`);
+    toast.success('PDF gerado com sucesso!');
+  };
+
+  // Função para exportar um ofício individual em Excel
+  const exportarOficioExcel = (oficio: Oficio) => {
+    const dados = [
+      { Campo: 'Número do Ofício', Valor: oficio.numero_oficio },
+      { Campo: 'Data de Solicitação', Valor: formatDate(oficio.data_solicitacao) },
+      { Campo: 'Status', Valor: oficio.status_solicitacao },
+      { Campo: 'Tipo de Demanda', Valor: oficio.tipo_de_demanda },
+      { Campo: 'Nível de Urgência', Valor: oficio.nivel_de_urgencia || '-' },
+      { Campo: 'Requerente', Valor: oficio.requerente_nome || '-' },
+      { Campo: 'Logradouro', Valor: oficio.logradouro || '-' },
+      { Campo: 'Bairro', Valor: oficio.bairro || '-' },
+      { Campo: 'Cidade', Valor: oficio.cidade || '-' },
+      { Campo: 'Responsável', Valor: oficio.responsavel_nome || '-' },
+      { Campo: 'Descrição', Valor: oficio.descricao_do_problema || '-' }
+    ];
+    
+    // Adiciona URL do ofício protocolado se existir
+    if (oficio.url_oficio_protocolado) {
+      dados.push({ Campo: 'Arquivo Protocolado', Valor: oficio.url_oficio_protocolado });
+    }
+    
+    // Adiciona fotos do problema se existirem
+    if (oficio.fotos_do_problema && oficio.fotos_do_problema.length > 0) {
+      oficio.fotos_do_problema.forEach((foto, index) => {
+        dados.push({ Campo: `Foto ${index + 1}`, Valor: foto });
+      });
+    }
+    
+    const ws = XLSX.utils.json_to_sheet(dados);
+    
+    // Ajustar largura das colunas
+    const maxWidthCampo = Math.max(...dados.map(d => d.Campo.length));
+    const maxWidthValor = Math.max(...dados.map(d => String(d.Valor).length));
+    
+    ws['!cols'] = [
+      { wch: Math.min(maxWidthCampo + 2, 30) },
+      { wch: Math.min(maxWidthValor + 2, 100) }
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ofício');
+    
+    XLSX.writeFile(wb, `Oficio_${oficio.numero_oficio.replace('/', '-')}.xlsx`);
+    toast.success('Excel gerado com sucesso!');
+  };
+
+  // Função para exportar todos os ofícios em Excel
+  const exportarTodosExcel = () => {
+    const dados = filteredOficios.map(oficio => ({
+      'Nº Ofício': oficio.numero_oficio,
+      'Data': formatDate(oficio.data_solicitacao),
+      'Tipo de Demanda': oficio.tipo_de_demanda,
+      'Status': oficio.status_solicitacao,
+      'Urgência': oficio.nivel_de_urgencia || '-',
+      'Requerente': oficio.requerente_nome || '-',
+      'Logradouro': oficio.logradouro || '-',
+      'Bairro': oficio.bairro || '-',
+      'Cidade': oficio.cidade || '-',
+      'Responsável': oficio.responsavel_nome || '-',
+      'Descrição': oficio.descricao_do_problema || '-',
+      'Arquivo Protocolado': oficio.url_oficio_protocolado || '-',
+      'Fotos do Problema': oficio.fotos_do_problema && oficio.fotos_do_problema.length > 0 
+        ? oficio.fotos_do_problema.join(' | ') 
+        : '-'
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(dados);
+    
+    // Ajustar largura das colunas automaticamente
+    const colWidths = [
+      { wch: 12 },  // Nº Ofício
+      { wch: 12 },  // Data
+      { wch: 25 },  // Tipo de Demanda
+      { wch: 12 },  // Status
+      { wch: 10 },  // Urgência
+      { wch: 25 },  // Requerente
+      { wch: 30 },  // Logradouro
+      { wch: 20 },  // Bairro
+      { wch: 20 },  // Cidade
+      { wch: 25 },  // Responsável
+      { wch: 40 },  // Descrição
+      { wch: 50 },  // Arquivo Protocolado
+      { wch: 60 }   // Fotos do Problema
+    ];
+    
+    ws['!cols'] = colWidths;
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Ofícios ${ano}`);
+    
+    XLSX.writeFile(wb, `Oficios_${ano}.xlsx`);
+    toast.success('Excel gerado com sucesso!');
   };
 
   // Reseta a página atual quando os filtros mudam
@@ -192,9 +388,107 @@ const ListaAnualOficios: React.FC = () => {
     fetchTiposDemanda();
   }, [company?.uid]);
 
+  // Função para buscar nome personalizado da pasta
+  const getFolderName = (year: string) => {
+    if (!year) return '';
+    const customName = localStorage.getItem(`folder_name_${year}`);
+    return customName || year;
+  };
+
+  // Buscar anos disponíveis
+  const fetchAvailableYears = useCallback(async () => {
+    if (!company?.uid) return;
+    
+    try {
+      const { data, error } = await supabaseClient
+        .from('gbp_oficios')
+        .select('numero_oficio')
+        .eq('empresa_uid', company.uid);
+
+      if (error) throw error;
+
+      const years = new Set<string>();
+      data?.forEach(oficio => {
+        const year = oficio.numero_oficio.split('/')[1];
+        if (year) years.add(year);
+      });
+
+      setAvailableYears(Array.from(years).sort((a, b) => Number(b) - Number(a)));
+    } catch (error) {
+      console.error('Erro ao buscar anos:', error);
+    }
+  }, [company?.uid]);
+
+  // Buscar ofícios
+  const fetchOficios = useCallback(async () => {
+    if (!company?.uid || !ano) return;
+    
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabaseClient
+        .from('gbp_oficios')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .filter('numero_oficio', 'ilike', `%/${ano}`)
+        .not('url_oficio_protocolado', 'is', null)
+        .not('url_oficio_protocolado', 'eq', '');
+
+      if (error) throw error;
+
+      const filteredData = (data || []).filter(oficio => 
+        oficio.url_oficio_protocolado && 
+        oficio.url_oficio_protocolado.trim() !== ''
+      );
+
+      setOficios(filteredData);
+    } catch (error) {
+      console.error('Erro ao buscar ofícios:', error);
+      toast.error('Erro ao carregar os ofícios');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [company?.uid, ano]);
+
   useEffect(() => {
-    fetchOficios();
-  }, [ano]);
+    if (company?.uid && ano) {
+      fetchOficios();
+      fetchAvailableYears();
+    }
+  }, [company?.uid, ano, fetchOficios, fetchAvailableYears]);
+
+  // Função para mover ofício
+  const handleMoveOficio = async () => {
+    if (!oficioToMove || !targetYear) return;
+
+    try {
+      const currentNumber = oficioToMove.numero_oficio.split('/')[0];
+      const yearToMove = targetYear === 'novo' ? newYearInput : targetYear;
+      
+      if (!yearToMove) {
+        toast.error('Por favor, digite o ano da nova pasta');
+        return;
+      }
+
+      const newNumeroOficio = `${currentNumber}/${yearToMove}`;
+
+      const { error } = await supabaseClient
+        .from('gbp_oficios')
+        .update({ numero_oficio: newNumeroOficio })
+        .eq('uid', oficioToMove.uid);
+
+      if (error) throw error;
+
+      toast.success(`Ofício movido para ${yearToMove} com sucesso!`);
+      setShowMoveModal(false);
+      setOficioToMove(null);
+      setTargetYear('');
+      setNewYearInput('');
+      fetchOficios();
+    } catch (error) {
+      console.error('Erro ao mover ofício:', error);
+      toast.error('Erro ao mover ofício');
+    }
+  };
 
   useEffect(() => {
     let filtered = [...oficios];
@@ -253,33 +547,6 @@ const ListaAnualOficios: React.FC = () => {
 
     setFilteredOficios(filtered);
   }, [oficios, searchTerm, searchDate, selectedStatus, selectedTipoDemanda, selectedPeriod]);
-
-  const fetchOficios = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabaseClient
-        .from('gbp_oficios')
-        .select('*')
-        .eq('empresa_uid', company.uid)
-        .filter('numero_oficio', 'ilike', `%/${ano}`)
-        .not('url_oficio_protocolado', 'is', null)
-        .not('url_oficio_protocolado', 'eq', '');
-
-      if (error) throw error;
-
-      const filteredData = (data || []).filter(oficio => 
-        oficio.url_oficio_protocolado && 
-        oficio.url_oficio_protocolado.trim() !== ''
-      );
-
-      setOficios(filteredData);
-    } catch (error) {
-      console.error('Erro ao buscar ofícios:', error);
-      toast.error('Erro ao carregar os ofícios');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSaveExistingOficio = async () => {
     try {
@@ -495,7 +762,7 @@ const ListaAnualOficios: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-1 sm:p-6">
+    <div className="min-h-screen bg-gray-50 p-1 sm:p-6 flex flex-col">
       <div className="bg-white border-b">
         <div className="flex items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-4">
@@ -515,12 +782,34 @@ const ListaAnualOficios: React.FC = () => {
             </div>
           </div>
           
-          <button
-            onClick={() => setShowExistingOficioModal(true)}
-            className="hidden md:inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Cadastrar Ofício Existente
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Botões de Download */}
+            <div className="hidden md:flex items-center gap-2">
+              <button
+                onClick={() => exportarTodosPDF()}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-md hover:bg-red-100 border border-red-200 transition-colors"
+                title="Exportar todos em PDF"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden lg:inline">PDF</span>
+              </button>
+              <button
+                onClick={() => exportarTodosExcel()}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-sm font-medium rounded-md hover:bg-green-100 border border-green-200 transition-colors"
+                title="Exportar todos em Excel"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span className="hidden lg:inline">Excel</span>
+              </button>
+            </div>
+            
+            <button
+              onClick={() => setShowExistingOficioModal(true)}
+              className="hidden md:inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Cadastrar Ofício Existente
+            </button>
+          </div>
         </div>
       </div>
 
@@ -533,7 +822,7 @@ const ListaAnualOficios: React.FC = () => {
         </svg>
       </button>
 
-      <div className="mx-auto mt-6">
+      <div className="mt-6 flex-grow flex flex-col">
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow p-4 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -733,181 +1022,195 @@ const ListaAnualOficios: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="bg-white rounded-lg shadow">
-                <div className="divide-y divide-gray-200">
+              <div className="flex-grow">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {getCurrentPageItems()
                     .sort((a, b) => {
                       const numA = parseInt(a.numero_oficio.split('/')[0]);
                       const numB = parseInt(b.numero_oficio.split('/')[0]);
                       return numB - numA;
                     })
-                    .map((oficio) => (
-                      <div key={oficio.uid} className="p-4 hover:bg-slate-50 transition-all border-b border-slate-100 first:rounded-t-lg last:rounded-b-lg last:border-b-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-base font-medium text-slate-900">
-                                Ofício Nº {oficio.numero_oficio}
-                                {!oficio.visualizou && (
-                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                    Novo
-                                  </span>
-                                )}
-                              </h3>
+                    .map((oficio) => {
+                      const StatusIcon = STATUS_STYLES[oficio.status_solicitacao as keyof typeof STATUS_STYLES]?.icon || CircleDot;
+                      return (
+                        <div 
+                          key={oficio.uid} 
+                          className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-blue-300 transition-all duration-300 hover:-translate-y-1"
+                        >
+                          {/* Header do Card */}
+                          <div className="flex items-start justify-between gap-3 mb-4">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md flex-shrink-0">
+                                <FileText className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
+                                  Of. Nº {oficio.numero_oficio}
+                                </h3>
+                                <p className="text-xs text-slate-500 flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {formatDate(oficio.data_solicitacao)}
+                                </p>
+                              </div>
                             </div>
-                            <div className="mt-1.5 flex items-center gap-1 text-sm text-slate-500">
-                              <span className="inline-block w-2 h-2 rounded-full bg-slate-300"></span>
-                              {oficio.tipo_de_demanda}
+
+                            {/* Status Badge */}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border flex-shrink-0 ${
+                              STATUS_STYLES[oficio.status_solicitacao as keyof typeof STATUS_STYLES]?.color || 'bg-gray-50 text-gray-700 border-gray-200'
+                            }`}>
+                              <StatusIcon className="h-3.5 w-3.5" />
+                              {oficio.status_solicitacao}
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-3 mt-3 sm:mt-0">
-                            <div className="flex items-center text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              {formatDate(oficio.data_solicitacao)}
+                          {/* Tipo de Demanda */}
+                          <div className="mb-4 pb-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2 text-sm">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
+                                <Building2 className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-500 font-medium">Tipo de Demanda</p>
+                                <p className="text-sm font-semibold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">{oficio.tipo_de_demanda}</p>
+                              </div>
                             </div>
-                            <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
-                              STATUS_STYLES[oficio.status_solicitacao as keyof typeof STATUS_STYLES]?.color || 'bg-gray-50 text-gray-700 border-gray-200'
-                            }`}>
-                              {oficio.status_solicitacao}
-                            </span>
-                            <div className="flex items-center gap-3 ml-auto sm:ml-0">
-                              {oficio.url_oficio_protocolado && (
+                          </div>
+
+                          {/* Footer com Ações */}
+                          <div className="flex flex-col gap-3">
+                            {/* Linha: Ver Arquivo e Excluir */}
+                            <div className="flex items-center gap-2">
+                              {/* Botão Ver Arquivo */}
+                              {oficio.url_oficio_protocolado ? (
                                 <a
                                   href={oficio.url_oficio_protocolado}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 rounded-lg transition-all duration-200"
                                 >
-                                  <FileText className="h-3.5 w-3.5" />
-                                  Arquivo
+                                  <FileText className="h-4 w-4" />
+                                  Ver Arquivo
                                 </a>
+                              ) : (
+                                <div className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded-lg cursor-not-allowed">
+                                  <FileText className="h-4 w-4" />
+                                  Sem Arquivo
+                                </div>
                               )}
+
+                              {/* Botão Excluir (Admin) */}
                               {user?.nivel_acesso === 'admin' && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditOficioData({
-                                        uid: oficio.uid,
-                                        numero_oficio: oficio.numero_oficio,
-                                        tipo_de_demanda: oficio.tipo_de_demanda,
-                                        status_solicitacao: oficio.status_solicitacao,
-                                        url_oficio_protocolado: oficio.url_oficio_protocolado
-                                      });
-                                      setShowEditModal(true);
-                                    }}
-                                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                                    title="Editar ofício"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setOficioToDelete(oficio);
-                                      setShowDeleteModal(true);
-                                    }}
-                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                    title="Excluir ofício"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() => {
+                                    setOficioToDelete(oficio);
+                                    setShowDeleteModal(true);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 rounded-lg transition-all duration-200 whitespace-nowrap"
+                                  title="Excluir ofício"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Excluir
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Grid de Ícones de Ação */}
+                            <div className="grid grid-cols-4 gap-2">
+                              {/* Botão Download PDF */}
+                              <button
+                                onClick={() => exportarOficioPDF(oficio)}
+                                className="flex flex-col items-center justify-center gap-1 p-2.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 hover:shadow-sm border border-transparent hover:border-red-200"
+                                title="Baixar PDF"
+                              >
+                                <Download className="h-5 w-5" />
+                                <span className="text-xs font-medium">PDF</span>
+                              </button>
+
+                              {/* Botão Download Excel */}
+                              <button
+                                onClick={() => exportarOficioExcel(oficio)}
+                                className="flex flex-col items-center justify-center gap-1 p-2.5 text-slate-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 hover:shadow-sm border border-transparent hover:border-green-200"
+                                title="Baixar Excel"
+                              >
+                                <FileSpreadsheet className="h-5 w-5" />
+                                <span className="text-xs font-medium">Excel</span>
+                              </button>
+
+                              {/* Botão Mover */}
+                              <button
+                                onClick={() => {
+                                  setOficioToMove(oficio);
+                                  setShowMoveModal(true);
+                                }}
+                                className="flex flex-col items-center justify-center gap-1 p-2.5 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all duration-200 hover:shadow-sm border border-transparent hover:border-purple-200"
+                                title="Mover para outra pasta"
+                              >
+                                <FolderInput className="h-5 w-5" />
+                                <span className="text-xs font-medium">Mover</span>
+                              </button>
+
+                              {/* Botão Editar (Admin) */}
+                              {user?.nivel_acesso === 'admin' ? (
+                                <button
+                                  onClick={() => navigate(`/app/documentos/oficios/editar/${oficio.uid}`)}
+                                  className="flex flex-col items-center justify-center gap-1 p-2.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 hover:shadow-sm border border-transparent hover:border-blue-200"
+                                  title="Editar ofício"
+                                >
+                                  <Pencil className="h-5 w-5" />
+                                  <span className="text-xs font-medium">Editar</span>
+                                </button>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center gap-1 p-2.5 text-slate-300 bg-slate-50 rounded-lg cursor-not-allowed border border-slate-200">
+                                  <Pencil className="h-5 w-5" />
+                                  <span className="text-xs font-medium">Editar</span>
+                                </div>
                               )}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              {/* Paginação */}
-              <div className="mt-4 flex items-center justify-between bg-white px-4 py-3 sm:px-6">
-                <div className="flex flex-1 justify-between sm:hidden">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="relative ml-3 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Próximo
-                  </button>
-                </div>
-                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-slate-700">
-                      Mostrando <span className="font-medium">{((currentPage - 1) * itemsPerPage) + 1}</span> até{' '}
-                      <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredOficios.length)}</span> de{' '}
-                      <span className="font-medium">{filteredOficios.length}</span> resultados
-                    </p>
-                  </div>
-                  <div>
-                    <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                      <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="sr-only">Anterior</span>
-                        <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1)
-                        .filter(page => {
-                          return (
-                            page === 1 ||
-                            page === totalPages ||
-                            Math.abs(page - currentPage) <= 1
-                          );
-                        })
-                        .map((page, index, array) => {
-                          if (index > 0 && page - array[index - 1] > 1) {
-                            return (
-                              <span
-                                key={`ellipsis-${page}`}
-                                className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-300"
-                              >
-                                ...
-                              </span>
-                            );
-                          }
-                          return (
-                            <button
-                              key={page}
-                              onClick={() => handlePageChange(page)}
-                              className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                                currentPage === page
-                                  ? 'z-10 bg-blue-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
-                                  : 'text-slate-900 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0'
-                              }`}
-                            >
-                              {page}
-                            </button>
-                          );
-                        })}
-                      <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="sr-only">Próximo</span>
-                        <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                      </button>
-                    </nav>
-                  </div>
+                      );
+                    })}
                 </div>
               </div>
             </>
           )}
         </div>
 
-        {showExistingOficioModal && (
-          <div className="fixed inset-0 overflow-y-auto z-50">
+        {/* Paginação */}
+        {!isLoading && filteredOficios.length > 0 && (
+          <div className="mt-8 flex items-center justify-between py-4 px-2 bg-white rounded-lg shadow">
+            <div>
+              <p className="text-xs text-slate-500">
+                Mostrando <span className="font-medium">{((currentPage - 1) * itemsPerPage) + 1}</span> até{' '}
+                <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredOficios.length)}</span> de{' '}
+                <span className="font-medium">{filteredOficios.length}</span> resultados
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                title="Página anterior"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                title="Próxima página"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showExistingOficioModal && (
+        <div className="fixed inset-0 overflow-y-auto z-50">
             <div className="flex min-h-screen items-center justify-center p-4">
               <div className="fixed inset-0 bg-black bg-opacity-25 transition-opacity" onClick={() => setShowExistingOficioModal(false)} />
               
@@ -1346,8 +1649,88 @@ const ListaAnualOficios: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Modal de Mover Ofício */}
+        {showMoveModal && oficioToMove && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-purple-100">
+                  <FolderInput className="h-6 w-6 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-800">Mover Ofício</h2>
+                  <p className="text-sm text-slate-500">Ofício Nº {oficioToMove.numero_oficio}</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Selecione a pasta de destino:
+                </label>
+                <select
+                  value={targetYear}
+                  onChange={(e) => setTargetYear(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="">Selecione um ano...</option>
+                  {availableYears
+                    .filter(year => year !== ano)
+                    .sort((a, b) => {
+                      const nameA = getFolderName(a).toLowerCase();
+                      const nameB = getFolderName(b).toLowerCase();
+                      return nameA.localeCompare(nameB); // Ordenar A-Z
+                    })
+                    .map(year => (
+                      <option key={year} value={year}>
+                        {getFolderName(year)}
+                      </option>
+                    ))}
+                  <option value="novo">+ Criar nova pasta</option>
+                </select>
+
+                {targetYear === 'novo' && (
+                  <input
+                    type="text"
+                    value={newYearInput}
+                    placeholder="Digite o ano (ex: 2026)"
+                    onChange={(e) => setNewYearInput(e.target.value)}
+                    autoFocus
+                    className="w-full mt-3 px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                )}
+              </div>
+
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-purple-800">
+                  <strong>Atenção:</strong> O ofício será movido de <strong>{getFolderName(ano)}</strong> para <strong>{targetYear === 'novo' ? (newYearInput || '...') : (targetYear ? getFolderName(targetYear) : '...')}</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowMoveModal(false);
+                    setOficioToMove(null);
+                    setTargetYear('');
+                    setNewYearInput('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleMoveOficio}
+                  disabled={!targetYear || (targetYear === 'novo' && !newYearInput)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Mover Ofício
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
   );
 };
 

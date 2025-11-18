@@ -32,6 +32,8 @@ import { RegisterInvite } from './pages/RegisterInvite';
 import { FormularioPublico } from './pages/FormularioPublico';
 import GerenciarFormulario from './pages/app/configuracoes/GerenciarFormulario';
 import { PublicAtendimento } from './pages/public/atendimento';
+import { CadastroMoradores } from './pages/CadastroMoradores';
+import { GerenciarEmpreendimentos } from './pages/GerenciarEmpreendimentos';
 import Oficios from './pages/Documents/Oficios';
 import ProjetosLei from './pages/Documents/ProjetosLei';
 import NovoProjetoParte1 from './pages/Documents/ProjetosLei/NovoProjetoParte1';
@@ -49,6 +51,7 @@ import EmendasParlamentares from './pages/Documents/EmendasParlamentares';
 import EmendaParlamentarForm from './pages/Documents/EmendasParlamentares/Form';
 import NovoOficio from './pages/Documents/Oficios/NovoOficio';
 import ListaAnualOficios from './pages/Documents/Oficios/ListaAnual';
+import EditarOficio from './pages/Documents/Oficios/EditarOficio';
 import { PlanosPage } from './pages/app/Planos';
 import { Strategy } from './pages/Strategy';
 import WhatsAppPage from './pages/WhatsApp/index';
@@ -75,6 +78,18 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   // Verifica se o usuário está autenticado e tem nível de acesso admin
   if (!user || user.nivel_acesso?.toLowerCase() !== 'admin') {
     console.log('[AdminRoute] Acesso negado - Redirecionando para /app');
+    return <Navigate to="/app" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function RestrictedRoute({ children, blockedRoles = [] }: { children: React.ReactNode; blockedRoles?: string[] }) {
+  const { user } = useAuth();
+  
+  // Verifica se o usuário tem um nível de acesso bloqueado
+  if (user && blockedRoles.includes(user.nivel_acesso?.toLowerCase() || '')) {
+    console.log('[RestrictedRoute] Acesso negado para nível:', user.nivel_acesso);
     return <Navigate to="/app" replace />;
   }
 
@@ -263,9 +278,9 @@ export function AppRoutes() {
           <Route path="detalhe/:tableName/:numero" element={<DetalheCandidatoPage />} />
         </Route>
         <Route path="documentos">
-          <Route index element={<Documents />} />
-          <Route path="novo" element={<NewDocument />} />
-          <Route path=":id/editar" element={<EditDocument />} />
+          <Route index element={<RestrictedRoute blockedRoles={['visitante']}><Documents /></RestrictedRoute>} />
+          <Route path="novo" element={<RestrictedRoute blockedRoles={['visitante']}><NewDocument /></RestrictedRoute>} />
+          <Route path=":id/editar" element={<RestrictedRoute blockedRoles={['visitante']}><EditDocument /></RestrictedRoute>} />
           <Route path="demandas-ruas">
             <Route index element={<AdminRoute><DemandasRuas /></AdminRoute>} />
             <Route path="nova" element={<AdminRoute><EditarDemanda /></AdminRoute>} />
@@ -275,10 +290,11 @@ export function AppRoutes() {
             <Route path="configuracoes" element={<AdminRoute><ConfiguracoesDemanda /></AdminRoute>} />
           </Route>
           <Route path="oficios">
-            <Route index element={<Oficios />} />
-            <Route path="novo" element={<NovoOficio />} />
-            <Route path=":ano" element={<ListaAnualOficios />} />
-            <Route path=":ano/:id/editar" element={<NovoOficio />} />
+            <Route index element={<RestrictedRoute blockedRoles={['visitante']}><Oficios /></RestrictedRoute>} />
+            <Route path="novo" element={<RestrictedRoute blockedRoles={['visitante']}><NovoOficio /></RestrictedRoute>} />
+            <Route path=":ano" element={<RestrictedRoute blockedRoles={['visitante']}><ListaAnualOficios /></RestrictedRoute>} />
+            <Route path="editar/:uid" element={<RestrictedRoute blockedRoles={['visitante']}><EditarOficio /></RestrictedRoute>} />
+            <Route path=":ano/:id/editar" element={<RestrictedRoute blockedRoles={['visitante']}><NovoOficio /></RestrictedRoute>} />
           </Route>
           <Route path="projetos-lei">
             <Route index element={<AdminRoute><ProjetosLei /></AdminRoute>} />
@@ -348,6 +364,26 @@ export function AppRoutes() {
               <CheckoutPage />
             </Suspense>
           </PrivateRoute>
+        } 
+      />
+
+      {/* Rota Pública - Cadastro de Moradores */}
+      <Route 
+        path="/cadastro-moradores" 
+        element={
+          <PublicLayout>
+            <CadastroMoradores />
+          </PublicLayout>
+        } 
+      />
+
+      {/* Rota Pública - Gerenciar Empreendimentos */}
+      <Route 
+        path="/gerenciar-empreendimentos" 
+        element={
+          <PublicLayout>
+            <GerenciarEmpreendimentos />
+          </PublicLayout>
         } 
       />
 

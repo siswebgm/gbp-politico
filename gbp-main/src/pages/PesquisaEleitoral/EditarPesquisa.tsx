@@ -272,7 +272,10 @@ export function EditarPesquisa() {
         if (updateError) throw updateError;
         
         // Remover perguntas e candidatos existentes para reinserção
-        await Promise.all([
+        console.log('=== DELETANDO perguntas e candidatos existentes ===');
+        console.log('Pesquisa ID:', id);
+        
+        const [deleteResultPerguntas, deleteResultCandidatos] = await Promise.all([
           supabaseClient
             .from('ps_gbp_perguntas')
             .delete()
@@ -283,8 +286,20 @@ export function EditarPesquisa() {
             .eq('pesquisa_uid', id)
         ]);
         
-        // Redireciona para a lista de pesquisas após salvar
-        navigate('/app/pesquisas');
+        if (deleteResultPerguntas.error) {
+          console.error('Erro ao deletar perguntas:', deleteResultPerguntas.error);
+          throw deleteResultPerguntas.error;
+        }
+        
+        if (deleteResultCandidatos.error) {
+          console.error('Erro ao deletar candidatos:', deleteResultCandidatos.error);
+          throw deleteResultCandidatos.error;
+        }
+        
+        console.log('Perguntas deletadas com sucesso');
+        console.log('Candidatos deletados com sucesso');
+        
+        // NÃO redireciona aqui - precisa salvar perguntas e candidatos primeiro
       } else {
         // Criar nova pesquisa
         const { data: novaPesquisa, error } = await supabaseClient
@@ -297,14 +312,6 @@ export function EditarPesquisa() {
         if (!novaPesquisa?.uid) throw new Error('Falha ao criar a pesquisa');
         
         pesquisaId = novaPesquisa.uid;
-        // Exibe notificação de sucesso
-        toast({
-          title: 'Sucesso',
-          description: 'Pesquisa criada e publicada com sucesso!',
-          variant: 'success'
-        });
-        // Redireciona para a lista de pesquisas
-        navigate('/app/pesquisas');
       }
 
       // 3. Salvar perguntas
@@ -586,6 +593,19 @@ export function EditarPesquisa() {
           }
         }
       }
+
+      // Sucesso - mostrar toast e redirecionar
+      toast({
+        title: 'Sucesso',
+        description: id && id !== 'nova' 
+          ? 'Pesquisa atualizada com sucesso!' 
+          : 'Pesquisa criada e publicada com sucesso!',
+        variant: 'success'
+      });
+      
+      // Redirecionar para a lista de pesquisas
+      navigate('/app/pesquisas');
+      
     } catch (error) {
       console.error('Erro ao salvar pesquisa:', error);
       toast({
@@ -1133,27 +1153,8 @@ export function EditarPesquisa() {
   };
 
   const handleSavePesquisa = async () => {
-    try {
-      setLoading(true);
-      await salvarPesquisa();
-      // Exibe notificação de sucesso após publicar
-      toast({
-        title: 'Sucesso',
-        description: 'Pesquisa publicada com sucesso! Sua pesquisa está ativa e disponível para os participantes.',
-        variant: 'success',
-        duration: 5000
-      });
-    } catch (error) {
-      console.error('Erro ao salvar pesquisa:', error);
-      toast({
-        title: 'Erro',
-        description: 'Ocorreu um erro ao salvar a pesquisa.',
-        variant: 'warning',
-        duration: 5000
-      });
-    } finally {
-      setLoading(false);
-    }
+    // A função salvarPesquisa já gerencia loading, toast e navegação
+    await salvarPesquisa();
   };
 
   if (loading) {
