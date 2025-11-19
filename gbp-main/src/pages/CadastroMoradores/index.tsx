@@ -29,6 +29,7 @@ export function CadastroMoradores() {
   const [searchParams] = useSearchParams();
   const empreendimentoParam = searchParams.get('empreendimento');
   const tokenParam = searchParams.get('token');
+  const empreendimentoUidParam = searchParams.get('empreendimento_uid');
   
   const [formData, setFormData] = useState<FormData>({
     empreendimento_uid: '',
@@ -73,10 +74,10 @@ export function CadastroMoradores() {
 
   // Carregar empreendimentos ao montar o componente
   useEffect(() => {
-    if (acessoAutorizado) {
+    if (acessoAutorizado || empreendimentoParam || empreendimentoUidParam) {
       carregarEmpreendimentos();
     }
-  }, [acessoAutorizado]);
+  }, [acessoAutorizado, empreendimentoParam, empreendimentoUidParam]);
 
   // Validar token da URL
   useEffect(() => {
@@ -109,21 +110,36 @@ export function CadastroMoradores() {
     validarTokenUrl();
   }, [tokenParam]);
 
-  // Processar parâmetro de empreendimento da URL
+  // Processar parâmetro de empreendimento da URL (nome)
   useEffect(() => {
     if (empreendimentoParam && empreendimentos.length > 0) {
       // Buscar empreendimento pelo nome (case-insensitive)
       const empreendimentoEncontrado = empreendimentos.find(
-        emp => emp.nome.toLowerCase() === empreendimentoParam.toLowerCase()
+        emp => emp.nome.toLowerCase().trim() === empreendimentoParam.toLowerCase().trim()
       );
       
       if (empreendimentoEncontrado) {
         setFormData(prev => ({ ...prev, empreendimento_uid: empreendimentoEncontrado.uid }));
         setEmpreendimentoBloqueado(true);
-        console.log('🏢 Empreendimento pré-selecionado:', empreendimentoEncontrado.nome);
+        console.log('🏢 Empreendimento pré-selecionado (nome):', empreendimentoEncontrado.nome);
       }
     }
   }, [empreendimentoParam, empreendimentos]);
+
+  // Processar parâmetro de empreendimento_uid da URL (UID)
+  useEffect(() => {
+    if (empreendimentoUidParam && empreendimentos.length > 0) {
+      const empreendimentoEncontrado = empreendimentos.find(
+        emp => emp.uid === empreendimentoUidParam
+      );
+      
+      if (empreendimentoEncontrado) {
+        setFormData(prev => ({ ...prev, empreendimento_uid: empreendimentoEncontrado.uid }));
+        setEmpreendimentoBloqueado(true);
+        console.log('🏢 Empreendimento pré-selecionado (UID):', empreendimentoEncontrado.nome);
+      }
+    }
+  }, [empreendimentoUidParam, empreendimentos]);
 
   // Carregar blocos quando selecionar empreendimento
   useEffect(() => {
@@ -326,8 +342,8 @@ export function CadastroMoradores() {
     }
   };
 
-  // Se não tem acesso autorizado e não tem token na URL, mostrar tela de código
-  if (!acessoAutorizado && !tokenParam) {
+  // Se não tem acesso autorizado, não tem token e não vierem uid+nome do empreendimento na URL, mostrar tela de código
+  if (!acessoAutorizado && !tokenParam && !(empreendimentoParam && empreendimentoUidParam)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4">
         <Card className="w-full max-w-md p-8 dark:bg-gray-800 shadow-2xl">

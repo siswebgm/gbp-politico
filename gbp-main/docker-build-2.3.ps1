@@ -15,5 +15,5 @@ docker build `
   --build-arg VITE_APP_URL='https://seu-site.com' `
   --build-arg VITE_STRIPE_PUBLIC_KEY='pk_test_51S2Pcs6ASvUfmfy6Nty14Sxrf9Q88peX5xe31Aa4uNXUbNr8c9Um7JPgFvULx6ao60rj3IHPMiqltWzRu0qr9tQJ00z1WZvLEw' `
   -f Dockerfile.env `
-  -t siswebgm/gbp-politico:2.3 `
+  -t siswebgm/gbp-politico:2.4 `
   .

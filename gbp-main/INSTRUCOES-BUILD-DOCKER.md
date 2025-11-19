@@ -52,11 +52,11 @@ docker build `
   --build-arg VITE_APP_URL="$env:VITE_APP_URL" `
   --build-arg VITE_STRIPE_PUBLIC_KEY="$env:VITE_STRIPE_PUBLIC_KEY" `
   -f Dockerfile.env `
-  -t siswebgm/gbp-politico:2.3 `
+  -t siswebgm/gbp-politico:2.4 `
   .
 
 # 3. Push da imagem
-docker push siswebgm/gbp-politico:2.3
+docker push siswebgm/gbp-politico:2.4
 ```
 
 ## ✅ Verificação
@@ -77,7 +77,7 @@ docker images siswebgm/gbp-politico
 2. **Injeta no build**: As variáveis são passadas como build args
 3. **Build do Vite**: O Vite compila o código com as variáveis injetadas
 4. **Cria imagem Nginx**: Imagem final com os arquivos estáticos
-5. **Push para Docker Hub**: Envia para o repositório siswebgm/gbp-politico:2.3
+5. **Push para Docker Hub**: Envia para o repositório siswebgm/gbp-politico:2.4
 
 ## 🔒 Segurança
 
@@ -89,7 +89,7 @@ docker images siswebgm/gbp-politico
 ## 📦 Resultado Esperado
 
 ```
-siswebgm/gbp-politico:2.3
+siswebgm/gbp-politico:2.4
 ```
 
 Imagem disponível em: https://hub.docker.com/r/siswebgm/gbp-politico
