@@ -60,6 +60,24 @@ export const moradoresService = {
     }
   },
 
+  async atualizarMorador(uid: string, data: { nome_responsavel: string; telefone: string }) {
+    try {
+      const { error } = await supabaseClient
+        .from('gbp_moradores')
+        .update({
+          nome_responsavel: data.nome_responsavel,
+          telefone: data.telefone
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Erro ao atualizar morador:', error);
+      throw error;
+    }
+  },
+
   async listarMoradores(empreendimento?: string) {
     try {
       let query = supabaseClient
@@ -115,7 +133,6 @@ export const moradoresService = {
           uid,
           nome_responsavel,
           telefone,
-          email,
           created_at,
           apartamento:apartamento_uid (
             uid,
@@ -137,16 +154,12 @@ export const moradoresService = {
             whatsapp
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(200); // evita trazer volume excessivo para o grid
 
       if (error) {
         console.error('Erro na query de moradores:', error);
         throw error;
-      }
-
-      console.log('Query executada com sucesso. Total de moradores:', data?.length);
-      if (data && data.length > 0) {
-        console.log('Exemplo de morador com estrutura completa:', JSON.stringify(data[0], null, 2));
       }
 
       return data || [];

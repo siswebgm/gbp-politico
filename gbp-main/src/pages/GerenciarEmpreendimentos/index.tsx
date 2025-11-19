@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Building2, Plus, Users, Eye, Edit, Trash2, Home, MapPin, Phone, Mail, FileSpreadsheet, FileText, Link, Copy, CheckCircle } from 'lucide-react';
+import { useToast } from '../../components/ui/use-toast';
+import { Building2, Plus, Users, Eye, Edit, Trash2, Home, MapPin, Phone, Mail, FileSpreadsheet, FileText, Link, Copy, CheckCircle, AlertCircle, Grid, List } from 'lucide-react';
 import { empreendimentosService, Empreendimento, Bloco, Apartamento } from '../../services/empreendimentosService';
 import { moradoresService } from '../../services/moradoresService';
 import { cadastroTokensService } from '../../services/cadastroTokensService';
@@ -36,12 +38,25 @@ interface Morador {
 }
 
 export function GerenciarEmpreendimentos() {
+  const { empreendimentoSlug } = useParams<{ empreendimentoSlug?: string }>();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('moradores');
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
   const [blocos, setBlocos] = useState<Bloco[]>([]);
   const [apartamentos, setApartamentos] = useState<Apartamento[]>([]);
   const [moradores, setMoradores] = useState<Morador[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Estados para controle de acesso
+  const [acessoAutorizado, setAcessoAutorizado] = useState(false);
+  const [codigoAcesso, setCodigoAcesso] = useState('');
+  const [erroAcesso, setErroAcesso] = useState(false);
+  
+  // Código de acesso fixo (pode ser alterado ou vir de variável de ambiente)
+  const CODIGO_ACESSO_CORRETO = '8433135';
+
+  // Estado para controlar visualização (grid ou lista)
+  const [visualizacao, setVisualizacao] = useState<'grid' | 'lista'>('grid');
 
   // Estados para formulários
   const [showEmpreendimentoForm, setShowEmpreendimentoForm] = useState(false);
@@ -108,7 +123,7 @@ export function GerenciarEmpreendimentos() {
 
   // Estados de paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
-  const itensPorPagina = 10;
+  const itensPorPagina = 12;
 
   // Estados para modal de dependentes
   const [modalDependentes, setModalDependentes] = useState(false);
@@ -116,9 +131,61 @@ export function GerenciarEmpreendimentos() {
   const [novoDependente, setNovoDependente] = useState({ nome: '', parentesco: '', whatsapp: '' });
   const [loadingDependente, setLoadingDependente] = useState(false);
 
+  // Estados para edição de morador
+  const [modalEditarMorador, setModalEditarMorador] = useState(false);
+  const [moradorEmEdicao, setMoradorEmEdicao] = useState<Morador | null>(null);
+  const [loadingEditarMorador, setLoadingEditarMorador] = useState(false);
+
+  // Verificar se precisa de código de acesso
   useEffect(() => {
-    carregarDados();
-  }, [activeTab]);
+    // Se tem slug na URL, libera acesso automaticamente
+    if (empreendimentoSlug) {
+      setAcessoAutorizado(true);
+    }
+  }, [empreendimentoSlug]);
+
+  useEffect(() => {
+    if (acessoAutorizado) {
+      carregarDados();
+    }
+  }, [activeTab, acessoAutorizado]);
+
+  // Aplicar filtro de empreendimento pela URL
+  useEffect(() => {
+    if (empreendimentoSlug && empreendimentos.length > 0) {
+      console.log('🔍 Slug da URL:', empreendimentoSlug);
+      
+      // Extrair UID do slug (formato: uid-nome-do-empreendimento)
+      const uidFromSlug = empreendimentoSlug.split('-')[0];
+      console.log('🔑 UID extraído:', uidFromSlug);
+      console.log('📋 Empreendimentos disponíveis:', empreendimentos.map(e => ({ uid: e.uid, nome: e.nome })));
+      
+      // Tentar encontrar por UID exato
+      let empreendimento = empreendimentos.find(emp => emp.uid === uidFromSlug);
+      
+      // Se não encontrar, tentar por UID que começa com o slug
+      if (!empreendimento) {
+        empreendimento = empreendimentos.find(emp => emp.uid.startsWith(uidFromSlug));
+      }
+      
+      // Se ainda não encontrar, tentar match parcial do UID
+      if (!empreendimento) {
+        empreendimento = empreendimentos.find(emp => emp.uid.includes(uidFromSlug));
+      }
+      
+      console.log('✅ Empreendimento encontrado:', empreendimento);
+      
+      if (empreendimento) {
+        console.log('🎯 Aplicando filtro para:', empreendimento.nome);
+        setFiltros(prev => ({
+          ...prev,
+          empreendimento: empreendimento.uid
+        }));
+      } else {
+        console.warn('⚠️ Empreendimento não encontrado com UID:', uidFromSlug);
+      }
+    }
+  }, [empreendimentoSlug, empreendimentos]);
 
   // Resetar página ao mudar filtros
   useEffect(() => {
@@ -232,6 +299,27 @@ export function GerenciarEmpreendimentos() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatarTelefoneEdicao = (valor: string) => {
+    const apenasDigitos = valor.replace(/\D/g, '').slice(0, 11); // limita a 11 dígitos
+
+    if (apenasDigitos.length <= 10) {
+      return apenasDigitos.replace(/(\d{0,2})(\d{0,4})(\d{0,4})/, (match, d1, d2, d3) => {
+        if (!d1) return '';
+        if (!d2) return `(${d1}`;
+        if (!d3) return `(${d1}) ${d2}`;
+        return `(${d1}) ${d2}-${d3}`;
+      });
+    }
+
+    // 11 dígitos (celular)
+    return apenasDigitos.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, (match, d1, d2, d3) => {
+      if (!d1) return '';
+      if (!d2) return `(${d1}`;
+      if (!d3) return `(${d1}) ${d2}`;
+      return `(${d1}) ${d2}-${d3}`;
+    });
   };
 
   const handleCriarEmpreendimento = async (e: React.FormEvent) => {
@@ -440,6 +528,20 @@ export function GerenciarEmpreendimentos() {
     setUsarEmpreendimentoExistente(false);
   };
 
+  // Clique para editar morador
+  const abrirModalEditarMorador = (morador: Morador) => {
+    setMoradorEmEdicao({
+      ...morador,
+      telefone: formatarTelefoneEdicao(morador.telefone || ''),
+    });
+    setModalEditarMorador(true);
+  };
+
+  const fecharModalEditarMorador = () => {
+    setModalEditarMorador(false);
+    setMoradorEmEdicao(null);
+  };
+
   const abrirModalDependentes = (morador: Morador) => {
     setMoradorSelecionado(morador);
     setModalDependentes(true);
@@ -495,6 +597,36 @@ export function GerenciarEmpreendimentos() {
     }
   };
 
+  const handleSalvarEdicaoMorador = async () => {
+    if (!moradorEmEdicao) return;
+
+    setLoadingEditarMorador(true);
+    try {
+      await moradoresService.atualizarMorador(moradorEmEdicao.uid, {
+        nome_responsavel: moradorEmEdicao.nome_responsavel,
+        telefone: moradorEmEdicao.telefone.replace(/\D/g, ''),
+      });
+
+      toast({
+        title: 'Morador atualizado',
+        description: 'Os dados foram salvos com sucesso.',
+        variant: 'success',
+      });
+      setModalEditarMorador(false);
+      setMoradorEmEdicao(null);
+      carregarDados();
+    } catch (err) {
+      console.error('Erro ao atualizar morador:', err);
+      toast({
+        title: 'Erro ao atualizar morador',
+        description: 'Não foi possível salvar as alterações. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingEditarMorador(false);
+    }
+  };
+
   const handleGerarLink = async () => {
     if (!filtros.empreendimento) {
       alert('Selecione um empreendimento primeiro!');
@@ -527,6 +659,39 @@ export function GerenciarEmpreendimentos() {
     navigator.clipboard.writeText(linkGerado);
     setLinkCopiado(true);
     setTimeout(() => setLinkCopiado(false), 3000);
+  };
+
+  // Função para gerar slug do empreendimento
+  const gerarSlugEmpreendimento = (emp: Empreendimento) => {
+    const nomeSlug = emp.nome
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
+      .trim()
+      .replace(/\s+/g, '-'); // Substitui espaços por hífen
+    
+    return `${emp.uid}-${nomeSlug}`;
+  };
+
+  // Função para copiar link direto do empreendimento
+  const copiarLinkEmpreendimento = (emp: Empreendimento) => {
+    const slug = gerarSlugEmpreendimento(emp);
+    const url = `${window.location.origin}/gerenciar-empreendimentos/${slug}`;
+    navigator.clipboard.writeText(url);
+    alert(`Link copiado: ${url}`);
+  };
+
+  // Função para validar código de acesso
+  const handleValidarCodigo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (codigoAcesso === CODIGO_ACESSO_CORRETO) {
+      setAcessoAutorizado(true);
+      setErroAcesso(false);
+    } else {
+      setErroAcesso(true);
+      setCodigoAcesso('');
+    }
   };
 
   const exportarParaExcel = () => {
@@ -716,47 +881,139 @@ export function GerenciarEmpreendimentos() {
     };
   };
 
+  // Se não tem acesso autorizado e não tem slug na URL, mostrar tela de código
+  if (!acessoAutorizado && !empreendimentoSlug) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md p-8 dark:bg-gray-800 shadow-2xl">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
+              <Building2 className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              Acesso Restrito
+            </h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Digite o código de acesso para continuar
+            </p>
+          </div>
+
+          <form onSubmit={handleValidarCodigo} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Código de Acesso
+              </label>
+              <input
+                type="password"
+                value={codigoAcesso}
+                onChange={(e) => {
+                  setCodigoAcesso(e.target.value);
+                  setErroAcesso(false);
+                }}
+                placeholder="Digite o código"
+                className={`w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  erroAcesso ? 'border-red-500' : 'border-gray-300'
+                }`}
+                autoFocus
+              />
+              {erroAcesso && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  Código incorreto. Tente novamente.
+                </p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
+            >
+              Acessar
+            </Button>
+          </form>
+
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <p className="text-xs text-blue-800 dark:text-blue-300 text-center">
+              💡 Para acessar um empreendimento específico, use o link direto fornecido pelo administrador
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-4 sm:py-6 md:py-8 px-3 sm:px-4 md:px-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-blue-600 rounded-full mb-3 sm:mb-4">
-            <Building2 className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2 px-2">
-            Gerenciar Empreendimentos
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 px-4">
-            Cadastre e visualize empreendimentos, blocos, apartamentos e moradores
-          </p>
-        </div>
+        {/* Header + Tabs */}
+        <div className="mb-6 sm:mb-8">
+          <div className="relative overflow-hidden rounded-2xl bg-white/80 dark:bg-gray-900/70 shadow-lg border border-blue-100/70 dark:border-gray-700 px-4 sm:px-8 pt-5 sm:pt-6 pb-4 flex flex-col gap-4 sm:gap-5">
+            {/* Ícone + título */}
+            <div className="flex items-center gap-4 w-full">
+              <div className="relative">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                  <Building2 className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+                </div>
+                <span className="absolute -bottom-1 -right-1 inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-semibold shadow-md">
+                  GM
+                </span>
+              </div>
 
-        {/* Tabs */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3 mb-6 sm:justify-center px-2 sm:px-0">
-          <button
-            onClick={() => setActiveTab('moradores')}
-            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm sm:text-base ${
-              activeTab === 'moradores'
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
-            }`}
-          >
-            <Users className="w-4 h-4 flex-shrink-0" />
-            <span>Moradores</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('cadastro')}
-            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm sm:text-base ${
-              activeTab === 'cadastro'
-                ? 'bg-green-600 text-white shadow-lg'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
-            }`}
-          >
-            <Plus className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Cadastro Completo</span>
-            <span className="sm:hidden">Cadastro</span>
-          </button>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white leading-tight">
+                  Gerenciar Empreendimentos
+                </h1>
+                <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  Cadastre e visualize empreendimentos, blocos, apartamentos e moradores em um único painel organizado.
+                </p>
+              </div>
+            </div>
+
+            {/* Badges + Tabs */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full mt-1">
+              {/* Badges de contexto */}
+              <div className="flex flex-wrap justify-center sm:justify-start gap-2 text-xs sm:text-sm">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 border border-blue-100 dark:border-blue-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  Gestão de moradores
+                </span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-200 border border-purple-100 dark:border-purple-700">
+                  Blocos & apartamentos
+                </span>
+              </div>
+
+              {/* Tabs integradas ao header */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-nowrap gap-2 sm:gap-3 w-full sm:w-auto">
+                <button
+                  onClick={() => setActiveTab('moradores')}
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm sm:text-base shadow-sm border ${
+                    activeTab === 'moradores'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  <Users className="w-4 h-4 flex-shrink-0" />
+                  <span>Moradores</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('cadastro')}
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 text-sm sm:text-base shadow-sm border ${
+                    activeTab === 'cadastro'
+                      ? 'bg-green-600 text-white border-green-600 shadow-md'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  <Plus className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">Cadastro Completo</span>
+                  <span className="sm:hidden">Cadastro</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Glow de fundo */}
+            <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 blur-3xl" />
+          </div>
         </div>
 
         {/* Content */}
@@ -1022,11 +1279,55 @@ export function GerenciarEmpreendimentos() {
           {/* Moradores */}
           {activeTab === 'moradores' && (
             <div>
+              {/* Alerta quando empreendimento da URL não é encontrado */}
+              {empreendimentoSlug && !filtros.empreendimento && empreendimentos.length > 0 && (
+                <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
+                        Empreendimento não encontrado
+                      </h3>
+                      <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                        O empreendimento da URL "<span className="font-mono">{empreendimentoSlug}</span>" não foi encontrado.
+                        Verifique se o link está correto ou selecione um empreendimento manualmente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                 <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
                   Moradores Cadastrados ({moradoresFiltradosOrdenados.length})
                 </h2>
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+                  {/* Botões de visualização */}
+                  <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <button
+                      onClick={() => setVisualizacao('grid')}
+                      className={`p-2 rounded transition-all ${
+                        visualizacao === 'grid'
+                          ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                      }`}
+                      title="Visualização em Grid"
+                    >
+                      <Grid className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setVisualizacao('lista')}
+                      className={`p-2 rounded transition-all ${
+                        visualizacao === 'lista'
+                          ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                      }`}
+                      title="Visualização em Lista"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
+
                   <Button
                     onClick={exportarParaExcel}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-2"
@@ -1055,16 +1356,32 @@ export function GerenciarEmpreendimentos() {
                   Filtros
                 </h3>
                 <div className="flex flex-wrap gap-2 sm:gap-3">
-                  <select
-                    value={filtros.empreendimento}
-                    onChange={(e) => setFiltros({ ...filtros, empreendimento: e.target.value, bloco: '', apartamento: '' })}
-                    className="flex-1 min-w-[200px] px-3 py-2 text-sm border rounded-lg dark:bg-gray-600 dark:text-white dark:border-gray-500 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Todos Empreendimentos</option>
-                    {empreendimentos.map(emp => (
-                      <option key={emp.uid} value={emp.uid}>{emp.nome}</option>
-                    ))}
-                  </select>
+                  <div className="flex-1 min-w-[200px] flex gap-2">
+                    <select
+                      value={filtros.empreendimento}
+                      onChange={(e) => setFiltros({ ...filtros, empreendimento: e.target.value, bloco: '', apartamento: '' })}
+                      disabled={!!empreendimentoSlug}
+                      className="flex-1 px-3 py-2 text-sm border rounded-lg dark:bg-gray-600 dark:text-white dark:border-gray-500 focus:ring-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Todos Empreendimentos</option>
+                      {empreendimentos.map(emp => (
+                        <option key={emp.uid} value={emp.uid}>{emp.nome}</option>
+                      ))}
+                    </select>
+                    {filtros.empreendimento && !empreendimentoSlug && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emp = empreendimentos.find(e => e.uid === filtros.empreendimento);
+                          if (emp) copiarLinkEmpreendimento(emp);
+                        }}
+                        className="p-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg transition-colors"
+                        title="Copiar link direto deste empreendimento"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
 
                   <select
                     value={filtros.bloco}
@@ -1149,7 +1466,129 @@ export function GerenciarEmpreendimentos() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-4 sm:space-y-6">
+                  {/* Visualização em Grid */}
+                  {visualizacao === 'grid' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {moradoresPaginados.map((morador) => (
+                        <Card key={morador.uid} className="p-6 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                          {/* Header do Card */}
+                          <div className="flex items-start justify-between gap-3 mb-5">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                                {morador.nome_responsavel.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight mb-1 truncate">
+                                  {morador.nome_responsavel}
+                                </h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
+                                  {morador.apartamento?.bloco?.empreendimento?.cidade || 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Ícone discreto para editar morador */}
+                            <button
+                              type="button"
+                              onClick={() => abrirModalEditarMorador(morador)}
+                              className="p-1.5 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                              title="Editar morador (nome e telefone)"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Informações de Contato */}
+                          <div className="space-y-2 mb-4">
+                            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                              <Phone className="w-4 h-4 text-blue-500" />
+                              <span className="font-medium">{morador.telefone}</span>
+                            </div>
+                            {morador.email && (
+                              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                <Mail className="w-4 h-4 text-blue-500" />
+                                <span className="truncate">{morador.email}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Localização */}
+                          <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4 border border-gray-100 dark:border-gray-600">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm text-gray-900 dark:text-white mb-1 truncate">
+                                  {morador.apartamento?.bloco?.empreendimento?.nome || 'N/A'}
+                                </p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Bloco {morador.apartamento?.bloco?.nome || 'N/A'} • Apto {morador.apartamento?.numero || 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dependentes */}
+                          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                  Dependentes ({morador.dependentes?.length || 0})
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => abrirModalDependentes(morador)}
+                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all hover:scale-105 shadow-sm"
+                                title="Adicionar dependente"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            
+                            {morador.dependentes && morador.dependentes.length > 0 ? (
+                              <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                                {morador.dependentes.map((dep) => (
+                                  <div
+                                    key={dep.uid}
+                                    className="p-3 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-sm text-gray-900 dark:text-white truncate">{dep.nome}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">{dep.parentesco}</p>
+                                      </div>
+                                      {dep.whatsapp && (
+                                        <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                          <Phone className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-4">
+                                <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                                  Nenhum dependente cadastrado
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              📅 {new Date(morador.created_at).toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Visualização em Lista */
+                    <div className="space-y-3">
                       {moradoresPaginados.map((morador, index) => {
                         // Verificar se é o primeiro morador ou se mudou de empreendimento
                         const empreendimentoAtual = morador.apartamento?.bloco?.empreendimento?.nome || 'Sem Empreendimento';
@@ -1294,6 +1733,7 @@ export function GerenciarEmpreendimentos() {
                         );
                       })}
                     </div>
+                  )}
 
                     {/* Controles de Paginação */}
                     {totalPaginas > 1 && (
@@ -1379,6 +1819,77 @@ export function GerenciarEmpreendimentos() {
             </div>
           )}
         </Card>
+
+        {/* Modal de Edição de Morador */}
+        {modalEditarMorador && moradorEmEdicao && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Editar Morador
+                </h3>
+                <button
+                  type="button"
+                  onClick={fecharModalEditarMorador}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Nome do Responsável
+                  </label>
+                  <input
+                    type="text"
+                    value={moradorEmEdicao.nome_responsavel}
+                    onChange={e => setMoradorEmEdicao(prev => prev ? { ...prev, nome_responsavel: e.target.value.toUpperCase() } : prev)}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Telefone
+                  </label>
+                  <input
+                    type="tel"
+                    value={moradorEmEdicao.telefone}
+                    onChange={e => {
+                      const formatado = formatarTelefoneEdicao(e.target.value);
+                      setMoradorEmEdicao(prev => prev ? { ...prev, telefone: formatado } : prev);
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
+                    placeholder="(00) 00000-0000"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  type="button"
+                  onClick={fecharModalEditarMorador}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white"
+                  disabled={loadingEditarMorador}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSalvarEdicaoMorador}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                  disabled={loadingEditarMorador}
+                >
+                  {loadingEditarMorador ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal de Dependentes */}
         {modalDependentes && moradorSelecionado && (

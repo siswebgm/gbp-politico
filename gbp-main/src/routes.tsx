@@ -386,6 +386,16 @@ export function AppRoutes() {
           </PublicLayout>
         } 
       />
+      
+      {/* Rota com parâmetro de empreendimento específico */}
+      <Route 
+        path="/gerenciar-empreendimentos/:empreendimentoSlug" 
+        element={
+          <PublicLayout>
+            <GerenciarEmpreendimentos />
+          </PublicLayout>
+        } 
+      />
 
       <Route path="*" element={
         isAuthenticated ? (
