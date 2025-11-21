@@ -12,6 +12,7 @@ interface Dependente {
   nome: string;
   parentesco: string;
   whatsapp?: string;
+  add_grupo: boolean;
 }
 
 interface FormData {
@@ -23,6 +24,7 @@ interface FormData {
   telefone: string;
   email: string;
   dependentes: Dependente[];
+  add_grupo: boolean;
 }
 
 export function CadastroMoradores() {
@@ -39,7 +41,8 @@ export function CadastroMoradores() {
     nome_responsavel: '',
     telefone: '',
     email: '',
-    dependentes: []
+    dependentes: [],
+    add_grupo: true
   });
 
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
@@ -258,7 +261,8 @@ export function CadastroMoradores() {
       id: Date.now().toString(),
       nome: '',
       parentesco: '',
-      whatsapp: ''
+      whatsapp: '',
+      add_grupo: false
     };
     setFormData(prev => ({
       ...prev,
@@ -273,16 +277,16 @@ export function CadastroMoradores() {
     }));
   };
 
-  const atualizarDependente = (id: string, field: keyof Dependente, value: string) => {
+  const atualizarDependente = (id: string, field: keyof Dependente, value: any) => {
     let valorFormatado = value;
 
     // Formatar nome do dependente para maiúsculas
-    if (field === 'nome') {
+    if (field === 'nome' && typeof value === 'string') {
       valorFormatado = value.toUpperCase();
     }
 
     // Formatar WhatsApp com máscara
-    if (field === 'whatsapp') {
+    if (field === 'whatsapp' && typeof value === 'string') {
       valorFormatado = formatarTelefone(value);
     }
 
@@ -311,6 +315,10 @@ export function CadastroMoradores() {
     setLoading(true);
 
     try {
+      const blocoSelecionado = blocos.find(bloco => bloco.uid === formData.bloco_uid);
+      const apartamentoSelecionado = apartamentos.find(apt => apt.uid === formData.apartamento_uid);
+      const empreendimentoSelecionado = empreendimentos.find(emp => emp.uid === formData.empreendimento_uid);
+
       // Chamar serviço de cadastro
       await moradoresService.cadastrarMorador({
         apartamento_uid: formData.apartamento_uid,
@@ -320,8 +328,14 @@ export function CadastroMoradores() {
         dependentes: formData.dependentes.map(dep => ({
           nome: dep.nome,
           parentesco: dep.parentesco,
-          whatsapp: dep.whatsapp ? limparTelefone(dep.whatsapp) : undefined // Salvar WhatsApp sem máscara
-        }))
+          whatsapp: dep.whatsapp ? limparTelefone(dep.whatsapp) : undefined, // Salvar WhatsApp sem máscara
+          add_grupo: dep.add_grupo
+        })),
+        empreendimento_uid: formData.empreendimento_uid,
+        add_grupo: formData.add_grupo,
+        bloco: blocoSelecionado?.nome,
+        apartamento: apartamentoSelecionado?.numero?.toString(),
+        nome_empreendimento: empreendimentoSelecionado?.nome
       });
 
       // Marcar apartamento como ocupado
@@ -851,6 +865,29 @@ export function CadastroMoradores() {
                 />
               </div>
             </div>
+
+            <div className="mt-3 sm:mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, add_grupo: !prev.add_grupo }))}
+                className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300"
+              >
+                <span className="text-right leading-tight">Adicionar ao grupo do WhatsApp</span>
+                <span
+                  className={`inline-flex w-9 h-5 rounded-full border transition-colors duration-200 ${
+                    formData.add_grupo
+                      ? 'bg-purple-600 border-purple-600'
+                      : 'bg-gray-300 dark:bg-gray-600 border-gray-400 dark:border-gray-500'
+                  }`}
+                >
+                  <span
+                    className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 translate-y-0.5 ${
+                      formData.add_grupo ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
           </Card>
 
           {/* Seção: Dependentes/Residentes */}
@@ -902,10 +939,11 @@ export function CadastroMoradores() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                          Nome
+                          Nome *
                         </label>
                         <input
                           type="text"
+                          required
                           value={dependente.nome}
                           onChange={(e) => atualizarDependente(dependente.id, 'nome', e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-600 dark:text-white"
@@ -915,9 +953,10 @@ export function CadastroMoradores() {
 
                       <div>
                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                          Parentesco
+                          Parentesco *
                         </label>
                         <select
+                          required
                           value={dependente.parentesco}
                           onChange={(e) => atualizarDependente(dependente.id, 'parentesco', e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-600 dark:text-white"
@@ -935,16 +974,40 @@ export function CadastroMoradores() {
 
                       <div>
                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                          WhatsApp
+                          WhatsApp *
                         </label>
                         <input
                           type="tel"
+                          required
                           value={dependente.whatsapp}
                           onChange={(e) => atualizarDependente(dependente.id, 'whatsapp', e.target.value)}
                           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-600 dark:text-white"
                           placeholder="(00) 00000-0000"
                         />
                       </div>
+                    </div>
+
+                    <div className="mt-3 sm:mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => atualizarDependente(dependente.id, 'add_grupo', !dependente.add_grupo)}
+                        className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300"
+                      >
+                        <span className="text-right leading-tight">Adicionar ao grupo do WhatsApp</span>
+                        <span
+                          className={`inline-flex w-9 h-5 rounded-full border transition-colors duration-200 ${
+                            dependente.add_grupo
+                              ? 'bg-green-600 border-green-600'
+                              : 'bg-gray-300 dark:bg-gray-600 border-gray-400 dark:border-gray-500'
+                          }`}
+                        >
+                          <span
+                            className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 translate-y-0.5 ${
+                              dependente.add_grupo ? 'translate-x-4' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </span>
+                      </button>
                     </div>
                   </div>
                 ))}

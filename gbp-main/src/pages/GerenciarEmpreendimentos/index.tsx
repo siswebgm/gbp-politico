@@ -561,7 +561,9 @@ export function GerenciarEmpreendimentos() {
 
     setLoadingDependente(true);
     try {
-      await moradoresService.adicionarDependente(moradorSelecionado.uid, {
+      const empreendimentoUid = moradorSelecionado.apartamento?.bloco?.empreendimento?.uid || '';
+
+      await moradoresService.adicionarDependente(moradorSelecionado.uid, empreendimentoUid, {
         nome: novoDependente.nome.toUpperCase(),
         parentesco: novoDependente.parentesco,
         whatsapp: novoDependente.whatsapp ? novoDependente.whatsapp.replace(/\D/g, '') : undefined

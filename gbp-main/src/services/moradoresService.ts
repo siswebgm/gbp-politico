@@ -4,6 +4,7 @@ export interface DependenteData {
   nome: string;
   parentesco: string;
   whatsapp?: string;
+  add_grupo?: boolean;
 }
 
 export interface MoradorData {
@@ -12,6 +13,11 @@ export interface MoradorData {
   telefone: string;
   email?: string;
   dependentes: DependenteData[];
+  empreendimento_uid: string;
+  add_grupo: boolean;
+  bloco?: string;
+  apartamento?: string;
+  nome_empreendimento?: string;
 }
 
 export const moradoresService = {
@@ -25,6 +31,11 @@ export const moradoresService = {
           nome_responsavel: data.nome_responsavel,
           telefone: data.telefone,
           email: data.email || null,
+          gbp_empreendimentos: data.empreendimento_uid,
+          add_grupo: data.add_grupo,
+          bloco: data.bloco || null,
+          apartamento: data.apartamento || null,
+          nome_empreendimento: data.nome_empreendimento || null,
           created_at: new Date().toISOString()
         })
         .select()
@@ -41,6 +52,8 @@ export const moradoresService = {
             nome: dep.nome,
             parentesco: dep.parentesco,
             whatsapp: dep.whatsapp || null,
+            gbp_empreendimentos: data.empreendimento_uid,
+            add_grupo: dep.add_grupo ?? false,
             created_at: new Date().toISOString()
           }));
 
@@ -169,7 +182,7 @@ export const moradoresService = {
     }
   },
 
-  async adicionarDependente(morador_uid: string, dependente: DependenteData) {
+  async adicionarDependente(morador_uid: string, empreendimento_uid: string, dependente: DependenteData) {
     try {
       const { data, error } = await supabaseClient
         .from('gbp_dependentes')
@@ -177,7 +190,9 @@ export const moradoresService = {
           morador_uid,
           nome: dependente.nome,
           parentesco: dependente.parentesco,
-          whatsapp: dependente.whatsapp || null
+          whatsapp: dependente.whatsapp || null,
+          gbp_empreendimentos: empreendimento_uid || null,
+          add_grupo: dependente.add_grupo ?? false
         })
         .select()
         .single();
