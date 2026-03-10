@@ -3,6 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, RefreshCw } from 'lucide-react';
 import InputMask from 'react-input-mask';
 
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import { Button } from '../../components/ui/button';
@@ -38,10 +55,28 @@ type RecentExportRow = {
   data: string;
 };
 
+type AmbienteProducao = {
+  uid: string;
+  label: string;
+  total: number;
+};
+
+type ComparacaoLinhaPoint = {
+  date: string;
+  iso: string;
+  [empresa_uid: string]: any;
+};
+
 function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
+}
+
+function formatShortLabel(input: string, max = 16) {
+  const s = String(input || '').trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, Math.max(0, max - 1))}…`;
 }
 
 function addDays(d: Date, days: number) {
@@ -92,6 +127,12 @@ export function GerenciamentoAmbientes() {
 
   const [recentKind, setRecentKind] = useState<RecentKind>('cadastro');
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+
+  const [loadingComparacao, setLoadingComparacao] = useState(false);
+  const [comparacaoAmbientes, setComparacaoAmbientes] = useState<AmbienteProducao[]>([]);
+
+  const [loadingComparacaoLinha, setLoadingComparacaoLinha] = useState(false);
+  const [comparacaoLinha, setComparacaoLinha] = useState<ComparacaoLinhaPoint[]>([]);
 
   const [ambienteFilterUid, setAmbienteFilterUid] = useState<string>('all');
 
@@ -286,9 +327,77 @@ export function GerenciamentoAmbientes() {
     }
   }, [ambienteFilterUid, companies, period.end, period.start, recentKind]);
 
+  const loadComparacao = useCallback(async () => {
+    if (!companies.length) {
+      setComparacaoAmbientes([]);
+      return;
+    }
+
+    setLoadingComparacao(true);
+    const startIso = period.start.toISOString();
+    const endIso = period.end.toISOString();
+
+    try {
+      const next: AmbienteProducao[] = [];
+
+      await Promise.all(
+        companies.map(async (c) => {
+          const empresa_uid = c.uid;
+          const empresa_label = toTitleCase(c.apelido || c.nome || 'Ambiente');
+
+          if (recentKind === 'cadastro') {
+            const { count } = await supabaseClient
+              .from('gbp_eleitores')
+              .select('*', { count: 'exact', head: true })
+              .eq('empresa_uid', empresa_uid)
+              .gte('created_at', startIso)
+              .lt('created_at', endIso);
+
+            next.push({ uid: empresa_uid, label: empresa_label, total: count || 0 });
+          }
+
+          if (recentKind === 'atendimento') {
+            const { count } = await supabaseClient
+              .from('gbp_atendimentos')
+              .select('*', { count: 'exact', head: true })
+              .eq('empresa_uid', empresa_uid)
+              .gte('created_at', startIso)
+              .lt('created_at', endIso);
+
+            next.push({ uid: empresa_uid, label: empresa_label, total: count || 0 });
+          }
+
+          if (recentKind === 'demanda') {
+            const { count } = await supabaseClient
+              .from('gbp_demandas_ruas')
+              .select('*', { count: 'exact', head: true })
+              .eq('empresa_uid', empresa_uid)
+              .eq('excluido', false)
+              .gte('criado_em', startIso)
+              .lt('criado_em', endIso);
+
+            next.push({ uid: empresa_uid, label: empresa_label, total: count || 0 });
+          }
+        })
+      );
+
+      next.sort((a, b) => b.total - a.total);
+      setComparacaoAmbientes(next);
+    } catch (e) {
+      console.error('[GerenciamentoAmbientes] Erro ao carregar comparação:', e);
+      setComparacaoAmbientes([]);
+    } finally {
+      setLoadingComparacao(false);
+    }
+  }, [companies, period.end, period.start, recentKind]);
+
   useEffect(() => {
     void loadRecent();
   }, [loadRecent]);
+
+  useEffect(() => {
+    void loadComparacao();
+  }, [loadComparacao]);
 
   useEffect(() => {
     setRecentPage(1);
@@ -298,6 +407,159 @@ export function GerenciamentoAmbientes() {
     const totalPages = Math.max(1, Math.ceil(recentItems.length / recentItemsPerPage));
     if (recentPage > totalPages) setRecentPage(totalPages);
   }, [recentItems.length, recentItemsPerPage, recentPage]);
+
+  const comparacaoTotal = useMemo(() => {
+    return comparacaoAmbientes.reduce((acc, cur) => acc + (cur.total || 0), 0);
+  }, [comparacaoAmbientes]);
+
+  const comparacaoPieData = useMemo(() => {
+    const top = comparacaoAmbientes.slice(0, 6);
+    const rest = comparacaoAmbientes.slice(6);
+    const outrosTotal = rest.reduce((acc, cur) => acc + (cur.total || 0), 0);
+    return outrosTotal > 0 ? [...top, { uid: 'outros', label: 'Outros', total: outrosTotal }] : top;
+  }, [comparacaoAmbientes]);
+
+  const comparacaoColors = useMemo(() => {
+    return ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#64748b'];
+  }, []);
+
+  const topComparacaoAmbientes = useMemo(() => {
+    return comparacaoAmbientes.filter((x) => (x.total || 0) > 0).slice(0, 5);
+  }, [comparacaoAmbientes]);
+
+  const comparacaoLinhaHasData = useMemo(() => {
+    if (comparacaoLinha.length === 0 || topComparacaoAmbientes.length === 0) return false;
+    return comparacaoLinha.some((p) => topComparacaoAmbientes.some((env) => Number(p?.[env.uid] || 0) > 0));
+  }, [comparacaoLinha, topComparacaoAmbientes]);
+
+  const loadComparacaoLinha = useCallback(() => {
+    let cancelled = false;
+
+    if (!companies.length || topComparacaoAmbientes.length === 0) {
+      setComparacaoLinha([]);
+      setLoadingComparacaoLinha(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoadingComparacaoLinha(true);
+
+    (async () => {
+      try {
+        const start = startOfDay(period.start);
+        const end = startOfDay(period.end);
+
+        const days: Date[] = [];
+        for (let d = new Date(start); d < end; d = addDays(d, 1)) {
+          days.push(new Date(d));
+        }
+
+        const points: ComparacaoLinhaPoint[] = days.map((d) => {
+          const iso = startOfDay(d).toISOString().slice(0, 10);
+          return {
+            date: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            iso,
+          };
+        });
+
+        const idxByIso = new Map(points.map((p, i) => [p.iso, i] as const));
+
+        const PAGE_SIZE = 1000;
+
+        async function fetchAllTimestamps(empresaUid: string): Promise<string[]> {
+          const timestamps: string[] = [];
+          let from = 0;
+
+          while (true) {
+            if (cancelled) return timestamps;
+
+            if (recentKind === 'cadastro') {
+              const res = await supabaseClient
+                .from('gbp_eleitores')
+                .select('created_at')
+                .eq('empresa_uid', empresaUid)
+                .gte('created_at', start.toISOString())
+                .lt('created_at', end.toISOString())
+                .order('created_at', { ascending: true })
+                .range(from, from + PAGE_SIZE - 1);
+
+              (res.data || []).forEach((r: any) => {
+                if (r?.created_at) timestamps.push(String(r.created_at));
+              });
+
+              if (!res.data || res.data.length < PAGE_SIZE) break;
+            }
+
+            if (recentKind === 'atendimento') {
+              const res = await supabaseClient
+                .from('gbp_atendimentos')
+                .select('created_at')
+                .eq('empresa_uid', empresaUid)
+                .gte('created_at', start.toISOString())
+                .lt('created_at', end.toISOString())
+                .order('created_at', { ascending: true })
+                .range(from, from + PAGE_SIZE - 1);
+
+              (res.data || []).forEach((r: any) => {
+                if (r?.created_at) timestamps.push(String(r.created_at));
+              });
+
+              if (!res.data || res.data.length < PAGE_SIZE) break;
+            }
+
+            if (recentKind === 'demanda') {
+              const res = await supabaseClient
+                .from('gbp_demandas_ruas')
+                .select('criado_em')
+                .eq('empresa_uid', empresaUid)
+                .eq('excluido', false)
+                .gte('criado_em', start.toISOString())
+                .lt('criado_em', end.toISOString())
+                .order('criado_em', { ascending: true })
+                .range(from, from + PAGE_SIZE - 1);
+
+              (res.data || []).forEach((r: any) => {
+                if (r?.criado_em) timestamps.push(String(r.criado_em));
+              });
+
+              if (!res.data || res.data.length < PAGE_SIZE) break;
+            }
+
+            from += PAGE_SIZE;
+          }
+
+          return timestamps;
+        }
+
+        for (const env of topComparacaoAmbientes) {
+          if (cancelled) break;
+
+          const timestamps = await fetchAllTimestamps(env.uid);
+          if (cancelled) break;
+
+          for (const ts of timestamps) {
+            const iso = startOfDay(new Date(ts)).toISOString().slice(0, 10);
+            const rowIdx = idxByIso.get(iso);
+            if (rowIdx === undefined) continue;
+            points[rowIdx][env.uid] = Number(points[rowIdx][env.uid] || 0) + 1;
+          }
+        }
+
+        if (!cancelled) setComparacaoLinha(points);
+      } catch (e) {
+        console.error('[GerenciamentoAmbientes] Erro ao carregar comparação (linha):', e);
+        if (!cancelled) setComparacaoLinha([]);
+      } finally {
+        setLoadingComparacaoLinha(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setLoadingComparacaoLinha(false);
+    };
+  }, [companies.length, period.end, period.start, recentKind, topComparacaoAmbientes]);
 
   useEffect(() => {
     const el = recentScrollRef.current;
@@ -348,6 +610,10 @@ export function GerenciamentoAmbientes() {
       el.removeEventListener('touchmove', onTouchMove as any);
     };
   }, [recentItems.length, recentKind]);
+
+  useEffect(() => {
+    return loadComparacaoLinha();
+  }, [loadComparacaoLinha]);
 
   const recentTotalPages = useMemo(() => {
     return Math.max(1, Math.ceil(recentItems.length / recentItemsPerPage));
@@ -708,6 +974,174 @@ export function GerenciamentoAmbientes() {
 
         {!loadingRecent && recentItems.length === 0 && (
           <div className="py-6 text-center text-sm text-slate-500 dark:text-gray-400">Nenhum registro encontrado no período.</div>
+        )}
+
+        {(loadingComparacao || comparacaoTotal > 0) && (
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-3 md:p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Comparação entre ambientes</h3>
+                <div className="mt-1 text-sm text-slate-500 dark:text-gray-400">
+                  Ranking de quem mais produziu no período ({recentKind === 'cadastro' ? 'Cadastros' : recentKind === 'atendimento' ? 'Atendimentos' : 'Demandas'})
+                </div>
+                {ambienteFilterUid !== 'all' && (
+                  <div className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-300">
+                    Dica: para comparar ambientes, use “Todos os ambientes”.
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 mt-2 sm:mt-0">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-gray-800 dark:text-gray-200">
+                  Total: {new Intl.NumberFormat('pt-BR').format(comparacaoTotal)}
+                </span>
+              </div>
+            </div>
+
+            {loadingComparacao ? (
+              <div className="mt-4 text-sm text-slate-500 dark:text-gray-400">Carregando comparação...</div>
+            ) : (
+              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="h-[360px] w-full rounded-lg border border-slate-200 p-3 dark:border-gray-700">
+                  <div className="text-sm font-bold text-slate-700 dark:text-gray-200">Ranking</div>
+                  <div className="mt-2 h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={comparacaoAmbientes.slice(0, 12).map((x) => ({
+                          ...x,
+                          shortLabel: formatShortLabel(x.label, 14),
+                        }))}
+                        margin={{ top: 14, right: 10, left: 10, bottom: 70 }}
+                      >
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
+                        <XAxis
+                          dataKey="shortLabel"
+                          interval={0}
+                          angle={-35}
+                          textAnchor="end"
+                          height={70}
+                          tick={{ fontSize: 11, fill: '#64748b' }}
+                          axisLine={{ stroke: '#e2e8f0' }}
+                          tickLine={{ stroke: '#e2e8f0' }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          tick={{ fontSize: 11, fill: '#64748b' }}
+                          axisLine={{ stroke: '#e2e8f0' }}
+                          tickLine={{ stroke: '#e2e8f0' }}
+                        />
+                        <Tooltip
+                          formatter={(value: any) => [new Intl.NumberFormat('pt-BR').format(Number(value || 0)), 'Total']}
+                          labelFormatter={(label: any, payload: any) => {
+                            const full = payload?.[0]?.payload?.label;
+                            return full ? String(full) : String(label || '');
+                          }}
+                        />
+                        <Bar dataKey="total" radius={[8, 8, 0, 0]}>
+                          {comparacaoAmbientes.slice(0, 12).map((_, idx) => (
+                            <Cell key={`bar-cell-${idx}`} fill={comparacaoColors[idx % comparacaoColors.length]} />
+                          ))}
+                          <LabelList
+                            dataKey="total"
+                            position="top"
+                            formatter={(v: any) => new Intl.NumberFormat('pt-BR').format(Number(v || 0))}
+                            className="fill-slate-600"
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="h-[360px] w-full rounded-lg border border-slate-200 p-3 dark:border-gray-700">
+                  <div className="text-sm font-bold text-slate-700 dark:text-gray-200">Proporção</div>
+                  <div className="mt-2 h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={comparacaoPieData}
+                          dataKey="total"
+                          nameKey="label"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={92}
+                          innerRadius={46}
+                          paddingAngle={2}
+                        >
+                          {comparacaoPieData.map((_, idx) => (
+                            <Cell key={`cell-${idx}`} fill={comparacaoColors[idx % comparacaoColors.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: any, name: any) => [new Intl.NumberFormat('pt-BR').format(Number(value || 0)), String(name || '')]}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={44}
+                          formatter={(value: any) => <span className="text-xs text-slate-600 dark:text-gray-300">{String(value || '')}</span>}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {(loadingComparacaoLinha || comparacaoLinhaHasData) && (
+                  <div className="h-[360px] w-full rounded-lg border border-slate-200 p-3 dark:border-gray-700 lg:col-span-2">
+                    <div className="text-sm font-bold text-slate-700 dark:text-gray-200">Evolução no período</div>
+                    {loadingComparacaoLinha ? (
+                      <div className="mt-4 text-sm text-slate-500 dark:text-gray-400">Carregando evolução...</div>
+                    ) : (
+                      <div className="mt-2 h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={comparacaoLinha} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                            <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
+                            <XAxis
+                              dataKey="date"
+                              tick={{ fontSize: 11, fill: '#64748b' }}
+                              axisLine={{ stroke: '#e2e8f0' }}
+                              tickLine={{ stroke: '#e2e8f0' }}
+                            />
+                            <YAxis
+                              allowDecimals={false}
+                              tick={{ fontSize: 11, fill: '#64748b' }}
+                              axisLine={{ stroke: '#e2e8f0' }}
+                              tickLine={{ stroke: '#e2e8f0' }}
+                            />
+                            <Tooltip
+                              formatter={(value: any, name: any) => {
+                                const env = topComparacaoAmbientes.find((e) => e.uid === String(name));
+                                return [new Intl.NumberFormat('pt-BR').format(Number(value || 0)), env?.label || String(name || '')];
+                              }}
+                              labelFormatter={(label: any) => `Data: ${String(label || '')}`}
+                            />
+                            <Legend
+                              formatter={(value: any) => {
+                                const env = topComparacaoAmbientes.find((e) => e.uid === String(value));
+                                return (
+                                  <span className="text-xs text-slate-600 dark:text-gray-300">{env?.label || String(value || '')}</span>
+                                );
+                              }}
+                            />
+                            {topComparacaoAmbientes.map((env, idx) => (
+                              <Line
+                                key={env.uid}
+                                type="monotone"
+                                dataKey={env.uid}
+                                stroke={comparacaoColors[idx % comparacaoColors.length]}
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 4 }}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
