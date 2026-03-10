@@ -5,21 +5,23 @@ import {
   Users,
   CalendarCheck,
   Calendar,
-  BarChart3,
   FileText,
   MessageSquare,
   Map,
   Target,
   UserCircle,
   Settings,
+  Building2,
   ChevronLeft,
   ChevronRight,
   Search,
   AlertTriangle,
 } from 'lucide-react';
+
 import { useAuth } from '../providers/AuthProvider';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { demandasRuasService } from '../services/demandasRuasService';
+import { supabaseClient } from '../lib/supabase';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -162,8 +164,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
   const { company } = useCompanyStore();
   const isAdmin = user?.nivel_acesso === 'admin';
+  const canSeeAmbiente = Number((user as any)?.cota_criar_empresas ?? 0) > 0;
   const [demandasHoje, setDemandasHoje] = useState<number>(0);
-  
+  const [canSwitchCompany, setCanSwitchCompany] = useState(false);
+
   // Planos que têm acesso ao módulo de Demandas Ruas
   const planosComAcessoDemandasRuas = [
     'Inter 2.0', 
@@ -178,20 +182,55 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Set<string>>(new Set(['/app/pesquisas']));
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkCanSwitchCompany() {
+      if (!user?.uid) {
+        if (isMounted) setCanSwitchCompany(false);
+        return;
+      }
+
+      if (user?.adm_empresa === true) {
+        if (isMounted) setCanSwitchCompany(true);
+        return;
+      }
+
+      try {
+        const { count, error } = await supabaseClient
+          .from('gbp_usuario_empresas')
+          .select('uid', { count: 'exact', head: true })
+          .eq('user_uid', user.uid)
+          .eq('ativo', true);
+
+        if (error) throw error;
+        if (isMounted) setCanSwitchCompany((count || 0) > 0);
+      } catch (e) {
+        console.error('[Sidebar] Erro ao verificar empresas administráveis:', e);
+        if (isMounted) setCanSwitchCompany(false);
+      }
+    }
+
+    checkCanSwitchCompany();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.uid, user?.adm_empresa]);
+
   // Buscar contagem de demandas do dia atual
   useEffect(() => {
     const fetchDemandasHoje = async () => {
-      console.log('🔍 Verificando acesso a Demandas Ruas:', temAcessoDemandasRuas);
-      console.log('🔍 Plano da empresa:', company?.plano);
-      console.log('🔍 UID da empresa:', company?.uid);
+      console.log(' Verificando acesso a Demandas Ruas:', temAcessoDemandasRuas);
+      console.log(' Plano da empresa:', company?.plano);
+      console.log(' UID da empresa:', company?.uid);
       
       if (!temAcessoDemandasRuas) {
-        console.log('❌ Sem acesso ao módulo de Demandas Ruas');
+        console.log(' Sem acesso ao módulo de Demandas Ruas');
         return;
       }
       
       if (!company?.uid) {
-        console.log('⏳ Aguardando carregamento da empresa...');
+        console.log(' Aguardando carregamento da empresa...');
         return;
       }
       
@@ -201,24 +240,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         const amanha = new Date(hoje);
         amanha.setDate(amanha.getDate() + 1);
 
-        console.log('📅 Buscando demandas entre:', hoje.toISOString(), 'e', amanha.toISOString());
+        console.log(' Buscando demandas entre:', hoje.toISOString(), 'e', amanha.toISOString());
 
         const demandas = await demandasRuasService.getDemandas(company.uid);
-        console.log('📋 Total de demandas:', demandas.length);
+        console.log(' Total de demandas:', demandas.length);
         
         const demandasDoDia = demandas.filter(demanda => {
           const dataCriacao = new Date(demanda.criado_em);
           const isDoDia = dataCriacao >= hoje && dataCriacao < amanha;
           if (isDoDia) {
-            console.log('✅ Demanda do dia encontrada:', demanda.uid, dataCriacao.toISOString());
+            console.log(' Demanda do dia encontrada:', demanda.uid, dataCriacao.toISOString());
           }
           return isDoDia;
         });
         
-        console.log('📊 Demandas do dia:', demandasDoDia.length);
+        console.log(' Demandas do dia:', demandasDoDia.length);
         setDemandasHoje(demandasDoDia.length);
       } catch (error) {
-        console.error('❌ Erro ao buscar demandas do dia:', error);
+        console.error(' Erro ao buscar demandas do dia:', error);
       }
     };
 
@@ -235,6 +274,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const filteredNavigation = useMemo(() => {
     let filtered = navigation;
+
+    if (canSwitchCompany && canSeeAmbiente) {
+      const alreadyExists = filtered.some((i) => i.href === '/app/select-company');
+      if (!alreadyExists) {
+        filtered = [
+          ...filtered,
+          { name: 'Ambiente', href: '/app/select-company', icon: Building2 },
+        ];
+      }
+    }
     
     // Filtrar por nível de acesso admin
     if (!isAdmin) {
@@ -264,7 +313,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     });
     
     return filtered;
-  }, [isAdmin, user?.nivel_acesso, temAcessoDemandasRuas]);
+  }, [isAdmin, user?.nivel_acesso, temAcessoDemandasRuas, canSwitchCompany, canSeeAmbiente]);
 
   const handleMobileClose = useCallback(() => {
     if (window.innerWidth < 1024) {
@@ -323,7 +372,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     isActive={isActive}
                     isCollapsed={isCollapsed}
                     isParent={isParent}
-                    expanded={!!expandedItems[item.href]}
+                    expanded={expandedItems.has(item.href)}
                     onToggle={(e) => {
                       e.stopPropagation();
                       e.preventDefault();

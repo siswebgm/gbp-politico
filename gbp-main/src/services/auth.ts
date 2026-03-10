@@ -24,6 +24,7 @@ export interface AuthData {
   nivel_acesso: string | null;
   permissoes: string[];
   empresa_uid: string | null;
+  cota_criar_empresas?: number;
   contato: string | null;
   status: string | null;
   ultimo_acesso: string | null;
@@ -49,6 +50,7 @@ export const authService = {
           nivel_acesso,
           permissoes,
           empresa_uid,
+          cota_criar_empresas,
           contato,
           status,
           ultimo_acesso,

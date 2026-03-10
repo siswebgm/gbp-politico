@@ -67,6 +67,8 @@ import EditarPesquisa from './pages/PesquisaEleitoral/EditarPesquisa';
 import VisualizarPesquisa from './pages/PesquisaEleitoral/VisualizarPesquisa';
 import ResponderPesquisa from './pages/PesquisaEleitoral/ResponderPesquisa';
 import ObrigadoPesquisa from './pages/PesquisaEleitoral/ObrigadoPesquisa';
+import { SelectCompany } from './pages/SelectCompany';
+import { GerenciamentoAmbientes } from './pages/GerenciamentoAmbientes';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -96,13 +98,22 @@ function RestrictedRoute({ children, blockedRoles = [] }: { children: React.Reac
   return <>{children}</>;
 }
 
+function AmbienteRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const canSeeAmbiente = Number((user as any)?.cota_criar_empresas ?? 0) > 0;
+
+  if (!canSeeAmbiente) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const company = useCompanyStore((state) => state.company);
   
   // Lista de rotas públicas e rotas sem empresa
   const publicPaths = ['/cadastro'];
-  const noCompanyPaths = ['/select-company', '/app/planos'];
   const currentPath = window.location.pathname;
   
   // Se for uma rota pública, permite o acesso direto
@@ -120,10 +131,6 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (!company && !noCompanyPaths.some(path => currentPath.startsWith(path))) {
-    return <Navigate to="/select-company" replace />;
   }
 
   return <>{children}</>;
@@ -185,15 +192,22 @@ export function AppRoutes() {
         path="/login" 
         element={
           isAuthenticated ? (
-            company ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <Navigate to="/select-company" replace />
-            )
+            <Navigate to="/app" replace />
           ) : (
             <Login />
           )
         } 
+      />
+
+      <Route
+        path="/select-company"
+        element={
+          <PrivateRoute>
+            <AmbienteRoute>
+              <Navigate to="/app/select-company" replace />
+            </AmbienteRoute>
+          </PrivateRoute>
+        }
       />
       <Route path="/register/:token" element={<RegisterInvite />} />
       
@@ -253,6 +267,22 @@ export function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route
+          path="select-company"
+          element={
+            <AmbienteRoute>
+              <SelectCompany />
+            </AmbienteRoute>
+          }
+        />
+        <Route
+          path="gerenciamento/ambientes"
+          element={
+            <AmbienteRoute>
+              <GerenciamentoAmbientes />
+            </AmbienteRoute>
+          }
+        />
         <Route path="planos" element={
           <Suspense fallback={<div>Carregando...</div>}>
             <PlanosPage />

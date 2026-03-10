@@ -21,7 +21,7 @@ interface AuthContextType {
   signOut: () => void;
 }
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LoadingSpinner = () => (
   <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center">
@@ -113,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nivel_acesso,
           permissoes,
           empresa_uid,
+          cota_criar_empresas,
           contato,
           status,
           ultimo_acesso,
@@ -150,15 +151,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
-      authStore.setUser(userData);
-      localStorage.setItem('gbp_user', JSON.stringify(userData));
+      const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || userData.empresa_uid;
+      const userWithActiveEmpresa = {
+        ...userData,
+        empresa_uid: activeEmpresaUid,
+      };
 
-      if (userData.empresa_uid) {
+      authStore.setUser(userWithActiveEmpresa);
+      localStorage.setItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
+
+      if (activeEmpresaUid) {
         try {
-          const companyData = await loadCompanyData(userData.empresa_uid);
+          const companyData = await loadCompanyData(activeEmpresaUid);
           if (companyData) {
             setCompanyUser({
-              ...userData,
+              ...userWithActiveEmpresa,
               foto: userData.foto
             });
           }
@@ -264,17 +271,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('uid', user.uid);
 
       // Atualiza estado global
-      authStore.setUser(user);
-      localStorage.setItem('gbp_user', JSON.stringify(user));
-      localStorage.setItem('empresa_uid', user.empresa_uid || '');
+      const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || user.empresa_uid || '';
+      const userWithActiveEmpresa = {
+        ...user,
+        empresa_uid: activeEmpresaUid,
+      };
+
+      authStore.setUser(userWithActiveEmpresa);
+      localStorage.setItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
+      localStorage.setItem('empresa_uid', activeEmpresaUid);
       localStorage.setItem('user_uid', user.uid);
 
       // Carrega dados da empresa se existir
-      if (user.empresa_uid) {
-        const companyData = await loadCompanyData(user.empresa_uid);
+      if (activeEmpresaUid) {
+        const companyData = await loadCompanyData(activeEmpresaUid);
         if (companyData) {
           setCompanyUser({
-            ...user,
+            ...userWithActiveEmpresa,
             foto: user.foto
           });
         }
@@ -293,6 +306,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCompanyUser(null);
     localStorage.removeItem('gbp_user');
     localStorage.removeItem('empresa_uid');
+    localStorage.removeItem('active_empresa_uid');
     localStorage.removeItem('user_uid');
     localStorage.removeItem('supabase.auth.token');
     
@@ -324,7 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   }
   return context;

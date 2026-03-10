@@ -122,6 +122,21 @@ function generateXLSXReport(options: ReportOptions): void {
   // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
+  // Set column widths to avoid text overlapping
+  const MIN_WCH = 12;
+  const MAX_WCH = 60;
+  const widths = options.columns.map((col, idx) => {
+    let maxLen = String(col.header || '').length;
+    for (const item of options.data) {
+      const raw = item?.[col.key];
+      const value = raw instanceof Date ? format(raw, 'dd/MM/yyyy') : raw?.toString() || '';
+      maxLen = Math.max(maxLen, value.length);
+    }
+    const padded = maxLen + 2;
+    return { wch: Math.min(MAX_WCH, Math.max(MIN_WCH, padded)) };
+  });
+  ws['!cols'] = widths;
+
   // Style the title
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: options.columns.length - 1 } }];
 

@@ -31,7 +31,7 @@ export function PlanoProvider({ children }: { children: ReactNode }) {
         .select('*')
         .eq('empresa_uid', user.empresa_uid)
         .order('created_at', { ascending: false })
-        .single();
+        .maybeSingle();
 
       // Ignora erros de permissão (406) e registro não encontrado (PGRST116)
       if (error && error.code !== 'PGRST116' && !error.message?.includes('406')) {

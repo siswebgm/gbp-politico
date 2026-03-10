@@ -86,15 +86,17 @@ export function PlanosPage() {
         .eq('empresa_uid', user.empresa_uid)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116' && String((error as any)?.message || '').includes('406') === false) throw error;
       
       if (data) {
         setPlanoAtual({
           nome: data.nome,
           data_fim: data.data_fim
         });
+      } else {
+        setPlanoAtual(null);
       }
     } catch (error) {
       console.error('Erro ao carregar plano atual:', error);

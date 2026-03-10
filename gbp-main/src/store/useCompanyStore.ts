@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 interface Company {
   uid: string;
   nome: string;
+  apelido?: string | null;
   token: string | null;
   instancia: string | null;
   porta: string | null;

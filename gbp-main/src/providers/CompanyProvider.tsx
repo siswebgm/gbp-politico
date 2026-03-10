@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthProvider';
-import { useCompanyStore } from '../stores/companyStore';
+import { useCompanyStore } from '../store/useCompanyStore';
 
 interface Company {
   uid: string;
   nome: string;
+  apelido?: string | null;
   created_at: string;
 }
 
@@ -47,14 +48,15 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
         if (userError) throw userError;
 
-        if (userData?.empresa_uid) {
-          setCurrentCompanyId(userData.empresa_uid);
+        const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || userData?.empresa_uid;
+        if (activeEmpresaUid) {
+          setCurrentCompanyId(activeEmpresaUid);
 
           // Buscar dados da empresa
           const { data: companyData, error: companyError } = await supabaseClient
             .from('gbp_empresas')
             .select('*')
-            .eq('uid', userData.empresa_uid)
+            .eq('uid', activeEmpresaUid)
             .single();
 
           if (companyError) throw companyError;

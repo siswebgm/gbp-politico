@@ -2,7 +2,8 @@ import { Outlet } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ErrorBoundary } from 'react-error-boundary';
-import { Menu, User, Settings, LogOut, Building, CheckCircle2, XCircle, Sun, Moon } from 'lucide-react';
+import { Menu, User, Settings, LogOut, Building, CheckCircle2, Sun, Moon } from 'lucide-react';
+
 import { useAuth } from '../providers/AuthProvider';
 import { useState, useEffect, useRef } from 'react';
 import { NotificationBell } from './NotificationBell';
@@ -48,7 +49,7 @@ const useCheckCompanyStatus = () => {
           toast({
             title: "Acesso Suspenso",
             description: `O acesso à empresa ${empresaData.nome || ''} foi suspenso. Entre em contato com o suporte para mais informações.`,
-            variant: "destructive",
+            variant: "warning",
             duration: 5000
           });
           
@@ -133,12 +134,13 @@ export function Layout() {
           if (!error && userData) {
             setUserPhoto(userData.foto);
 
+            const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || userData.empresa_uid;
             // Se tiver empresa_uid, buscar dados da empresa
-            if (userData.empresa_uid) {
+            if (activeEmpresaUid) {
               const { data: companyData, error: companyError } = await supabaseClient
                 .from('gbp_empresas')
                 .select('plano')
-                .eq('uid', userData.empresa_uid)
+                .eq('uid', activeEmpresaUid)
                 .single();
 
               if (!companyError && companyData) {
@@ -201,7 +203,7 @@ export function Layout() {
       toast({
         title: "Erro ao fazer logout",
         description: "Ocorreu um erro ao tentar desconectar.",
-        variant: "destructive",
+        variant: "warning",
         duration: 5000
       });
     }
@@ -387,7 +389,7 @@ export function Layout() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="w-full px-0 py-3 lg:px-4 lg:py-4">
+          <div className="w-full min-h-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
             </ErrorBoundary>

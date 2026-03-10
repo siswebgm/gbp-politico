@@ -104,9 +104,11 @@ export function useDashboardData() {
     error,
     setData,
     setLoading,
-    setError
+    setError,
+    clearData
   } = useDashboardStore();
   const isMountedRef = useRef(true);
+  const lastCompanyUidRef = useRef<string | null>(null);
 
   const shouldRefreshCache = () => {
     if (!lastUpdate) return true;
@@ -217,7 +219,15 @@ export function useDashboardData() {
 
   useEffect(() => {
     isMountedRef.current = true;
-    fetchData();
+
+    if (company?.uid && lastCompanyUidRef.current && lastCompanyUidRef.current !== company.uid) {
+      clearData();
+      fetchData(true);
+    } else {
+      fetchData();
+    }
+
+    lastCompanyUidRef.current = company?.uid || null;
 
     return () => {
       isMountedRef.current = false;
