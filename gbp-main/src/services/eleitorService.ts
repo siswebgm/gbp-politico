@@ -18,6 +18,14 @@ interface ListAllResponse {
 }
 
 class EleitorService {
+  private canUseNormalizedSearch(filters: EleitorFilters = {}) {
+    const hasNome = !!(filters.nome && String(filters.nome).trim());
+    if (!hasNome) return false;
+
+    const { nome, ...rest } = filters;
+    return !Object.values(rest).some((v) => v !== undefined && v !== null && String(v).trim() !== '');
+  }
+
   async list(
     empresa_uid: string, 
     filters: EleitorFilters = {}, 
@@ -27,6 +35,39 @@ class EleitorService {
     nivel_acesso?: string | null
   ): Promise<ListResponse> {
     try {
+      if (this.canUseNormalizedSearch(filters)) {
+        const search = String(filters.nome || '').trim();
+
+        const [{ data: countData, error: countError }, { data: listData, error: listError }] = await Promise.all([
+          supabaseClient.rpc('search_eleitores_count', {
+            p_empresa_uid: empresa_uid,
+            p_search: search,
+          }),
+          supabaseClient.rpc('search_eleitores_list', {
+            p_empresa_uid: empresa_uid,
+            p_search: search,
+            p_page: page,
+            p_page_size: pageSize,
+          }),
+        ]);
+
+        if (!countError && !listError) {
+          const total = Number((countData as any) || 0);
+          const totalPages = Math.ceil(total / pageSize);
+          return {
+            data: (listData as Eleitor[]) || [],
+            total,
+            totalPages,
+            currentPage: page,
+          };
+        }
+
+        console.warn('[EleitorService.list] Falha ao usar busca normalizada (RPC). Voltando para ilike.', {
+          countError,
+          listError,
+        });
+      }
+
       let query = supabaseClient
         .from('gbp_eleitores')
         .select('*', { count: 'exact' })
@@ -150,6 +191,20 @@ class EleitorService {
   ): Promise<string[]> {
     console.log('[DEBUG] EleitorService.listAllIds - Buscando IDs dos eleitores:', { empresa_uid, filters });
     try {
+      if (this.canUseNormalizedSearch(filters)) {
+        const search = String(filters.nome || '').trim();
+        const { data, error } = await supabaseClient.rpc('search_eleitores_ids', {
+          p_empresa_uid: empresa_uid,
+          p_search: search,
+        });
+
+        if (!error) {
+          return (data as any[] | null | undefined)?.map((uid) => String(uid)) || [];
+        }
+
+        console.warn('[EleitorService.listAllIds] Falha ao usar busca normalizada (RPC). Voltando para ilike.', error);
+      }
+
       let query = supabaseClient
         .from('gbp_eleitores')
         .select('uid')

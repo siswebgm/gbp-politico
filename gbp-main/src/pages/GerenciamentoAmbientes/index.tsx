@@ -23,6 +23,7 @@ import {
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import { Button } from '../../components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { generateReport } from '../../utils/reportGenerator';
 
@@ -41,11 +42,13 @@ type RecentKind = 'cadastro' | 'atendimento' | 'demanda';
 
 type RecentItem = {
   kind: RecentKind;
+  uid?: string;
   empresa_uid: string;
   empresa_label: string;
   created_at: string;
   title: string;
   subtitle?: string;
+  descricao?: string;
 };
 
 type RecentExportRow = {
@@ -77,6 +80,13 @@ function formatShortLabel(input: string, max = 16) {
   const s = String(input || '').trim();
   if (s.length <= max) return s;
   return `${s.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function formatMaybeDateTime(input: any) {
+  if (!input) return '-';
+  const d = new Date(String(input));
+  if (Number.isNaN(d.getTime())) return String(input);
+  return d.toLocaleString('pt-BR');
 }
 
 function addDays(d: Date, days: number) {
@@ -127,6 +137,13 @@ export function GerenciamentoAmbientes() {
 
   const [recentKind, setRecentKind] = useState<RecentKind>('cadastro');
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [recentTotalCount, setRecentTotalCount] = useState(0);
+  const [exportingRecent, setExportingRecent] = useState(false);
+
+  const [atendimentoModalOpen, setAtendimentoModalOpen] = useState(false);
+  const [selectedAtendimentoUid, setSelectedAtendimentoUid] = useState<string | null>(null);
+  const [selectedAtendimento, setSelectedAtendimento] = useState<any | null>(null);
+  const [loadingAtendimento, setLoadingAtendimento] = useState(false);
 
   const [loadingComparacao, setLoadingComparacao] = useState(false);
   const [comparacaoAmbientes, setComparacaoAmbientes] = useState<AmbienteProducao[]>([]);
@@ -230,6 +247,7 @@ export function GerenciamentoAmbientes() {
   const loadRecent = useCallback(async () => {
     if (!companies.length) {
       setRecentItems([]);
+      setRecentTotalCount(0);
       return;
     }
 
@@ -240,92 +258,129 @@ export function GerenciamentoAmbientes() {
     const endIso = period.end.toISOString();
 
     try {
-      const next: RecentItem[] = [];
+      const empresaUids = companiesToLoad.map((c) => c.uid);
+      const labelByUid = new Map(companiesToLoad.map((c) => [c.uid, c.apelido || c.nome || 'Empresa'] as const));
 
-      await Promise.all(
-        companiesToLoad.map(async (c) => {
-          const empresa_uid = c.uid;
-          const empresa_label = c.apelido || c.nome || 'Empresa';
+      const pageSize = recentItemsPerPage;
+      const from = (recentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
 
-          if (recentKind === 'cadastro') {
-            const { data } = await supabaseClient
-              .from('gbp_eleitores')
-              .select('uid,nome,created_at')
-              .eq('empresa_uid', empresa_uid)
-              .gte('created_at', startIso)
-              .lt('created_at', endIso)
-              .order('created_at', { ascending: false })
-              .limit(5);
+      if (recentKind === 'cadastro') {
+        const { data, count, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('uid,nome,created_at,empresa_uid', { count: 'exact' })
+          .in('empresa_uid', empresaUids)
+          .gte('created_at', startIso)
+          .lt('created_at', endIso)
+          .order('created_at', { ascending: false })
+          .range(from, to);
 
-            (data || []).forEach((row: any) => {
-              next.push({
-                kind: 'cadastro',
-                empresa_uid,
-                empresa_label,
-                created_at: String(row?.created_at || ''),
-                title: String(row?.nome || 'Cadastro'),
-              });
-            });
-          }
+        if (error) throw error;
+        setRecentTotalCount(count || 0);
 
-          if (recentKind === 'atendimento') {
-            const { data } = await supabaseClient
-              .from('gbp_atendimentos')
-              .select('uid,created_at,status')
-              .eq('empresa_uid', empresa_uid)
-              .gte('created_at', startIso)
-              .lt('created_at', endIso)
-              .order('created_at', { ascending: false })
-              .limit(5);
+        setRecentItems(
+          (data || []).map((row: any) => ({
+            kind: 'cadastro',
+            empresa_uid: String(row?.empresa_uid || ''),
+            empresa_label: labelByUid.get(String(row?.empresa_uid || '')) || 'Empresa',
+            created_at: String(row?.created_at || ''),
+            title: String(row?.nome || 'Cadastro'),
+          }))
+        );
+      }
 
-            (data || []).forEach((row: any) => {
-              next.push({
-                kind: 'atendimento',
-                empresa_uid,
-                empresa_label,
-                created_at: String(row?.created_at || ''),
-                title: `Atendimento ${String(row?.uid || '').slice(0, 8)}`,
-                subtitle: row?.status ? `Status: ${row.status}` : undefined,
-              });
-            });
-          }
+      if (recentKind === 'atendimento') {
+        const { data, count, error } = await supabaseClient
+          .from('gbp_atendimentos')
+          .select('uid,created_at,status,empresa_uid,descricao,tipo_de_atendimento,responsavel', { count: 'exact' })
+          .in('empresa_uid', empresaUids)
+          .gte('created_at', startIso)
+          .lt('created_at', endIso)
+          .order('created_at', { ascending: false })
+          .range(from, to);
 
-          if (recentKind === 'demanda') {
-            const { data, error } = await supabaseClient
-              .from('gbp_demandas_ruas')
-              .select('uid,tipo_de_demanda,status,criado_em')
-              .eq('empresa_uid', empresa_uid)
-              .eq('excluido', false)
-              .gte('criado_em', startIso)
-              .lt('criado_em', endIso)
-              .order('criado_em', { ascending: false })
-              .limit(5);
+        if (error) throw error;
+        setRecentTotalCount(count || 0);
 
-            if (error) return;
+        setRecentItems(
+          (data || []).map((row: any) => ({
+            kind: 'atendimento',
+            uid: String(row?.uid || ''),
+            empresa_uid: String(row?.empresa_uid || ''),
+            empresa_label: labelByUid.get(String(row?.empresa_uid || '')) || 'Empresa',
+            created_at: String(row?.created_at || ''),
+            title: `Atendimento ${String(row?.uid || '').slice(0, 8)}`,
+            subtitle: row?.status ? `Status: ${row.status}` : undefined,
+            descricao: row?.descricao ? String(row.descricao) : undefined,
+          }))
+        );
+      }
 
-            (data || []).forEach((row: any) => {
-              next.push({
-                kind: 'demanda',
-                empresa_uid,
-                empresa_label,
-                created_at: String(row?.criado_em || ''),
-                title: String(row?.tipo_de_demanda || 'Demanda'),
-                subtitle: row?.status ? `Status: ${row.status}` : undefined,
-              });
-            });
-          }
-        })
-      );
+      if (recentKind === 'demanda') {
+        const { data, count, error } = await supabaseClient
+          .from('gbp_demandas_ruas')
+          .select('uid,tipo_de_demanda,status,criado_em,empresa_uid', { count: 'exact' })
+          .in('empresa_uid', empresaUids)
+          .eq('excluido', false)
+          .gte('criado_em', startIso)
+          .lt('criado_em', endIso)
+          .order('criado_em', { ascending: false })
+          .range(from, to);
 
-      next.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-      setRecentItems(next);
+        if (error) throw error;
+        setRecentTotalCount(count || 0);
+
+        setRecentItems(
+          (data || []).map((row: any) => ({
+            kind: 'demanda',
+            empresa_uid: String(row?.empresa_uid || ''),
+            empresa_label: labelByUid.get(String(row?.empresa_uid || '')) || 'Empresa',
+            created_at: String(row?.criado_em || ''),
+            title: String(row?.tipo_de_demanda || 'Demanda'),
+            subtitle: row?.status ? `Status: ${row.status}` : undefined,
+          }))
+        );
+      }
     } catch (e) {
       console.error('[GerenciamentoAmbientes] Erro ao carregar conteúdo recente:', e);
       setRecentItems([]);
+      setRecentTotalCount(0);
     } finally {
       setLoadingRecent(false);
     }
-  }, [ambienteFilterUid, companies, period.end, period.start, recentKind]);
+  }, [ambienteFilterUid, companies, period.end, period.start, recentKind, recentItemsPerPage, recentPage]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAtendimentoDetails() {
+      if (!atendimentoModalOpen || !selectedAtendimentoUid) return;
+
+      setLoadingAtendimento(true);
+      try {
+        const { data, error } = await supabaseClient
+          .from('gbp_atendimentos')
+          .select('*')
+          .eq('uid', selectedAtendimentoUid)
+          .single();
+
+        if (error) throw error;
+        if (!isMounted) return;
+        setSelectedAtendimento(data || null);
+      } catch (e) {
+        console.error('[GerenciamentoAmbientes] Erro ao carregar detalhes do atendimento:', e);
+        if (!isMounted) return;
+        setSelectedAtendimento(null);
+      } finally {
+        if (isMounted) setLoadingAtendimento(false);
+      }
+    }
+
+    void loadAtendimentoDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [atendimentoModalOpen, selectedAtendimentoUid]);
 
   const loadComparacao = useCallback(async () => {
     if (!companies.length) {
@@ -404,9 +459,9 @@ export function GerenciamentoAmbientes() {
   }, [recentKind, preset, customStart, customEnd, ambienteFilterUid]);
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(recentItems.length / recentItemsPerPage));
+    const totalPages = Math.max(1, Math.ceil(recentTotalCount / recentItemsPerPage));
     if (recentPage > totalPages) setRecentPage(totalPages);
-  }, [recentItems.length, recentItemsPerPage, recentPage]);
+  }, [recentItemsPerPage, recentPage, recentTotalCount]);
 
   const comparacaoTotal = useMemo(() => {
     return comparacaoAmbientes.reduce((acc, cur) => acc + (cur.total || 0), 0);
@@ -616,20 +671,19 @@ export function GerenciamentoAmbientes() {
   }, [loadComparacaoLinha]);
 
   const recentTotalPages = useMemo(() => {
-    return Math.max(1, Math.ceil(recentItems.length / recentItemsPerPage));
-  }, [recentItems.length, recentItemsPerPage]);
+    return Math.max(1, Math.ceil(recentTotalCount / recentItemsPerPage));
+  }, [recentItemsPerPage, recentTotalCount]);
 
   const recentPagedItems = useMemo(() => {
-    const start = (recentPage - 1) * recentItemsPerPage;
-    return recentItems.slice(start, start + recentItemsPerPage);
-  }, [recentItems, recentItemsPerPage, recentPage]);
+    return recentItems;
+  }, [recentItems]);
 
   const recentRangeLabel = useMemo(() => {
-    if (recentItems.length === 0) return '';
+    if (!recentTotalCount) return '';
     const start = (recentPage - 1) * recentItemsPerPage + 1;
-    const end = Math.min(recentItems.length, recentPage * recentItemsPerPage);
-    return `Mostrando ${start}–${end} de ${recentItems.length}`;
-  }, [recentItems.length, recentItemsPerPage, recentPage]);
+    const end = Math.min(recentTotalCount, recentPage * recentItemsPerPage);
+    return `Mostrando ${start}–${end} de ${recentTotalCount}`;
+  }, [recentItemsPerPage, recentPage, recentTotalCount]);
 
   const ambienteOptions = useMemo(() => {
     return [...companies]
@@ -654,29 +708,122 @@ export function GerenciamentoAmbientes() {
   }, [ambienteFilterUid, ambienteOptions, period.end, period.start, recentKind]);
 
   const handleExportRecent = useCallback(
-    (format: 'pdf' | 'xlsx') => {
-      const data: RecentExportRow[] = recentItems.map((it) => ({
-        ambiente: it.empresa_label || '-',
-        registro: it.title || '-',
-        detalhe: it.subtitle || '-',
-        data: it.created_at ? new Date(it.created_at).toLocaleString('pt-BR') : '-',
-      }));
+    async (format: 'pdf' | 'xlsx') => {
+      if (exportingRecent) return;
+      if (!companies.length) return;
 
-      generateReport({
-        title: 'Conteúdo recente',
-        subtitle: recentExportSubtitle,
-        columns: [
-          { header: 'Ambiente', key: 'ambiente' },
-          { header: 'Registro', key: 'registro' },
-          { header: 'Detalhe', key: 'detalhe' },
-          { header: 'Data', key: 'data' },
-        ],
-        data,
-        format,
-        orientation: 'landscape',
-      });
+      const companiesToLoad = ambienteFilterUid === 'all' ? companies : companies.filter((c) => c.uid === ambienteFilterUid);
+      const empresaUids = companiesToLoad.map((c) => c.uid);
+      const labelByUid = new Map(companiesToLoad.map((c) => [c.uid, c.apelido || c.nome || 'Empresa'] as const));
+
+      const startIso = period.start.toISOString();
+      const endIso = period.end.toISOString();
+
+      setExportingRecent(true);
+
+      try {
+        const PAGE_SIZE = 2000;
+
+        const allRows: any[] = [];
+        let from = 0;
+
+        while (true) {
+          let query: any;
+
+          if (recentKind === 'cadastro') {
+            query = supabaseClient
+              .from('gbp_eleitores')
+              .select('uid,nome,created_at,empresa_uid')
+              .in('empresa_uid', empresaUids)
+              .gte('created_at', startIso)
+              .lt('created_at', endIso)
+              .order('created_at', { ascending: false })
+              .range(from, from + PAGE_SIZE - 1);
+          }
+
+          if (recentKind === 'atendimento') {
+            query = supabaseClient
+              .from('gbp_atendimentos')
+              .select('uid,created_at,status,empresa_uid')
+              .in('empresa_uid', empresaUids)
+              .gte('created_at', startIso)
+              .lt('created_at', endIso)
+              .order('created_at', { ascending: false })
+              .range(from, from + PAGE_SIZE - 1);
+          }
+
+          if (recentKind === 'demanda') {
+            query = supabaseClient
+              .from('gbp_demandas_ruas')
+              .select('uid,tipo_de_demanda,status,criado_em,empresa_uid')
+              .in('empresa_uid', empresaUids)
+              .eq('excluido', false)
+              .gte('criado_em', startIso)
+              .lt('criado_em', endIso)
+              .order('criado_em', { ascending: false })
+              .range(from, from + PAGE_SIZE - 1);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          const batch = data || [];
+          allRows.push(...batch);
+
+          if (batch.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
+        }
+
+        const data: RecentExportRow[] = allRows.map((row: any) => {
+          const empresaUid = String(row?.empresa_uid || '');
+          const ambiente = labelByUid.get(empresaUid) || 'Empresa';
+
+          if (recentKind === 'cadastro') {
+            return {
+              ambiente,
+              registro: String(row?.nome || 'Cadastro'),
+              detalhe: '-',
+              data: row?.created_at ? new Date(String(row.created_at)).toLocaleString('pt-BR') : '-',
+            };
+          }
+
+          if (recentKind === 'atendimento') {
+            return {
+              ambiente,
+              registro: `Atendimento ${String(row?.uid || '').slice(0, 8)}`,
+              detalhe: row?.status ? `Status: ${row.status}` : '-',
+              data: row?.created_at ? new Date(String(row.created_at)).toLocaleString('pt-BR') : '-',
+            };
+          }
+
+          return {
+            ambiente,
+            registro: String(row?.tipo_de_demanda || 'Demanda'),
+            detalhe: row?.status ? `Status: ${row.status}` : '-',
+            data: row?.criado_em ? new Date(String(row.criado_em)).toLocaleString('pt-BR') : '-',
+          };
+        });
+
+        generateReport({
+          title: 'Conteúdo recente',
+          subtitle: recentExportSubtitle,
+          columns: [
+            { header: 'Ambiente', key: 'ambiente' },
+            { header: 'Registro', key: 'registro' },
+            { header: 'Detalhe', key: 'detalhe' },
+            { header: 'Data', key: 'data' },
+          ],
+          data,
+          format,
+          orientation: 'landscape',
+        });
+      } catch (e) {
+        console.error('[GerenciamentoAmbientes] Erro ao exportar conteúdo recente:', e);
+      } finally {
+        setExportingRecent(false);
+      }
     },
-    [recentExportSubtitle, recentItems]
+    [ambienteFilterUid, companies, exportingRecent, period.end, period.start, recentExportSubtitle, recentKind]
   );
 
   return (
@@ -727,7 +874,7 @@ export function GerenciamentoAmbientes() {
                 <span className="hidden sm:inline">Período</span>
               </div>
 
-              <div className="flex-1 min-w-0 flex items-center justify-start sm:justify-end gap-2 overflow-x-auto scrollbar-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] whitespace-nowrap">
+              <div className="flex-1 min-w-0 flex items-center justify-start sm:justify-end gap-2 overflow-x-auto scrollbar-hidden whitespace-nowrap">
                 <button
                   type="button"
                   onClick={() => setPreset('today')}
@@ -864,7 +1011,7 @@ export function GerenciamentoAmbientes() {
                     aria-label="Baixar PDF"
                     title="Baixar PDF"
                     className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 p-0 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-40 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-900/30 sm:w-auto sm:px-3"
-                    disabled={loadingRecent || recentItems.length === 0}
+                    disabled={loadingRecent || exportingRecent || recentTotalCount === 0}
                   >
                     <FileText className="h-4 w-4" />
                     <span className="hidden sm:inline">PDF</span>
@@ -875,7 +1022,7 @@ export function GerenciamentoAmbientes() {
                     aria-label="Baixar Excel"
                     title="Baixar Excel"
                     className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-0 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-900/30 sm:w-auto sm:px-3"
-                    disabled={loadingRecent || recentItems.length === 0}
+                    disabled={loadingRecent || exportingRecent || recentTotalCount === 0}
                   >
                     <FileSpreadsheet className="h-4 w-4" />
                     <span className="hidden sm:inline">Excel</span>
@@ -919,14 +1066,25 @@ export function GerenciamentoAmbientes() {
                     {recentPagedItems.map((it, idx) => (
                       <tr
                         key={`${it.kind}-${it.empresa_uid}-${it.created_at}-${idx}`}
-                        className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-slate-50/40 dark:bg-gray-800/20'}
+                        onClick={() => {
+                          if (it.kind !== 'atendimento' || !it.uid) return;
+                          setSelectedAtendimentoUid(it.uid);
+                          setSelectedAtendimento(null);
+                          setAtendimentoModalOpen(true);
+                        }}
+                        role={it.kind === 'atendimento' ? 'button' : undefined}
+                        className={`${idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-slate-50/40 dark:bg-gray-800/20'}${
+                          it.kind === 'atendimento' ? ' cursor-pointer hover:bg-blue-50/40 dark:hover:bg-blue-900/10' : ''
+                        }`}
                       >
                         <td className="px-3 py-2 text-sm font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                           {it.empresa_label}
                         </td>
                         <td className="px-3 py-2 text-sm text-slate-700 dark:text-gray-200 whitespace-nowrap">{it.title}</td>
                         <td className="px-3 py-2 text-sm text-slate-500 dark:text-gray-400 whitespace-nowrap">
-                          {it.subtitle || '-'}
+                          {it.kind === 'atendimento'
+                            ? formatShortLabel(it.descricao || it.subtitle || '-', 48)
+                            : it.subtitle || '-'}
                         </td>
                         <td className="px-3 py-2 text-right text-xs font-semibold text-slate-500 dark:text-gray-400 whitespace-nowrap">
                           {it.created_at ? new Date(it.created_at).toLocaleString() : '-'}
@@ -936,6 +1094,92 @@ export function GerenciamentoAmbientes() {
                   </tbody>
                 </table>
               </div>
+
+              <Dialog
+                open={atendimentoModalOpen}
+                onOpenChange={(open) => {
+                  setAtendimentoModalOpen(open);
+                  if (!open) {
+                    setSelectedAtendimentoUid(null);
+                    setSelectedAtendimento(null);
+                    setLoadingAtendimento(false);
+                  }
+                }}
+              >
+                <DialogContent className="left-[50%] top-4 w-[calc(100%-2rem)] translate-x-[-50%] translate-y-0 max-h-[calc(100vh-2rem)] sm:left-[50%] sm:top-[50%] sm:w-full sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Detalhes do atendimento</DialogTitle>
+                    <DialogDescription>
+                      {selectedAtendimento?.uid ? `UID: ${String(selectedAtendimento.uid).slice(0, 12)}…` : ' '}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {loadingAtendimento ? (
+                    <div className="text-sm text-slate-500 dark:text-gray-400">Carregando...</div>
+                  ) : !selectedAtendimento ? (
+                    <div className="text-sm text-slate-500 dark:text-gray-400">Não foi possível carregar os detalhes.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Status</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.status || '-'}</div>
+                      </div>
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Responsável</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.responsavel || '-'}</div>
+                      </div>
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Tipo de atendimento</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.tipo_de_atendimento || '-'}</div>
+                      </div>
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Indicado</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.indicado || '-'}</div>
+                      </div>
+
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700 sm:col-span-2">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Descrição</div>
+                        <div className="mt-1 whitespace-pre-wrap text-sm text-slate-900 dark:text-white">{selectedAtendimento.descricao || '-'}</div>
+                      </div>
+
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Data do atendimento</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatMaybeDateTime(selectedAtendimento.data_atendimento)}</div>
+                      </div>
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Agendamento</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatMaybeDateTime(selectedAtendimento.data_agendamento)}</div>
+                      </div>
+
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Eleitor</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.eleitor || '-'}</div>
+                      </div>
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">WhatsApp</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{selectedAtendimento.whatsapp || '-'}</div>
+                      </div>
+
+                      <div className="rounded-md border border-slate-200 p-3 dark:border-gray-700 sm:col-span-2">
+                        <div className="text-xs font-semibold text-slate-500 dark:text-gray-400">Endereço</div>
+                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                          {[
+                            selectedAtendimento.logradouro,
+                            selectedAtendimento.numero,
+                            selectedAtendimento.complemento,
+                            selectedAtendimento.bairro,
+                            selectedAtendimento.cidade,
+                            selectedAtendimento.uf,
+                            selectedAtendimento.cep,
+                          ]
+                            .filter(Boolean)
+                            .join(' • ') || '-'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
 
               {recentTotalPages > 1 && (
                 <div className="mt-2 flex items-center justify-end gap-3 overflow-x-auto scrollbar-hidden whitespace-nowrap text-xs text-slate-600 dark:text-gray-300">

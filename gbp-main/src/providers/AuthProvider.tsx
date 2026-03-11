@@ -239,6 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nivel_acesso,
           permissoes,
           empresa_uid,
+          cota_criar_empresas,
           contato,
           status,
           ultimo_acesso,
@@ -246,7 +247,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           foto,
           notification_token,
           notification_status,
-          notification_updated_at
+          notification_updated_at,
+          adm_empresa
         `)
         .eq('email', email)
         .eq('senha', password)

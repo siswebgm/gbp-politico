@@ -2475,20 +2475,20 @@ export function EleitoresReport() {
               </div>
             ) : (
               <>
-                <div ref={setupHorizontalScroll}>
+                <div ref={setupHorizontalScroll} className="overflow-x-auto pr-6">
                   <table style={{ minWidth: '1200px', width: '100%' }}>
                     <thead>
                       <tr className="border-b dark:border-gray-700">
-                        <th className="text-left py-2 text-gray-900 dark:text-white">Categoria</th>
-                        <th className="text-left py-2 text-gray-900 dark:text-white">Tipo</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white">%</th>
-                        <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
-                        <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
-                        <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
+                        <th className="text-left py-2 text-gray-900 dark:text-white whitespace-nowrap">Categoria</th>
+                        <th className="text-left py-2 text-gray-900 dark:text-white whitespace-nowrap">Tipo</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap">Total</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap">%</th>
+                        <th className="px-4 py-2 text-gray-900 dark:text-white whitespace-nowrap">Progresso</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Novos (Mês)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Cresc. Mensal</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Novos (Ano)</th>
+                        <th className="text-right py-2 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Cresc. Anual</th>
+                        <th className="text-center py-2 text-gray-900 dark:text-white whitespace-nowrap text-[11px] min-w-[72px]">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2594,7 +2594,7 @@ export function EleitoresReport() {
                                 <span className="text-gray-400">-</span>
                               )}
                             </td>
-                            <td className="py-2">
+                            <td className="py-2 min-w-[72px]">
                               <div className="relative flex items-center justify-center">
                                 <button
                                   onClick={(e) => {
@@ -2748,19 +2748,22 @@ export function EleitoresReport() {
                     </div>
 
                     {/* Tabela de Bairros */}
-                    <div ref={setupHorizontalScroll}>
-                        <table style={{ minWidth: '1200px', width: '100%' }}>
+                    <div ref={setupHorizontalScroll} className="overflow-x-auto">
+                      <div className="w-full">
+                        <table style={{ minWidth: '1100px', width: '100%' }}>
                           <thead>
                             <tr className="border-b dark:border-gray-700">
-                              <th className="text-left py-2 text-gray-900 dark:text-white">Bairro</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white">Total</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white">% Cidade</th>
-                              <th className="px-4 py-2 text-gray-900 dark:text-white">Progresso</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Mês)</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Mensal</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Novos (Ano)</th>
-                              <th className="text-right py-2 text-gray-900 dark:text-white text-xs">Cresc. Anual</th>
-                              <th className="text-center py-2 text-gray-900 dark:text-white">Ações</th>
+                              <th className="text-left py-1.5 text-gray-900 dark:text-white whitespace-nowrap">Bairro</th>
+                              <th className="text-right py-1.5 text-gray-900 dark:text-white whitespace-nowrap">Total</th>
+                              <th className="text-right py-1.5 text-gray-900 dark:text-white whitespace-nowrap">% Cidade</th>
+                              <th className="px-2 py-1.5 text-gray-900 dark:text-white whitespace-nowrap">Progresso</th>
+                              <th className="text-right py-1.5 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Novos (Mês)</th>
+                              <th className="text-right py-1.5 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Cresc. Mensal</th>
+                              <th className="text-right py-1.5 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Novos (Ano)</th>
+                              <th className="text-right py-1.5 pr-6 text-gray-900 dark:text-white whitespace-nowrap text-[11px]">Cresc. Anual</th>
+                              <th className="sticky right-0 w-[40px] min-w-[40px] px-0.5 py-1.5 text-center text-gray-900 dark:text-white whitespace-nowrap text-[11px] bg-gray-50 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+                                Ações
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2776,10 +2779,10 @@ export function EleitoresReport() {
                                     index === 0 ? 'bg-green-50/50 dark:bg-green-900/30' : ''
                                   }`}
                                 >
-                                  <td className="py-2 text-gray-900 dark:text-white font-medium">{bairro.bairro}</td>
-                                  <td className="text-right py-2 text-gray-900 dark:text-white">{bairro.total}</td>
-                                  <td className="text-right py-2 text-gray-900 dark:text-white">{percentageCidade.toFixed(1)}%</td>
-                                  <td className="px-4 py-2">
+                                  <td className="py-1.5 pr-2 text-gray-900 dark:text-white font-medium">{bairro.bairro}</td>
+                                  <td className="text-right py-1.5 px-1 text-gray-900 dark:text-white">{bairro.total}</td>
+                                  <td className="text-right py-1.5 px-1 text-gray-900 dark:text-white">{percentageCidade.toFixed(1)}%</td>
+                                  <td className="px-2 py-1.5">
                                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                                       <div
                                         className={`h-2.5 rounded-full ${
@@ -2791,7 +2794,7 @@ export function EleitoresReport() {
                                   </td>
                                   
                                   {/* Novos no Mês */}
-                                  <td className="text-right py-2 text-xs">
+                                  <td className="text-right py-1.5 text-xs whitespace-nowrap">
                                     {crescimento ? (
                                       <>
                                         <span className="text-gray-900 dark:text-white font-medium">
@@ -2807,7 +2810,7 @@ export function EleitoresReport() {
                                   </td>
                                   
                                   {/* Crescimento Mensal */}
-                                  <td className="text-right py-2 text-xs">
+                                  <td className="text-right py-1.5 text-xs whitespace-nowrap">
                                     {crescimento ? (
                                       <div className="flex items-center justify-end gap-1">
                                         {crescimento.crescimento_mensal > 0 ? (
@@ -2830,7 +2833,7 @@ export function EleitoresReport() {
                                   </td>
                                   
                                   {/* Novos no Ano */}
-                                  <td className="text-right py-2 text-xs">
+                                  <td className="text-right py-1.5 text-xs whitespace-nowrap">
                                     {crescimento ? (
                                       <>
                                         <span className="text-gray-900 dark:text-white font-medium">
@@ -2846,7 +2849,7 @@ export function EleitoresReport() {
                                   </td>
                                   
                                   {/* Crescimento Anual */}
-                                  <td className="text-right py-2 text-xs">
+                                  <td className="text-right py-1.5 pr-6 text-xs whitespace-nowrap">
                                     {crescimento ? (
                                       <div className="flex items-center justify-end gap-1">
                                         {crescimento.crescimento_anual > 0 ? (
@@ -2867,14 +2870,14 @@ export function EleitoresReport() {
                                       <span className="text-gray-400">-</span>
                                     )}
                                   </td>
-                                  <td className="py-2">
+                                  <td className="sticky right-0 w-[40px] min-w-[40px] px-0.5 py-1.5 bg-inherit border-l border-gray-200/70 dark:border-gray-600/70">
                                     <div className="relative flex items-center justify-center">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setOpenMenuBairro(openMenuBairro === `${bairro.cidade}-${bairro.bairro}` ? null : `${bairro.cidade}-${bairro.bairro}`);
                                         }}
-                                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+                                        className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
                                         title="Opções de exportação"
                                       >
                                         <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
@@ -2916,6 +2919,7 @@ export function EleitoresReport() {
                             })}
                           </tbody>
                         </table>
+                      </div>
                     </div>
                     <TablePagination
                       currentPage={currentPage}
