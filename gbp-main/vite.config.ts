@@ -41,27 +41,16 @@ export default defineConfig(({ command, mode }) => ({
     ]
   },
   build: {
-    // Force development mode settings
     sourcemap: false,
-    minify: false,
+    minify: 'terser',
     target: 'es2015',
-    cssMinify: false,
-    // Disable all optimizations
     rollupOptions: {
       output: {
-        // No chunking at all - single file
-        manualChunks: undefined,
-        inlineDynamicImports: true,
-        // Preserve original names
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]'
-      },
-      // Disable tree shaking
-      treeshake: false,
+        entryFileNames: 'js/[name]-[hash].js',
+        chunkFileNames: 'js/[name]-[hash].js',
+        assetFileNames: '[ext]/[name]-[hash].[ext]'
+      }
     },
-
-    // Increase chunk size warning limit
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
   },
 }));

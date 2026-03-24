@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Loader2, Edit2, Trash2, Search, X, DollarSign, ChevronDown, FileSpreadsheet } from 'lucide-react';
+import { ChevronLeft, Plus, Loader2, Search, X, DollarSign, ChevronDown, FileSpreadsheet, MoreVertical, Pencil, Trash2, Download } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useCompany } from '../../../providers/CompanyProvider';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -8,6 +8,14 @@ import { emendasParlamentaresService, EmendaParlamentar } from '../../../service
 import { useToast } from '../../../components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../../components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +96,60 @@ export default function EmendasParlamentares() {
     carregarEmendas();
   }, [carregarEmendas]);
 
+  const handleDownloadEmenda = (emenda: EmendaParlamentar) => {
+    const wb = XLSX.utils.book_new();
+    const arquivosUrls = (emenda.arquivos || [])
+      .map(a => a?.url)
+      .filter(Boolean)
+      .join(' ; ');
+    const row = {
+      'Número': emenda.numero_emenda,
+      'Ano': emenda.ano,
+      'Tipo': emenda.tipo,
+      'Descrição/Objeto': emenda.descricao || '',
+      'Valor Total': emenda.valor_total,
+      'Status': emenda.status,
+      'Arquivo(s)': arquivosUrls,
+      'Beneficiário': emenda.beneficiario || '',
+      'CNPJ': emenda.beneficiario_cnpj || '',
+      'Município': emenda.beneficiario_municipio || '',
+      'Estado': emenda.beneficiario_estado || '',
+      'Data Empenho': emenda.data_empenho || '',
+      'Valor Empenhado': emenda.valor_empenhado ?? '',
+      'Data Liberação': emenda.data_liberacao || '',
+      'Data Pagamento': emenda.data_pagamento || '',
+      'Valor Pago': emenda.valor_pago ?? '',
+      'Observações': emenda.observacoes || '',
+    };
+
+    const ws = XLSX.utils.json_to_sheet([row]);
+
+    const header = Object.keys(row);
+    const columnWidths = header.map((h, i) => {
+      const col = XLSX.utils.encode_col(i);
+      const allValues = [h, row[h as keyof typeof row]];
+      const maxLength = allValues.reduce((max, val) => {
+        const len = val ? val.toString().length : 0;
+        return Math.max(max, len);
+      }, 0);
+      return { wch: Math.min(Math.max(maxLength + 2, 10), 60) };
+    });
+    ws['!cols'] = columnWidths;
+
+    XLSX.utils.book_append_sheet(wb, ws, `Emenda_${emenda.ano}`);
+
+    const fileNameSafeNumero = String(emenda.numero_emenda || 'emenda')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_.-]/gi, '_');
+
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(
+      new Blob([wbout], { type: 'application/octet-stream' }),
+      `emenda_${fileNameSafeNumero}_${emenda.ano}.xlsx`
+    );
+  };
+
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
 
@@ -101,6 +163,7 @@ export default function EmendasParlamentares() {
         'Descrição/Objeto',
         'Valor Total',
         'Status',
+        'Arquivo(s)',
         'Beneficiário',
         'CNPJ',
         'Município',
@@ -120,6 +183,10 @@ export default function EmendasParlamentares() {
         'Descrição/Objeto': e.descricao,
         'Valor Total': e.valor_total,
         'Status': e.status,
+        'Arquivo(s)': (e.arquivos || [])
+          .map(a => a?.url)
+          .filter(Boolean)
+          .join(' ; '),
         'Beneficiário': e.beneficiario,
         'CNPJ': e.beneficiario_cnpj,
         'Município': e.beneficiario_municipio,
@@ -221,9 +288,28 @@ export default function EmendasParlamentares() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white ml-2">Emendas Parlamentares</h1>
           </div>
           <div className="hidden md:flex items-center gap-2">
-            <Button variant="outline" onClick={handleExportExcel}>
-              <FileSpreadsheet className="-ml-1 mr-2 h-4 w-4" />
-              Exportar Excel
+            <div className="relative w-[360px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por número, descrição ou beneficiário..."
+                className="pl-9 pr-9 w-full h-10 rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 focus-visible:ring-blue-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Limpar busca"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </Button>
+              )}
+            </div>
+            <Button variant="outline" size="icon" onClick={handleExportExcel} aria-label="Exportar Excel">
+              <FileSpreadsheet className="h-4 w-4" />
             </Button>
             <Button onClick={() => navigate('/app/documentos/emendas-parlamentares/novo')}>
               <Plus className="-ml-1 mr-2 h-4 w-4" />
@@ -231,19 +317,27 @@ export default function EmendasParlamentares() {
             </Button>
           </div>
         </div>
-        <div className="mt-4 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <Input 
-            placeholder="Buscar por número, descrição ou beneficiário..."
-            className="pl-10 w-full max-w-lg"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <Button variant="ghost" size="icon" className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setSearchQuery('')}>
-              <X className="w-5 h-5 text-gray-400" />
-            </Button>
-          )}
+        <div className="mt-4 md:hidden">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Buscar por número, descrição ou beneficiário..."
+              className="pl-9 pr-9 w-full h-10 rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 focus-visible:ring-blue-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setSearchQuery('')}
+                aria-label="Limpar busca"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -277,12 +371,33 @@ export default function EmendasParlamentares() {
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusConfig[emenda.status]?.className || ''}`}>
                               {statusConfig[emenda.status]?.label || emenda.status}
                             </span>
-                            <Button variant="ghost" size="icon" onClick={() => navigate(`/app/documentos/emendas-parlamentares/${emenda.uid}/editar`)}>
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => setEmendaParaDeletar(emenda)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleDownloadEmenda(emenda)}>
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Baixar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/app/documentos/emendas-parlamentares/${emenda.uid}/editar`)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => setEmendaParaDeletar(emenda)}
+                                  className="text-red-600 dark:text-red-400"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                       </li>

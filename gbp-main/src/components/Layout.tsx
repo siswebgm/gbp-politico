@@ -212,7 +212,7 @@ export function Layout() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg" style={{ paddingTop: 'var(--safe-area-inset-top)' }}>
         <div className="flex h-16 items-center justify-between px-4">
           {/* Left side */}
           <div className="flex items-center gap-4">
@@ -318,6 +318,11 @@ export function Layout() {
                           </p>
                           <CheckCircle2 className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                         </div>
+                        {!!company?.apelido && (
+                          <p className="mt-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 truncate">
+                            {company.apelido}
+                          </p>
+                        )}
                         {companyPlan && (
                           <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
                             Plano: {companyPlan}
@@ -383,12 +388,12 @@ export function Layout() {
       </header>
 
       {/* Main layout */}
-      <div className="flex flex-1 h-[calc(100vh-4rem)]" style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}>
+      <div className="flex flex-1 h-[calc(100vh-4rem)]" style={{ paddingTop: 'calc(4rem + var(--safe-area-inset-top))' }}>
         {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--safe-area-inset-bottom)' }}>
           <div className="w-full min-h-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />

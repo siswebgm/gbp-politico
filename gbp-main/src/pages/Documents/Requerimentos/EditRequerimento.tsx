@@ -5,12 +5,22 @@ import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Card } from "../../../components/ui/card";
 import { Textarea } from "../../../components/ui/textarea";
-import { ChevronLeft, Upload, FileText, X } from "lucide-react";
+import { ChevronLeft, Upload, FileText, X, ExternalLink, Trash2 } from "lucide-react";
 import { useToast } from "../../../components/ui/use-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../../providers/AuthProvider";
 import { useCompany } from "../../../providers/CompanyProvider";
 import { requerimentosService } from "../../../services/requerimentos";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 
 const statusOptions = [
   { value: 'protocolado', label: 'Protocolado' },
@@ -38,6 +48,7 @@ export default function EditRequerimento() {
   const [isFetching, setIsFetching] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [newArquivos, setNewArquivos] = useState<File[]>([]);
+  const [arquivoExistenteParaExcluir, setArquivoExistenteParaExcluir] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -100,13 +111,21 @@ export default function EditRequerimento() {
     setNewArquivos((prev) => prev.filter((_, i) => i !== arquivoIndex));
   };
 
+  const handleRemoveExistingArquivo = (arquivoIndex: number) => {
+    setFormData((prev: any) => {
+      if (!prev) return prev;
+      const current = Array.isArray(prev.arquivos) ? prev.arquivos : [];
+      return { ...prev, arquivos: current.filter((_: any, i: number) => i !== arquivoIndex) };
+    });
+  };
+
   const handleAreaClick = () => {
     fileInputRef.current?.click();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !company?.uid || !company?.storage || !uid || !formData) {
+    if (!user || !company?.uid || !uid || !formData) {
       toast({ title: 'Erro de autenticação', description: 'Dados da empresa não encontrados. Verifique seu login.', variant: 'error' });
       return;
     }
@@ -119,11 +138,13 @@ export default function EditRequerimento() {
     setIsLoading(true);
     try {
       let uploadedFiles: { nome: string; url: string }[] = [];
-      if (newArquivos.length > 0 && user?.company_uid) {
+      const bucketName = company.storage || 'uploads';
+
+      if (newArquivos.length > 0) {
         uploadedFiles = await requerimentosService.uploadArquivos(
           newArquivos, 
           company.uid, 
-          company.storage
+          bucketName
         );
       }
 
@@ -231,10 +252,31 @@ export default function EditRequerimento() {
                   <p className="text-sm font-medium text-gray-600">Arquivos existentes:</p>
                   {formData.arquivos.map((arquivo: { nome: string; url: string }, index: number) => (
                     <div key={index} className="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                      <a href={arquivo.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline">
-                        <FileText className="h-4 w-4" />
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 shrink-0" />
                         <span className="text-sm truncate max-w-[200px] sm:max-w-[300px]">{arquivo.nome}</span>
-                      </a>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.open(arquivo.url, '_blank', 'noopener,noreferrer')}
+                          aria-label="Visualizar arquivo"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setArquivoExistenteParaExcluir(index)}
+                          aria-label="Excluir arquivo"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -289,6 +331,43 @@ export default function EditRequerimento() {
             </Button>
           </div>
         </form>
+
+        <AlertDialog open={arquivoExistenteParaExcluir !== null} onOpenChange={(open) => !open && setArquivoExistenteParaExcluir(null)}>
+          <AlertDialogContent className="sm:max-w-[520px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-3">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                Excluir arquivo?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <span>Você tem certeza que deseja remover este arquivo do requerimento?</span>
+                {arquivoExistenteParaExcluir !== null && Array.isArray(formData?.arquivos) && formData.arquivos[arquivoExistenteParaExcluir]?.nome ? (
+                  <span className="block rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    {formData.arquivos[arquivoExistenteParaExcluir].nome}
+                  </span>
+                ) : null}
+                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  Essa ação remove apenas do requerimento. Para finalizar, clique em “Salvar Alterações”.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="h-10">Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className="h-10 bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+                onClick={() => {
+                  if (arquivoExistenteParaExcluir === null) return;
+                  handleRemoveExistingArquivo(arquivoExistenteParaExcluir);
+                  setArquivoExistenteParaExcluir(null);
+                }}
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

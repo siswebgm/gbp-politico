@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from './button';
 import { FilePlus } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -23,6 +23,8 @@ export function FileUpload({
   className,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputId = useMemo(() => `file-upload-${Math.random().toString(36).slice(2)}`, []);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -66,6 +68,10 @@ export function FileUpload({
     setIsDragging(false);
   };
 
+  const openFilePicker = () => {
+    inputRef.current?.click();
+  };
+
   return (
     <div
       className={cn(
@@ -74,11 +80,22 @@ export function FileUpload({
         isDragging && 'border-blue-500 bg-blue-50 dark:bg-blue-900',
         className
       )}
+      role="button"
+      tabIndex={0}
+      onClick={openFilePicker}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openFilePicker();
+        }
+      }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
       <input
+        id={inputId}
+        ref={inputRef}
         type="file"
         accept={accept}
         multiple={multiple}

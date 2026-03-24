@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { projetosLeiService, ProjetoLei } from '../../../services/projetosLei';
-import { Hash, Tag, FileBox, FileText } from 'lucide-react';
+import { Hash, Tag, FileBox, FileText, ChevronLeft } from 'lucide-react';
 import { useCompanyStore } from '../../../store/useCompanyStore';
 
 export default function VisualizarProjeto() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [projeto, setProjeto] = useState<ProjetoLei | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,13 +133,29 @@ export default function VisualizarProjeto() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col h-screen md:h-auto">
-      <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex flex-col h-screen">
+      <div className="flex-1 flex flex-col mx-auto w-full px-2 sm:px-3 lg:px-4">
         {/* Card Principal */}
-        <div className="bg-white flex-1 flex flex-col md:rounded-xl md:shadow-sm md:my-8">
+        <div className="bg-white flex-1 flex flex-col md:rounded-xl md:shadow-sm md:my-4">
           {/* Cabeçalho com Informações Principais */}
           <div className="p-6 border-b border-gray-100">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
+              <button 
+                onClick={() => navigate('/app/documentos/projetos-lei')} 
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+              </button>
+              <div className="flex-1">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+                  Visualizar Projeto de Lei
+                </h1>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Visualize os detalhes e arquivos do projeto
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-4">
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-4 mb-3">
                   {projeto.numero && (

@@ -271,11 +271,15 @@ export function EditarPesquisa() {
           
         if (updateError) throw updateError;
         
-        // Remover perguntas e candidatos existentes para reinserção
-        console.log('=== DELETANDO perguntas e candidatos existentes ===');
+        // Remover respostas, perguntas e candidatos existentes para reinserção
+        console.log('=== DELETANDO respostas, perguntas e candidatos existentes ===');
         console.log('Pesquisa ID:', id);
         
-        const [deleteResultPerguntas, deleteResultCandidatos] = await Promise.all([
+        const [deleteResultRespostas, deleteResultPerguntas, deleteResultCandidatos] = await Promise.all([
+          supabaseClient
+            .from('ps_gbp_respostas')
+            .delete()
+            .eq('pesquisa_uid', id),
           supabaseClient
             .from('ps_gbp_perguntas')
             .delete()
@@ -285,6 +289,11 @@ export function EditarPesquisa() {
             .delete()
             .eq('pesquisa_uid', id)
         ]);
+        
+        if (deleteResultRespostas.error) {
+          console.error('Erro ao deletar respostas:', deleteResultRespostas.error);
+          throw deleteResultRespostas.error;
+        }
         
         if (deleteResultPerguntas.error) {
           console.error('Erro ao deletar perguntas:', deleteResultPerguntas.error);
@@ -296,7 +305,7 @@ export function EditarPesquisa() {
           throw deleteResultCandidatos.error;
         }
         
-        console.log('Perguntas deletadas com sucesso');
+        console.log('Respostas, perguntas e candidatos deletados com sucesso');
         console.log('Candidatos deletados com sucesso');
         
         // NÃO redireciona aqui - precisa salvar perguntas e candidatos primeiro
@@ -572,24 +581,50 @@ export function EditarPesquisa() {
           }
           
           // 3. Remover candidatos que foram excluídos do formulário
-          const candidatosParaManter = new Set(candidatosFiltrados.map(c => c.nome.toLowerCase()));
+          console.log('=== VERIFICANDO CANDIDATOS PARA REMOVER ===');
+          console.log('candidatosFiltrados:', candidatosFiltrados);
+          console.log('candidatosPesquisa:', candidatosPesquisa);
+          
+          const candidatosParaManter = new Set(candidatosFiltrados.map(c => c.nome.toLowerCase().trim()));
           const candidatosParaRemover = candidatosPesquisa?.filter(
-            cp => !candidatosParaManter.has(cp.candidatos?.nome?.toLowerCase() || '')
+            cp => !candidatosParaManter.has(cp.candidatos?.nome?.toLowerCase().trim() || '')
           ) || [];
+          
+          console.log('candidatosParaManter:', Array.from(candidatosParaManter));
+          console.log('candidatosParaRemover:', candidatosParaRemover);
           
           if (candidatosParaRemover.length > 0) {
             console.log('Candidatos para remover da pesquisa:', candidatosParaRemover);
+            console.log('UIDs dos candidatos para deletar:', candidatosParaRemover.map(c => c.candidato_uid));
             
-            // Remover as associações com a pesquisa (não removemos os candidatos em si)
-            const { error: deleteError } = await supabaseClient
-              .from('ps_gbp_pesquisa_candidatos')
+            // Primeiro, verificar se os candidatos realmente existem antes de deletar
+            const { data: candidatosParaVerificar, error: verifyError } = await supabaseClient
+              .from('ps_gbp_candidatos')
+              .select('uid, nome')
+              .in('uid', candidatosParaRemover.map(c => c.candidato_uid));
+              
+            if (verifyError) {
+              console.error('Erro ao verificar candidatos antes de deletar:', verifyError);
+              throw verifyError;
+            }
+            
+            console.log('Candidatos encontrados no banco antes de deletar:', candidatosParaVerificar);
+            
+            // Remover as associações com a pesquisa e os candidatos em si
+            const { error: deleteError, data: deletedData } = await supabaseClient
+              .from('ps_gbp_candidatos')
               .delete()
-              .in('candidato_uid', candidatosParaRemover.map(c => c.candidato_uid))
-              .eq('pesquisa_uid', pesquisaId);
+              .in('uid', candidatosParaRemover.map(c => c.candidato_uid))
+              .select(); // Adicionar .select() para ver o que foi deletado
               
             if (deleteError) {
-              console.error('Erro ao remover candidatos da pesquisa:', deleteError);
+              console.error('Erro ao deletar candidatos:', deleteError);
+              throw deleteError; // Adicionar throw para interromper se der erro
+            } else {
+              console.log('Candidatos deletados com sucesso!', deletedData);
             }
+          } else {
+            console.log('Nenhum candidato para remover');
           }
         }
       }

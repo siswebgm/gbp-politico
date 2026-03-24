@@ -177,8 +177,90 @@ export function ListaPesquisas() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="pb-6">
+              <div className="mx-auto sm:px-0 md:px-0">
+                {/* Header Skeleton */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+                      <div className="space-y-2">
+                        <div className="w-48 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                        <div className="w-64 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                      </div>
+                    </div>
+                    <div className="hidden md:flex items-center gap-3">
+                      <div className="w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                      <div className="w-32 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filters Skeleton */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mt-6 mx-5 border border-gray-100 dark:border-gray-700/50">
+                  <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:items-center md:justify-between">
+                    <div className="w-32 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="w-full h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    <div className="w-full h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    <div className="w-full h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  </div>
+                </div>
+
+                {/* Cards Grid Skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mx-5 mt-6">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <div className="p-5 pb-3">
+                        <div className="flex justify-between items-start space-x-3 mb-3">
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="w-full h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                            <div className="w-3/4 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                          </div>
+                          <div className="w-12 h-6 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="w-20 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                          <div className="w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-4">
+                        <div className="space-y-4">
+                          <div className="w-full h-16 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="w-full h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                            <div className="w-full h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                          </div>
+                          <div className="w-full h-9 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                          <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                            <div className="flex flex-col items-center">
+                              <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2"></div>
+                              <div className="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-1"></div>
+                              <div className="w-20 h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t dark:border-gray-700 p-2.5 bg-gray-50 dark:bg-gray-800/50">
+                        <div className="flex justify-between w-full items-center">
+                          <div className="flex space-x-1.5">
+                            <div className="w-16 h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                            <div className="w-20 h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                          </div>
+                          <div className="w-8 h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

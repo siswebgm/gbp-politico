@@ -483,7 +483,7 @@ export function ResponderPesquisa() {
                   break;
                 case 'nota':
                 case 'estrelas':
-                  valorPadrao = 0;
+                  valorPadrao = 1;
                   break;
                 case 'escolha_unica':
                   valorPadrao = null;
@@ -516,7 +516,7 @@ export function ResponderPesquisa() {
                 break;
               case 'nota':
               case 'estrelas':
-                valorPadrao = 0;
+                valorPadrao = 1;
                 break;
               case 'escolha_unica':
                 valorPadrao = null;
@@ -535,6 +535,8 @@ export function ResponderPesquisa() {
         }
         
         console.log('Respostas iniciais:', respostasIniciais);
+        console.log('Candidatos carregados:', candidatos);
+        console.log('Perguntas processadas:', perguntasProcessadas);
         setRespostas(respostasIniciais);
         setLoading(false);
       } catch (error) {
@@ -1223,14 +1225,14 @@ export function ResponderPesquisa() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8 pt-2.5 pb-2.5">
+    <div className="min-h-screen bg-white px-4 sm:px-6 lg:px-8 pt-2.5 pb-2.5" style={{
+            backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+            backgroundSize: '20px 20px'
+          }}>
       <div className="max-w-3xl mx-auto">
         <Card className="mb-8 border-t-4 border-blue-600 shadow-lg">
           <CardHeader className="text-center py-8">
             <div className="space-y-4">
-              <div className="inline-block mx-auto px-4 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full mb-2">
-                Pesquisa de Opinião
-              </div>
               <CardTitle className="text-3xl md:text-4xl font-bold text-gray-800 leading-tight">
                 {pesquisa.titulo}
               </CardTitle>
@@ -1242,8 +1244,11 @@ export function ResponderPesquisa() {
               )}
               
               {pesquisa.data_fim && (
-                <div className="mt-6 text-sm font-medium text-gray-500 bg-gray-50 inline-block px-4 py-2 rounded-lg">
-                  <span className="text-blue-600">⏳</span> Disponível até: {formatarData(pesquisa.data_fim)}
+                <div className="mt-6 text-sm font-medium text-gray-500">
+                  <div className="bg-gray-50 inline-block px-4 py-2 rounded-lg">
+                    <span className="text-blue-600">⏳</span> 
+                    <span>Disponível até: {formatarData(pesquisa.data_fim)}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1277,9 +1282,6 @@ export function ResponderPesquisa() {
                       <h3 className="text-xl font-semibold">{candidato.nome}</h3>
                       {candidato.partido && (
                         <p className="text-gray-600">{candidato.partido}</p>
-                      )}
-                      {candidato.cargo && (
-                        <p className="text-sm text-gray-500">{candidato.cargo}</p>
                       )}
                     </div>
                   </div>
@@ -2037,7 +2039,16 @@ export function ResponderPesquisa() {
 
           
           <div className="mt-6 mb-4 px-3 py-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="max-w-md mx-auto text-center space-y-4">
+            <div className="flex justify-end gap-3">
+              <Button 
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => window.history.back()}
+                className="min-w-[120px] py-3 text-sm font-medium border-gray-300 hover:bg-gray-50 transition-colors duration-200"
+              >
+                Cancelar
+              </Button>
               <Button 
                 type="submit" 
                 size="lg"
@@ -2059,13 +2070,10 @@ export function ResponderPesquisa() {
                 ) : (
                   <>
                     <Check className="h-5 w-5 mr-2" />
-                    Enviar Minhas Respostas
+                    Enviar Respostas
                   </>
                 )}
               </Button>
-              <p className="text-[10px] text-gray-400 mt-2">
-                Processamento seguro
-              </p>
             </div>
           </div>
         </form>

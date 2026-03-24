@@ -8,23 +8,46 @@ interface AuthStore {
   logout: () => void;
 }
 
+const safeReadStoredUser = (): AuthData | null => {
+  try {
+    const raw = localStorage.getItem('gbp_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthData | null;
+    return parsed || null;
+  } catch {
+    return null;
+  }
+};
+
 export const useAuthStore = create<AuthStore>((set) => ({
-  isAuthenticated: !!localStorage.getItem('gbp_user'),
-  user: JSON.parse(localStorage.getItem('gbp_user') || 'null'),
+  user: safeReadStoredUser(),
+  isAuthenticated: !!safeReadStoredUser(),
   setUser: (user) => {
     if (user) {
-      localStorage.setItem('gbp_user', JSON.stringify(user));
+      try {
+        localStorage.setItem('gbp_user', JSON.stringify(user));
+      } catch {
+        // ignore
+      }
       set({ user, isAuthenticated: true });
     } else {
-      localStorage.removeItem('gbp_user');
+      try {
+        localStorage.removeItem('gbp_user');
+      } catch {
+        // ignore
+      }
       set({ user: null, isAuthenticated: false });
     }
   },
   logout: () => {
-    localStorage.removeItem('gbp_user');
-    localStorage.removeItem('empresa_uid');
-    localStorage.removeItem('user_uid');
-    localStorage.removeItem('supabase.auth.token');
+    try {
+      localStorage.removeItem('gbp_user');
+      localStorage.removeItem('empresa_uid');
+      localStorage.removeItem('user_uid');
+      localStorage.removeItem('supabase.auth.token');
+    } catch {
+      // ignore
+    }
     set({ user: null, isAuthenticated: false });
   },
 }));

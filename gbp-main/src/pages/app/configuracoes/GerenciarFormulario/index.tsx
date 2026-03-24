@@ -2559,7 +2559,7 @@ export default function GerenciarFormulario() {
                               zIndex: 5,
                               textAlign: textAlignMode,
                               maxWidth: '55%',
-                              maxWidth: '55%'
+                              
                             }}
                           >
                             <Typography

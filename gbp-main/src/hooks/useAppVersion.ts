@@ -6,8 +6,26 @@ interface Version {
   timestamp: string;
 }
 
-const CACHE_KEY = 'app_version';
+const CACHE_KEY = 'appVersion';
+const LEGACY_CACHE_KEY = 'app_version';
 const CHECK_INTERVAL = 30 * 60 * 1000; // 30 minutos
+
+const safeGetLocalStorageItem = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn('[useAppVersion] localStorage.getItem falhou:', key, e);
+    return null;
+  }
+};
+
+const safeSetLocalStorageItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn('[useAppVersion] localStorage.setItem falhou:', key, e);
+  }
+};
 
 export function useAppVersion() {
   const [needsUpdate, setNeedsUpdate] = useState(false);
@@ -16,7 +34,13 @@ export function useAppVersion() {
   const { data: serverVersion } = useQuery<Version>({
     queryKey: ['version'],
     queryFn: async () => {
-      const response = await fetch('/version.json');
+      const now = Date.now();
+      const response = await fetch(`/version.json?t=${now}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       return response.json();
     },
     // Configurações para otimizar as requisições
@@ -35,7 +59,7 @@ export function useAppVersion() {
   useEffect(() => {
     if (!serverVersion) return;
 
-    const cachedVersion = localStorage.getItem(CACHE_KEY);
+    const cachedVersion = safeGetLocalStorageItem(CACHE_KEY) || safeGetLocalStorageItem(LEGACY_CACHE_KEY);
     
     // Só atualiza se houver uma versão em cache e ela for diferente
     if (cachedVersion && cachedVersion !== serverVersion.version) {
@@ -43,11 +67,21 @@ export function useAppVersion() {
     }
     
     // Atualiza a versão em cache
-    localStorage.setItem(CACHE_KEY, serverVersion.version);
+    safeSetLocalStorageItem(CACHE_KEY, serverVersion.version);
   }, [serverVersion]);
 
   const forceUpdate = async () => {
     try {
+      // Limpa caches do navegador independente de SW (iOS Safari costuma manter cache agressivo)
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch (err) {
+          console.warn('Falha ao limpar caches:', err);
+        }
+      }
+
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
 
@@ -73,16 +107,6 @@ export function useAppVersion() {
           })
         );
 
-        // Limpa todos os caches sem tocar em localStorage/session (mantém login)
-        if ('caches' in window) {
-          try {
-            const keys = await caches.keys();
-            await Promise.all(keys.map((k) => caches.delete(k)));
-          } catch (err) {
-            console.warn('Falha ao limpar caches:', err);
-          }
-        }
-
         // Aguarda a troca de controller para garantir que a nova versão esteja ativa
         await new Promise<void>((resolve) => {
           let done = false;
@@ -95,8 +119,15 @@ export function useAppVersion() {
     } catch (e) {
       console.error('Erro durante atualização forçada:', e);
     } finally {
-      // Recarrega a página usando a sessão existente
-      window.location.reload();
+      // Recarrega a página com cache-bust para forçar novo HTML/JS em qualquer dispositivo
+      try {
+        const url = new URL(window.location.href);
+        const v = serverVersion?.version || Date.now().toString();
+        url.searchParams.set('v', v);
+        window.location.replace(url.toString());
+      } catch {
+        window.location.reload();
+      }
     }
   };
 

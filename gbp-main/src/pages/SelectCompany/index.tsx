@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { Building2, ChevronLeft, RefreshCw, Plus, BarChart3 } from 'lucide-react';
 
@@ -60,6 +61,10 @@ export function SelectCompany() {
   const [selectingCompanyUid, setSelectingCompanyUid] = useState<string | null>(null);
   const [refreshingCompanyUids, setRefreshingCompanyUids] = useState<Set<string>>(new Set());
 
+  const [createCompanyQuotaOverride, setCreateCompanyQuotaOverride] = useState<number | null>(null);
+  const [linkedEmpresaCount, setLinkedEmpresaCount] = useState<number>(0);
+  const [remainingQuotaRpc, setRemainingQuotaRpc] = useState<number | null>(null);
+
   const [isCreateCompanyOpen, setIsCreateCompanyOpen] = useState(false);
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   const [createCompanyError, setCreateCompanyError] = useState<string | null>(null);
@@ -72,10 +77,12 @@ export function SelectCompany() {
 
   const canSeeMultiAmbientes = companies.length > 1;
 
-  const createCompanyQuota = Number((user as any)?.cota_criar_empresas ?? 0);
+  const createCompanyQuota =
+    createCompanyQuotaOverride ?? Number((user as any)?.cota_criar_empresas ?? 0);
   const canCreateCompany = !!user?.permissoes?.includes('create_company');
-  const remainingCreateCompanyQuota = Math.max(createCompanyQuota - companies.length, 0);
-  const canOpenCreateCompany = canCreateCompany && remainingCreateCompanyQuota > 0;
+  const remainingCreateCompanyQuota = Math.max(createCompanyQuota - linkedEmpresaCount, 0);
+  const remainingQuotaUi = remainingQuotaRpc ?? remainingCreateCompanyQuota;
+  const canOpenCreateCompany = canCreateCompany && remainingQuotaUi > 0;
 
   const getSuggestedCompanyName = () => {
     const byStore = (activeCompany as any)?.nome;
@@ -85,28 +92,31 @@ export function SelectCompany() {
     return '';
   };
 
-  const fetchSummariesForCompanies = async (empresaUids: string[]): Promise<Record<string, CompanySummary>> => {
-    if (!empresaUids.length) return {};
+  const fetchSummariesForCompanies = useCallback(
+    async (empresaUids: string[]): Promise<Record<string, CompanySummary>> => {
+      if (!empresaUids.length) return {};
 
-    const { data, error } = await supabaseClient.rpc('get_companies_kpis', {
-      p_empresa_uids: empresaUids,
-    });
+      const { data, error } = await supabaseClient.rpc('get_companies_kpis', {
+        p_empresa_uids: empresaUids,
+      });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const rows = (data || []) as CompanyKpiRow[];
-    return rows.reduce((acc, row) => {
-      const empresa_uid = String(row.empresa_uid);
-      acc[empresa_uid] = {
-        empresa_uid,
-        eleitores: Number(row.eleitores) || 0,
-        atendimentos: Number(row.atendimentos) || 0,
-        demandas: Number(row.demandas) || 0,
-        agendamentos: Number(row.agendamentos) || 0,
-      };
-      return acc;
-    }, {} as Record<string, CompanySummary>);
-  };
+      const rows = (data || []) as CompanyKpiRow[];
+      return rows.reduce((acc, row) => {
+        const empresa_uid = String(row.empresa_uid);
+        acc[empresa_uid] = {
+          empresa_uid,
+          eleitores: Number(row.eleitores) || 0,
+          atendimentos: Number(row.atendimentos) || 0,
+          demandas: Number(row.demandas) || 0,
+          agendamentos: Number(row.agendamentos) || 0,
+        };
+        return acc;
+      }, {} as Record<string, CompanySummary>);
+    },
+    []
+  );
 
   const sortedCompanies = useMemo(() => {
     const baseEmpresaUid = user?.empresa_uid;
@@ -139,13 +149,31 @@ export function SelectCompany() {
           .single();
 
         if (!quotaError && quotaRow && isMounted) {
+          const quotaValue = Number((quotaRow as any)?.cota_criar_empresas ?? 0);
+          setCreateCompanyQuotaOverride(quotaValue);
+
           const currentUser = authStore.user || user;
           const updatedUser = {
             ...currentUser,
-            cota_criar_empresas: Number((quotaRow as any)?.cota_criar_empresas ?? 0),
+            cota_criar_empresas: quotaValue,
           };
           authStore.setUser(updatedUser);
           localStorage.setItem('gbp_user', JSON.stringify(updatedUser));
+        }
+
+        try {
+          const { data: remainingData, error: remainingError } = await supabaseClient.rpc(
+            'get_remaining_company_quota_for_user',
+            {
+              p_user_uid: user.uid,
+            }
+          );
+          if (!remainingError && remainingData && Array.isArray(remainingData) && remainingData[0]) {
+            const v = Number((remainingData[0] as any)?.remaining_quota ?? 0);
+            if (isMounted) setRemainingQuotaRpc(Number.isFinite(v) ? v : 0);
+          }
+        } catch {
+          // Se o RPC não existir ainda no banco, a UI continua usando o cálculo local.
         }
 
         const empresaUids = new Set<string>();
@@ -164,6 +192,7 @@ export function SelectCompany() {
         });
 
         const empresaUidList = Array.from(empresaUids);
+        if (isMounted) setLinkedEmpresaCount(empresaUidList.length);
         if (empresaUidList.length === 0) {
           if (isMounted) {
             setCompanies([]);
@@ -199,14 +228,161 @@ export function SelectCompany() {
     return () => {
       isMounted = false;
     };
-  }, [user?.uid, user?.empresa_uid]);
+  }, [user?.uid, user?.empresa_uid, fetchSummariesForCompanies]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let isActive = true;
+    let timeout: any;
+
+    const scheduleRefresh = () => {
+      if (!isActive) return;
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        window.dispatchEvent(new Event('gbp_refresh_companies'));
+      }, 400);
+    };
+
+    const channel = supabaseClient
+      .channel(`select-company-realtime-${user.uid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gbp_usuarios',
+          filter: `uid=eq.${user.uid}`,
+        },
+        () => scheduleRefresh()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'gbp_usuario_empresas',
+          filter: `user_uid=eq.${user.uid}`,
+        },
+        () => scheduleRefresh()
+      )
+      .subscribe();
+
+    const handler = async () => {
+      try {
+        try {
+          const { data: remainingData, error: remainingError } = await supabaseClient.rpc(
+            'get_remaining_company_quota_for_user',
+            {
+              p_user_uid: user.uid,
+            }
+          );
+          if (!remainingError && remainingData && Array.isArray(remainingData) && remainingData[0]) {
+            const v = Number((remainingData[0] as any)?.remaining_quota ?? 0);
+            setRemainingQuotaRpc(Number.isFinite(v) ? v : 0);
+          }
+        } catch {
+          // ignore
+        }
+
+        const empresaUids = new Set<string>();
+        if (user.empresa_uid) empresaUids.add(user.empresa_uid);
+
+        const { data: extraLinks, error: extraError } = await supabaseClient
+          .from('gbp_usuario_empresas')
+          .select('empresa_uid')
+          .eq('user_uid', user.uid)
+          .eq('ativo', true);
+
+        if (extraError) return;
+
+        (extraLinks || []).forEach((l: any) => {
+          if (l?.empresa_uid) empresaUids.add(l.empresa_uid);
+        });
+
+        const empresaUidList = Array.from(empresaUids);
+        setLinkedEmpresaCount(empresaUidList.length);
+        if (empresaUidList.length === 0) {
+          setCompanies([]);
+          setSummaries({});
+          return;
+        }
+
+        const { data: companiesData, error: companiesError } = await supabaseClient
+          .from('gbp_empresas')
+          .select('uid,nome,apelido,cidade,estado,logo')
+          .in('uid', empresaUidList);
+
+        if (companiesError) return;
+
+        const companyList = (companiesData || []) as Company[];
+        setCompanies(companyList);
+
+        const summariesMap = await fetchSummariesForCompanies(companyList.map((c) => c.uid));
+        setSummaries(summariesMap);
+      } catch (e) {
+        console.error('[SelectCompany] Falha ao atualizar empresas/cota (realtime):', e);
+      }
+    };
+
+    window.addEventListener('gbp_refresh_companies', handler);
+    return () => {
+      isActive = false;
+      if (timeout) clearTimeout(timeout);
+      window.removeEventListener('gbp_refresh_companies', handler);
+      supabaseClient.removeChannel(channel);
+    };
+  }, [user?.uid, user?.empresa_uid, fetchSummariesForCompanies]);
 
   const handleCreateCompany = async () => {
     if (!user?.uid) return;
-    if (remainingCreateCompanyQuota <= 0) {
+
+    try {
+      const { data: quotaRow, error: quotaError } = await supabaseClient
+        .from('gbp_usuarios')
+        .select('cota_criar_empresas')
+        .eq('uid', user.uid)
+        .single();
+
+      if (!quotaError && quotaRow) {
+        const quotaValue = Number((quotaRow as any)?.cota_criar_empresas ?? 0);
+        setCreateCompanyQuotaOverride(quotaValue);
+      }
+
+      const empresaUids = new Set<string>();
+      if (user.empresa_uid) empresaUids.add(user.empresa_uid);
+
+      const { data: extraLinks, error: extraError } = await supabaseClient
+        .from('gbp_usuario_empresas')
+        .select('empresa_uid')
+        .eq('user_uid', user.uid)
+        .eq('ativo', true);
+
+      if (!extraError) {
+        (extraLinks || []).forEach((l: any) => {
+          if (l?.empresa_uid) empresaUids.add(l.empresa_uid);
+        });
+      }
+
+      const quotaValue =
+        (!quotaError && quotaRow)
+          ? Number((quotaRow as any)?.cota_criar_empresas ?? 0)
+          : createCompanyQuota;
+      const remainingLive = Math.max(quotaValue - empresaUids.size, 0);
+
+      if (remainingLive <= 0) {
+        setCreateCompanyError('Você atingiu o limite de criação de empresas.');
+        return;
+      }
+    } catch (e) {
+      console.warn('[SelectCompany] Não foi possível validar cota em tempo real:', e);
+    }
+
+    if (remainingQuotaUi <= 0) {
       setCreateCompanyError('Você atingiu o limite de criação de empresas.');
       return;
     }
+
     if (!createCompanyForm.nome.trim()) {
       setCreateCompanyError('Informe o nome da empresa');
       return;
@@ -233,10 +409,18 @@ export function SelectCompany() {
       if (rpcError) throw rpcError;
       const row = (data || [])[0] as any;
 
+      const remainingFromRpc = Number(row?.remaining_quota);
+      if (Number.isFinite(remainingFromRpc)) {
+        setRemainingQuotaRpc(Math.max(remainingFromRpc, 0));
+      }
+
+      const createdEmpresaUid = String(row?.empresa_uid || '').trim();
+      const nextUids = [...companies.map((c) => c.uid), createdEmpresaUid].filter(Boolean);
+
       const { data: companiesData, error: companiesError } = await supabaseClient
         .from('gbp_empresas')
         .select('uid,nome,apelido,cidade,estado,logo')
-        .in('uid', [...companies.map((c) => c.uid), String(row?.empresa_uid)].filter(Boolean));
+        .in('uid', nextUids);
 
       if (companiesError) throw companiesError;
       const companyList = (companiesData || []) as Company[];
@@ -248,6 +432,8 @@ export function SelectCompany() {
       setCreateCompanyForm({ nome: '', apelido: '', cidade: '', estado: '' });
       setIsCreateCompanyOpen(false);
 
+      window.dispatchEvent(new Event('gbp_refresh_companies'));
+
       toast({
         title: 'Sucesso',
         description: `Empresa "${apelidoCriado}" criada com sucesso.`,
@@ -256,7 +442,16 @@ export function SelectCompany() {
       });
     } catch (e: any) {
       console.error('[SelectCompany] Erro ao criar empresa:', e);
-      setCreateCompanyError(e?.message || 'Erro ao criar empresa');
+      const msg = String(e?.message || '').trim();
+      setCreateCompanyError(msg || 'Erro ao criar empresa');
+
+      if (msg.toLowerCase().includes('cota de criação de empresas esgotada')) {
+        setRemainingQuotaRpc(0);
+        setIsCreateCompanyOpen(false);
+        window.dispatchEvent(new Event('gbp_refresh_companies'));
+      } else {
+        window.dispatchEvent(new Event('gbp_refresh_companies'));
+      }
     } finally {
       setIsCreatingCompany(false);
     }
@@ -411,11 +606,11 @@ export function SelectCompany() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {canCreateCompany && (
+              {canOpenCreateCompany && (
                 <button
                   type="button"
                   onClick={() => {
-                    if (!canOpenCreateCompany) return;
+                    setCreateCompanyError(null);
                     setCreateCompanyForm((prev) => {
                       if (String(prev.nome || '').trim()) return prev;
                       const suggested = getSuggestedCompanyName();
@@ -424,25 +619,23 @@ export function SelectCompany() {
                     });
                     setIsCreateCompanyOpen(true);
                   }}
-                  disabled={!canOpenCreateCompany}
-                  className="group relative flex min-h-[160px] items-center justify-center rounded-2xl border border-dashed border-slate-300/80 bg-gradient-to-br from-white to-slate-50/70 text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-sm dark:border-gray-700 dark:from-gray-900/20 dark:to-gray-900/5 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:text-white"
-                  aria-label="Criar nova empresa"
-                  aria-disabled={!canOpenCreateCompany}
-                  title={canOpenCreateCompany ? 'Clique para criar uma nova empresa' : 'Limite de criação atingido'}
+                  className="group relative flex min-h-[160px] items-center justify-center rounded-2xl border border-dashed border-slate-300/80 bg-gradient-to-br from-white to-slate-50/70 text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-gray-700 dark:from-gray-900/20 dark:to-gray-900/5 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:text-white"
+                  aria-label="Criar novo ambiente"
+                  title="Clique para criar um novo ambiente"
                 >
                   <div className="flex flex-col items-center justify-center gap-2">
                     <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm ring-1 ring-blue-200/70 transition-transform group-hover:scale-[1.02] dark:ring-blue-400/20">
                       <Plus className="h-5 w-5" />
                     </div>
-                    <div className="text-base font-semibold tracking-tight">Criar empresa</div>
+                    <div className="text-base font-semibold tracking-tight">Novo Ambiente</div>
                     <div className="text-xs text-slate-500 dark:text-gray-400">
-                      Disponível: <span className="font-semibold text-slate-700 dark:text-gray-200">{remainingCreateCompanyQuota}</span>
+                      Disponível: <span className="font-semibold text-slate-700 dark:text-gray-200">{remainingQuotaUi}</span>
                     </div>
                   </div>
 
                   <div className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                     <span className="rounded-full bg-slate-900/90 px-3 py-1 text-[11px] font-semibold text-white shadow-sm">
-                      {canOpenCreateCompany ? 'Clique para criar' : 'Limite atingido'}
+                      Clique para criar
                     </span>
                   </div>
                 </button>
@@ -566,6 +759,7 @@ export function SelectCompany() {
           open={isCreateCompanyOpen}
           onOpenChange={(open) => {
             if (open) {
+              setCreateCompanyError(null);
               setCreateCompanyForm((prev) => {
                 if (String(prev.nome || '').trim()) return prev;
                 const suggested = getSuggestedCompanyName();
@@ -582,7 +776,7 @@ export function SelectCompany() {
                 <Building2 className="h-5 w-5" />
                 Criar nova empresa
               </DialogTitle>
-              <DialogDescription>Você ainda pode criar {remainingCreateCompanyQuota} empresa(s).</DialogDescription>
+              <DialogDescription>Você ainda pode criar {remainingQuotaUi} empresa(s).</DialogDescription>
             </DialogHeader>
 
             {createCompanyError && (
@@ -643,7 +837,7 @@ export function SelectCompany() {
               <Button type="button" variant="outline" onClick={() => setIsCreateCompanyOpen(false)} disabled={isCreatingCompany}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={handleCreateCompany} disabled={isCreatingCompany || remainingCreateCompanyQuota <= 0}>
+              <Button type="button" onClick={handleCreateCompany} disabled={isCreatingCompany || remainingQuotaUi <= 0}>
                 {isCreatingCompany ? 'Criando...' : 'Criar empresa'}
               </Button>
             </div>

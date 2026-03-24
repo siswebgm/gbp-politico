@@ -65,33 +65,30 @@ export function NovaDemanda() {
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
+    const prevHtmlStyle = html.getAttribute('style');
+    const prevBodyStyle = body.getAttribute('style');
     
     // Adiciona classe para permitir scroll
     body.classList.add('public-page-scroll');
+    html.classList.add('public-page-scroll');
     
     // Força estilos diretamente
-    html.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important; overscroll-behavior: none !important;';
-    body.style.cssText = 'overflow: scroll !important; overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; position: relative !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: none !important;';
-    
-    // Previne pull-to-refresh e outros gestos que causam reload
-    const preventPullToRefresh = (e: TouchEvent) => {
-      const element = e.target as HTMLElement;
-      // Permite scroll normal mas previne refresh
-      if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
-        return; // Permite comportamento normal em inputs
-      }
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      if (scrollTop === 0 && e.touches[0].clientY > 0) {
-        // Está no topo e puxando para baixo
-        e.preventDefault();
-      }
-    };
-    
-    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
+    html.style.cssText = 'overflow-x: hidden !important; overflow-y: auto !important; height: auto !important; position: relative !important; inset: auto !important; top: auto !important; right: auto !important; bottom: auto !important; left: auto !important;';
+    body.style.cssText = 'overflow-x: hidden !important; overflow-y: auto !important; height: auto !important; position: relative !important; inset: auto !important; top: auto !important; right: auto !important; bottom: auto !important; left: auto !important; -webkit-overflow-scrolling: touch !important;';
     
     return () => {
       body.classList.remove('public-page-scroll');
-      document.removeEventListener('touchmove', preventPullToRefresh);
+      html.classList.remove('public-page-scroll');
+      if (prevHtmlStyle !== null) {
+        html.setAttribute('style', prevHtmlStyle);
+      } else {
+        html.removeAttribute('style');
+      }
+      if (prevBodyStyle !== null) {
+        body.setAttribute('style', prevBodyStyle);
+      } else {
+        body.removeAttribute('style');
+      }
     };
   }, []);
   

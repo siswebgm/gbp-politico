@@ -6,37 +6,6 @@ const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB por chunk
 export type TipoUpload = 'candidatos' | 'documentos' | 'outros';
 
 /**
- * Faz upload de um arquivo em chunks (para arquivos grandes)
- */
-async function uploadInChunks(file: File, finalFileName: string, bucketName: string): Promise<string> {
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-  let uploadedSize = 0;
-
-  for (let chunk = 0; chunk < totalChunks; chunk++) {
-    const start = chunk * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const chunkBlob = file.slice(start, end);
-
-    const { error: uploadError } = await supabaseClient.storage
-      .from(bucketName)
-      .upload(`${finalFileName}_${chunk}`, chunkBlob, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (uploadError) {
-      console.error(`Erro ao fazer upload do chunk ${chunk}:`, uploadError);
-      throw new Error(`Erro ao fazer upload do arquivo: ${uploadError.message}`);
-    }
-
-    uploadedSize += chunkBlob.size;
-  }
-
-  // Retorna o caminho final do arquivo
-  return finalFileName;
-}
-
-/**
  * Faz upload de um arquivo para o storage
  * @param file Arquivo a ser enviado
  * @param empresaId ID da empresa (será usado como pasta)
@@ -48,11 +17,10 @@ export async function uploadFile(
   file: File, 
   empresaId: string,
   tipo: TipoUpload = 'outros',
-  nomePersonalizado?: string
+  nomePersonalizado?: string,
+  bucketName: string = 'uploads'
 ): Promise<string> {
   try {
-    const bucketName = 'uploads';
-    
     // Gera um nome de arquivo único se não for fornecido um nome personalizado
     const extensao = file.name.split('.').pop() || '';
     const nomeArquivo = nomePersonalizado || 
@@ -61,22 +29,17 @@ export async function uploadFile(
     // Cria um caminho estruturado: empresa_id/tipo/nome_arquivo.extensao
     const finalFileName = `${empresaId}/${tipo}/${nomeArquivo}`;
 
-    // Upload em chunks para arquivos grandes
-    if (file.size > CHUNK_SIZE) {
-      await uploadInChunks(file, finalFileName, bucketName);
-    } else {
-      // Upload direto para arquivos pequenos
-      const { error: uploadError } = await supabaseClient.storage
-        .from(bucketName)
-        .upload(finalFileName, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
+    // Upload direto (Supabase Storage já suporta arquivos grandes)
+    const { error: uploadError } = await supabaseClient.storage
+      .from(bucketName)
+      .upload(finalFileName, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
 
-      if (uploadError) {
-        console.error('Erro ao fazer upload:', uploadError);
-        throw new Error(`Erro ao fazer upload do arquivo: ${uploadError.message}`);
-      }
+    if (uploadError) {
+      console.error('Erro ao fazer upload:', uploadError);
+      throw new Error(`Erro ao fazer upload do arquivo: ${uploadError.message}`);
     }
 
     // Obtém a URL pública do arquivo

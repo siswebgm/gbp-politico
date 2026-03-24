@@ -321,35 +321,34 @@ export function AttendanceList() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 py-6 pb-24 md:pb-6">
-      <Container maxWidth={false}>
+    <div className="bg-gray-50 dark:bg-gray-900 pb-24 md:pb-6">
+      <div className="w-full">
         <div className="space-y-3 sm:space-y-4">
-          <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <button 
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 px-5 md:px-4">
+              <div className="flex items-center gap-4">
+                <button
                   onClick={() => navigate('/app')}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  className="inline-flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 >
-                  <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <ArrowLeft className="h-5 w-5" />
                 </button>
+
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-semibold dark:text-white">Atendimentos</h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    <span className="hidden sm:inline">Gerencie todos os atendimentos em um só lugar</span>
-                    <span className="sm:hidden">Gerencie seus atendimentos</span>
+                  <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Atendimentos</h1>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Gerencie todos os atendimentos em um só lugar
                   </p>
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-2">
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<Filter className="w-4 h-4" />}
+                <button
                   onClick={() => setShowFilters(!showFilters)}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
                 >
+                  <Filter className="h-4 w-4 mr-2" />
                   Filtros
-                </Button>
+                </button>
 
                 {hasAdminAccess && (
                   <div className="relative">
@@ -393,14 +392,16 @@ export function AttendanceList() {
             </div>
           </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3 lg:gap-4 cursor-pointer">
+        <div className="px-2 sm:px-5 pb-4">
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3 lg:gap-4 cursor-pointer">
           <div 
             onClick={() => setStatusFilter('all')} 
             className={`bg-white dark:bg-gray-800 p-4 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${statusFilter === 'all' ? 'ring-2 ring-blue-500' : ''}`}
           >
-            <div className="flex items-center">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">Total</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total</p>
                 <p className="text-2xl sm:text-xl lg:text-2xl font-semibold mt-1 sm:mt-1 lg:mt-2">{statusCounts.total}</p>
               </div>
               <div className="flex-shrink-0 ml-3 sm:ml-2">
@@ -476,7 +477,7 @@ export function AttendanceList() {
         </div>
 
         {/* Filtros Rápidos */}
-        <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 space-y-3 sm:space-y-4">
+        <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 space-y-3 sm:space-y-4 mt-4">
           <div className="flex flex-col gap-3 sm:gap-4">
             {/* Busca Rápida */}
             <div className="w-full">
@@ -592,7 +593,8 @@ export function AttendanceList() {
             calculateElapsedTime={calculateElapsedTime}
           />
         </div>
-      </Container>
+        </div>
+      </div>
 
       {/* Botão flutuante de filtros para mobile */}
       <div className="fixed bottom-6 right-4 md:hidden z-50">

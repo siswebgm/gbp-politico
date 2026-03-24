@@ -1,5 +1,8 @@
 // Este arquivo é responsável por registrar o service worker
 export function register() {
+  unregister();
+  return;
+
   if ('serviceWorker' in navigator && 'Notification' in window) {
     window.addEventListener('load', () => {
       const swUrl = '/sw.js';
@@ -35,12 +38,11 @@ export function register() {
 
 export function unregister() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready
-      .then((registration) => {
-        registration.unregister();
-      })
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
       .catch((error) => {
-        console.error(error.message);
+        console.error(error?.message || error);
       });
   }
 }

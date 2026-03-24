@@ -24,7 +24,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LoadingSpinner = () => (
-  <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center">
+  <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center pointer-events-none">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
   </div>
 );
@@ -38,14 +38,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
   const { toast } = useToast();
 
+  const safeGetLocalStorageItem = (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn('[AuthProvider] localStorage.getItem falhou:', key, e);
+      return null;
+    }
+  };
+
+  const safeSetLocalStorageItem = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('[AuthProvider] localStorage.setItem falhou:', key, e);
+    }
+  };
+
+  const safeRemoveLocalStorageItem = (key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('[AuthProvider] localStorage.removeItem falhou:', key, e);
+    }
+  };
+
+  const safeParseJson = <T,>(value: string | null): T | null => {
+    if (!value) return null;
+    try {
+      return JSON.parse(value) as T;
+    } catch (e) {
+      console.warn('[AuthProvider] JSON.parse falhou', e);
+      return null;
+    }
+  };
+
   // Monitor de conexão
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       // Ao voltar online, tenta recarregar os dados
-      const storedUser = localStorage.getItem('gbp_user');
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
+      const storedUser = safeGetLocalStorageItem('gbp_user');
+      const userData = safeParseJson<{ uid?: string }>(storedUser);
+      if (userData?.uid) {
         loadUserData(userData.uid).catch(console.error);
       }
     };
@@ -53,9 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleOffline = () => {
       setIsOnline(false);
       // Quando offline, mantém os dados do localStorage
-      const storedUser = localStorage.getItem('gbp_user');
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
+      const storedUser = safeGetLocalStorageItem('gbp_user');
+      const userData = safeParseJson<any>(storedUser);
+      if (userData) {
         authStore.setUser(userData);
       }
     };
@@ -93,9 +128,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (!isOnline) {
         // Se estiver offline, usa dados do localStorage
-        const storedUser = localStorage.getItem('gbp_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
+        const storedUser = safeGetLocalStorageItem('gbp_user');
+        const userData = safeParseJson<any>(storedUser);
+        if (userData) {
           authStore.setUser(userData);
           return true;
         }
@@ -130,9 +165,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         // Se houver erro de conexão, tenta usar dados do localStorage
         if (error.code === 'NETWORK_ERROR' || !isOnline) {
-          const storedUser = localStorage.getItem('gbp_user');
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
+          const storedUser = safeGetLocalStorageItem('gbp_user');
+          const userData = safeParseJson<any>(storedUser);
+          if (userData) {
             authStore.setUser(userData);
             return true;
           }
@@ -151,14 +186,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
-      const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || userData.empresa_uid;
+      const activeEmpresaUid = safeGetLocalStorageItem('active_empresa_uid') || userData.empresa_uid;
       const userWithActiveEmpresa = {
         ...userData,
         empresa_uid: activeEmpresaUid,
       };
 
       authStore.setUser(userWithActiveEmpresa);
-      localStorage.setItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
+      safeSetLocalStorageItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
 
       if (activeEmpresaUid) {
         try {
@@ -178,9 +213,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Erro ao atualizar dados do usuário:', error);
       // Em caso de erro, tenta usar dados do localStorage
-      const storedUser = localStorage.getItem('gbp_user');
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
+      const storedUser = safeGetLocalStorageItem('gbp_user');
+      const userData = safeParseJson<any>(storedUser);
+      if (userData) {
         authStore.setUser(userData);
         return true;
       }
@@ -191,18 +226,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initializeAuth = async () => {
       setIsInitializing(true);
+
+      let timedOut = false;
+      const hardTimeout = window.setTimeout(() => {
+        timedOut = true;
+        console.warn('[AuthProvider] Inicialização excedeu tempo limite. Liberando UI.');
+        setIsInitializing(false);
+      }, 12000);
+
       try {
-        const storedUser = localStorage.getItem('gbp_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          if (userData?.uid) {
-            await loadUserData(userData.uid);
-          }
+        const storedUser = safeGetLocalStorageItem('gbp_user');
+        const userData = safeParseJson<{ uid?: string }>(storedUser);
+        if (userData?.uid) {
+          await Promise.race([
+            loadUserData(userData.uid),
+            new Promise((resolve) => setTimeout(resolve, 8000)),
+          ]);
         }
       } catch (error) {
         console.error('Erro ao inicializar autenticação:', error);
       } finally {
-        setIsInitializing(false);
+        window.clearTimeout(hardTimeout);
+        if (!timedOut) {
+          setIsInitializing(false);
+        }
       }
     };
 
@@ -211,12 +258,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Atualização periódica apenas quando online
     const updateInterval = setInterval(() => {
       if (isOnline) {
-        const storedUser = localStorage.getItem('gbp_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          if (userData?.uid) {
-            loadUserData(userData.uid).catch(console.error);
-          }
+        const storedUser = safeGetLocalStorageItem('gbp_user');
+        const userData = safeParseJson<{ uid?: string }>(storedUser);
+        if (userData?.uid) {
+          loadUserData(userData.uid).catch(console.error);
         }
       }
     }, 30000);
@@ -273,16 +318,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('uid', user.uid);
 
       // Atualiza estado global
-      const activeEmpresaUid = localStorage.getItem('active_empresa_uid') || user.empresa_uid || '';
+      const activeEmpresaUid = safeGetLocalStorageItem('active_empresa_uid') || user.empresa_uid || '';
       const userWithActiveEmpresa = {
         ...user,
         empresa_uid: activeEmpresaUid,
       };
 
       authStore.setUser(userWithActiveEmpresa);
-      localStorage.setItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
-      localStorage.setItem('empresa_uid', activeEmpresaUid);
-      localStorage.setItem('user_uid', user.uid);
+      safeSetLocalStorageItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
+      safeSetLocalStorageItem('empresa_uid', activeEmpresaUid);
+      safeSetLocalStorageItem('user_uid', user.uid);
 
       // Carrega dados da empresa se existir
       if (activeEmpresaUid) {
@@ -306,18 +351,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     authStore.logout();
     setCompany(null);
     setCompanyUser(null);
-    localStorage.removeItem('gbp_user');
-    localStorage.removeItem('empresa_uid');
-    localStorage.removeItem('active_empresa_uid');
-    localStorage.removeItem('user_uid');
-    localStorage.removeItem('supabase.auth.token');
+    safeRemoveLocalStorageItem('gbp_user');
+    safeRemoveLocalStorageItem('empresa_uid');
+    safeRemoveLocalStorageItem('active_empresa_uid');
+    safeRemoveLocalStorageItem('user_uid');
+    safeRemoveLocalStorageItem('supabase.auth.token');
     
     // Limpar quaisquer outros dados do localStorage
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('gbp_') || key.includes('supabase')) {
-        localStorage.removeItem(key);
-      }
-    });
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('gbp_') || key.includes('supabase')) {
+          safeRemoveLocalStorageItem(key);
+        }
+      });
+    } catch (e) {
+      console.warn('[AuthProvider] Falha ao iterar localStorage durante signOut', e);
+    }
 
     // Redirecionar para login
     navigate('/login');

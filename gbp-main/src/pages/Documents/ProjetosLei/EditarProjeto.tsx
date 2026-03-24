@@ -80,13 +80,28 @@ export default function EditarProjeto() {
         const data = await projetosLeiService.buscarPorId(uid);
         
         if (data) {
+          console.log('Dados do projeto carregados:', data);
+          console.log('Arquivos do projeto:', data.arquivos);
+          
+          // Valida e normaliza os arquivos existentes
+          let arquivosExistentes = [];
+          if (Array.isArray(data.arquivos)) {
+            arquivosExistentes = data.arquivos.filter(arquivo => {
+              if (!arquivo || typeof arquivo !== 'string') return false;
+              // Aceita tanto URLs completas quanto caminhos do storage
+              return arquivo.startsWith('http') || arquivo.startsWith('projetos-lei/');
+            });
+          }
+          
+          console.log('Arquivos existentes filtrados:', arquivosExistentes);
+          
           setProjeto({
             ano: data.ano.toString(),
             numero: data.numero,
             status: data.status,
             titulo: data.titulo,
             arquivos: [],
-            arquivosExistentes: Array.isArray(data.arquivos) ? data.arquivos : [],
+            arquivosExistentes: arquivosExistentes,
           });
         } else {
           showErrorToast("Projeto não encontrado");
@@ -103,6 +118,14 @@ export default function EditarProjeto() {
 
     carregarProjeto();
   }, [uid]);
+
+  // Função para sanitizar nomes de arquivos
+  const sanitizeFileName = (fileName: string): string => {
+    return fileName
+      .replace(/[^a-zA-Z0-9.-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '');
+  };
 
   const handleChange = (field: keyof ProjetoUpload, value: string) => {
     setProjeto({ ...projeto, [field]: value });
@@ -140,6 +163,7 @@ export default function EditarProjeto() {
   };
 
   const handleRemoveArquivoExistente = (arquivoUrl: string) => {
+    console.log('Removendo arquivo:', arquivoUrl);
     setProjeto({
       ...projeto,
       arquivosExistentes: projeto.arquivosExistentes.filter(url => url !== arquivoUrl)
@@ -171,22 +195,43 @@ export default function EditarProjeto() {
 
         for (let i = 0; i < totalArquivos; i++) {
           const arquivo = projeto.arquivos[i];
-          const fileName = `${Date.now()}-${arquivo.name}`;
+          const sanitizedFileName = sanitizeFileName(arquivo.name);
+          const fileName = `${Date.now()}-${sanitizedFileName}`;
           const filePath = `projetos-lei/${company.uid}/${projeto.ano}/${projeto.numero}/${fileName}`;
+
+          // Validação do caminho do arquivo
+          if (!filePath || filePath.trim() === '') {
+            throw new Error('Caminho do arquivo inválido');
+          }
+
+          console.log('Fazendo upload do arquivo:', filePath);
+          console.log('Nome original:', arquivo.name);
+          console.log('Nome sanitizado:', sanitizedFileName);
 
           const { error: uploadError } = await supabaseClient.storage
             .from(company.storage)
             .upload(filePath, arquivo);
 
           if (uploadError) {
-            throw uploadError;
+            console.error('Erro no upload:', uploadError);
+            throw new Error(`Erro ao fazer upload do arquivo ${arquivo.name}: ${uploadError.message}`);
           }
 
-          const { data: urlData } = supabaseClient.storage
-            .from(company.storage)
-            .getPublicUrl(filePath);
+          let urlData;
+          try {
+            urlData = supabaseClient.storage
+              .from(company.storage)
+              .getPublicUrl(filePath);
+            
+            if (!urlData || !urlData.data || !urlData.data.publicUrl) {
+              throw new Error('URL pública não gerada corretamente');
+            }
+          } catch (urlError) {
+            console.error('Erro ao gerar URL pública:', urlError);
+            throw new Error(`Erro ao gerar URL pública para o arquivo ${arquivo.name}`);
+          }
 
-          arquivosUrls.push(urlData.publicUrl);
+          arquivosUrls.push(urlData.data.publicUrl);
 
           const progressPercentage = 10 + ((i + 1) / totalArquivos) * 60;
           setUploadProgress(progressPercentage);
@@ -196,13 +241,23 @@ export default function EditarProjeto() {
       }
 
       // Atualizar projeto no banco de dados
+      // Filtra apenas URLs válidas para evitar problemas
+      const arquivosValidos = arquivosUrls.filter(url => {
+        if (!url || typeof url !== 'string') return false;
+        // Verifica se é uma URL válida ou um caminho válido
+        return url.startsWith('http') || url.startsWith('projetos-lei/');
+      });
+
       const projetoAtualizado = {
         numero: projeto.numero,
         ano: parseInt(projeto.ano),
         titulo: projeto.titulo,
         status: projeto.status as 'em_andamento' | 'aprovado' | 'arquivado',
-        arquivos: JSON.stringify(arquivosUrls),
+        arquivos: JSON.stringify(arquivosValidos),
       };
+
+      console.log('Arquivos válidos:', arquivosValidos);
+      console.log('Projeto atualizado:', projetoAtualizado);
 
       setUploadProgress(80);
 
@@ -344,29 +399,46 @@ export default function EditarProjeto() {
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Arquivos Atuais</h3>
                 <div className="space-y-2">
-                  {projeto.arquivosExistentes.map((url, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                          {url.split('/').pop()}
-                        </span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveArquivoExistente(url)}
-                        disabled={isLoading}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  {projeto.arquivosExistentes.map((url, index) => {
+                    // Extrai o nome do arquivo da URL ou do caminho
+                    let filename = '';
+                    try {
+                      if (url.startsWith('http')) {
+                        // É uma URL completa, extrai o último segmento
+                        filename = url.split('/').pop() || '';
+                      } else {
+                        // É um caminho/chave do storage, extrai o último segmento
+                        filename = url.split('/').pop() || '';
+                      }
+                    } catch (error) {
+                      console.error('Erro ao extrair nome do arquivo:', error);
+                      filename = 'arquivo.pdf';
+                    }
+                    
+                    return (
+                      <div
+                        key={`${url}-${index}`}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                       >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <FileText className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                          <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                            {filename}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveArquivoExistente(url)}
+                          disabled={isLoading}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             )}
@@ -463,10 +535,11 @@ export default function EditarProjeto() {
             )}
 
             {/* Botões */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 max-w-md ml-auto">
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={() => navigate('/app/documentos/projetos-lei')}
                 disabled={isLoading}
                 className="flex-1"
@@ -475,6 +548,7 @@ export default function EditarProjeto() {
               </Button>
               <Button
                 type="submit"
+                size="sm"
                 disabled={isLoading || !projeto.numero || !projeto.titulo}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               >

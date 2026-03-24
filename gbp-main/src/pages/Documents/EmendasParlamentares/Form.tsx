@@ -18,13 +18,45 @@ import { useToast } from '../../../components/ui/use-toast';
 import { useCompany } from '../../../providers/CompanyProvider';
 import { useAuth } from '../../../providers/AuthProvider';
 import { emendasParlamentaresService, EmendaParlamentar } from '../../../services/emendasParlamentares';
+import { uploadFile } from '../../../services/uploadService';
+import { ExternalLink, Trash2 } from 'lucide-react';
+
+ function parsePtBrCurrencyRequired(val: unknown): number {
+   if (val === null || val === undefined) return 0;
+   if (typeof val === 'number') return val;
+
+   const raw = String(val).trim();
+   if (!raw) return 0;
+
+   const cleaned = raw
+     .replace(/\s/g, '')
+     .replace(/R\$/g, '')
+     .replace(/\u00A0/g, '')
+     .replace(/[^0-9,.-]/g, '');
+
+   if (cleaned.includes(',')) {
+     const normalized = cleaned.replace(/\./g, '').replace(',', '.');
+     const n = Number(normalized);
+     return Number.isFinite(n) ? n : 0;
+   }
+
+   const n = Number(cleaned);
+   return Number.isFinite(n) ? n : 0;
+ }
+
+ function parsePtBrCurrencyOptional(val: unknown): number | undefined {
+   if (val === null || val === undefined) return undefined;
+   if (typeof val === 'string' && !val.trim()) return undefined;
+   const parsed = parsePtBrCurrencyRequired(val);
+   return parsed;
+ }
 
 const formSchema = z.object({
   numero_emenda: z.string().min(1, 'Número da emenda é obrigatório'),
   ano: z.preprocess((val) => Number(val), z.number().min(2000, 'Ano inválido')),
   tipo: z.string().min(1, 'Tipo é obrigatório'),
   descricao: z.string().optional(),
-  valor_total: z.preprocess((val) => Number(String(val).replace(/[^0-9,]/g, '').replace(',', '.')), z.number().min(0, 'Valor deve ser positivo')),
+  valor_total: z.preprocess((val) => parsePtBrCurrencyRequired(val), z.number().min(0, 'Valor deve ser positivo')),
   beneficiario: z.string().optional(),
   beneficiario_cnpj: z.string().optional(),
   beneficiario_municipio: z.string().optional(),
@@ -33,14 +65,9 @@ const formSchema = z.object({
   data_empenho: z.string().optional(),
   data_liberacao: z.string().optional(),
   data_pagamento: z.string().optional(),
-  valor_empenhado: z.preprocess((val) => Number(String(val).replace(/[^0-9,]/g, '').replace(',', '.')), z.number().min(0, 'Valor deve ser positivo').optional()),
-  valor_pago: z.preprocess((val) => Number(String(val).replace(/[^0-9,]/g, '').replace(',', '.')), z.number().min(0, 'Valor deve ser positivo').optional()),
-  arquivos: z.array(z.object({
-    nome: z.string(),
-    tipo: z.string(),
-    tamanho: z.number(),
-    url: z.string().optional()
-  })).optional()
+  valor_empenhado: z.preprocess((val) => parsePtBrCurrencyOptional(val), z.number().min(0, 'Valor deve ser positivo').optional()),
+  valor_pago: z.preprocess((val) => parsePtBrCurrencyOptional(val), z.number().min(0, 'Valor deve ser positivo').optional()),
+  arquivos: z.array(z.instanceof(File)).optional(),
 });
 
 export default function EmendaParlamentarForm() {
@@ -50,6 +77,7 @@ export default function EmendaParlamentarForm() {
   const { company } = useCompany();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [arquivosExistentes, setArquivosExistentes] = React.useState<NonNullable<EmendaParlamentar['arquivos']>>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -75,6 +103,7 @@ export default function EmendaParlamentarForm() {
       const fetchEmenda = async () => {
         try {
           const data = await emendasParlamentaresService.getById(id);
+          setArquivosExistentes(data.arquivos || []);
           form.reset({
             ...data,
             ano: data.ano || new Date().getFullYear(),
@@ -82,6 +111,7 @@ export default function EmendaParlamentarForm() {
             data_empenho: data.data_empenho ? data.data_empenho.split('T')[0] : '',
             data_liberacao: data.data_liberacao ? data.data_liberacao.split('T')[0] : '',
             data_pagamento: data.data_pagamento ? data.data_pagamento.split('T')[0] : '',
+            arquivos: [],
           });
         } catch (error) {
           toast({ title: 'Erro ao buscar dados da emenda', variant: 'error' });
@@ -95,18 +125,26 @@ export default function EmendaParlamentarForm() {
     if (!company?.uid || !user?.uid) return;
     setIsLoading(true);
     try {
-            const payload: Partial<EmendaParlamentar> = {
+      let uploadedArquivos: { nome: string; tipo: string; tamanho: number; url: string }[] | undefined;
+      if (values.arquivos && values.arquivos.length > 0) {
+        const bucketName = (company as any)?.storage || 'uploads';
+        const urls = await Promise.all(values.arquivos.map((file) => uploadFile(file, company.uid, 'documentos', undefined, bucketName)));
+        uploadedArquivos = values.arquivos.map((file, idx) => ({
+          nome: file.name,
+          tipo: file.type,
+          tamanho: file.size,
+          url: urls[idx],
+        }));
+      }
+
+      const payload: Partial<EmendaParlamentar> = {
         ...values,
         data_empenho: values.data_empenho || undefined,
         data_liberacao: values.data_liberacao || undefined,
         data_pagamento: values.data_pagamento || undefined,
         empresa_uid: company.uid,
         updated_by: user.uid,
-        arquivos: values.arquivos?.map(file => ({
-          nome: file.name,
-          tipo: file.type,
-          tamanho: file.size
-        }))
+        arquivos: [...(arquivosExistentes || []), ...(uploadedArquivos || [])],
       };
 
       if (id) {
@@ -173,6 +211,44 @@ export default function EmendaParlamentarForm() {
           <Card>
             <CardHeader><CardTitle>Anexos</CardTitle></CardHeader>
             <CardContent>
+              {arquivosExistentes.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Arquivos atuais:</div>
+                  <div className="space-y-2">
+                    {arquivosExistentes.map((a, idx) => (
+                      <div
+                        key={`${a.nome}-${idx}`}
+                        className="flex items-center justify-between gap-3 p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm text-gray-800 dark:text-gray-200 truncate">{a.nome}</div>
+                          {a.url && (
+                            <a
+                              href={a.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Visualizar
+                            </a>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-700"
+                          aria-label={`Remover arquivo ${a.nome}`}
+                          onClick={() => setArquivosExistentes(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <FormField name="arquivos" control={form.control} render={({ field }) => (
                 <FormItem>
                   <FormLabel>Anexos</FormLabel>
@@ -182,7 +258,7 @@ export default function EmendaParlamentarForm() {
                       onChange={field.onChange}
                       multiple={true}
                       maxFiles={10}
-                      maxSize={10 * 1024 * 1024}
+                      maxSize={40 * 1024 * 1024}
                       className="w-full"
                     />
                   </FormControl>

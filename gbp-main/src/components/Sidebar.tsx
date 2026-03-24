@@ -97,12 +97,12 @@ const MenuItem = React.memo(function MenuItem({
   badge
 }: MenuItemProps) {
   return (
-    <div className="mb-1">
+    <div className="mb-1.5">
       <div 
         className={`flex items-center ${
           isCollapsed 
-            ? 'justify-center w-12 h-10 mx-auto' 
-            : 'px-4 py-1.5'
+            ? 'justify-center w-12 h-[34px] mx-auto' 
+            : 'px-3 py-[5px]'
         } rounded-lg text-sm font-medium transition-all duration-200 group hover:scale-[1.02] ${
           isActive
             ? 'bg-blue-50 text-blue-600 dark:bg-blue-800/50 dark:text-white shadow-sm'
@@ -119,7 +119,7 @@ const MenuItem = React.memo(function MenuItem({
               ? 'text-blue-600 dark:text-white' 
               : 'text-gray-400 dark:text-gray-400 group-hover:scale-110 group-hover:text-blue-500 dark:group-hover:text-blue-400'
           }`}>
-            <item.icon className="w-5 h-5" />
+            <item.icon className="w-4 h-4" />
           </div>
           {!isCollapsed && (
             <span className="truncate flex-1 ml-3">
@@ -140,7 +140,6 @@ const MenuItem = React.memo(function MenuItem({
             </>
           )}
         </Link>
-        
         {isParent && !isCollapsed && (
           <button
             onClick={onToggle}
@@ -331,9 +330,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] bg-white dark:bg-gray-800 shadow-lg z-30 transition-all duration-300 ease-in-out ${
+        className={`fixed lg:sticky left-0 bg-white dark:bg-gray-800 shadow-lg z-30 transition-all duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'lg:w-20' : 'w-64'}`}
+        style={{
+          top: 'calc(4rem + var(--safe-area-inset-top))',
+          height: 'calc(100vh - (4rem + var(--safe-area-inset-top)))',
+        }}
       >
         <nav className="flex flex-col h-full">
           <button
@@ -348,8 +351,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             )}
           </button>
 
-          <div className={`flex-1 overflow-y-auto py-4 ${isCollapsed ? 'px-2' : 'px-3'}`}>
-            <div className={isCollapsed ? 'space-y-2' : 'space-y-1'}>
+          <div className={`flex-1 overflow-y-auto py-2 ${isCollapsed ? 'px-2' : 'px-3'}`}>
+            <div className={isCollapsed ? 'space-y-2' : 'space-y-1.5'}>
               {filteredNavigation.map((item) => {
                 // Lógica especial para evitar conflito entre Documentos e Demandas Ruas
                 let isActive = false;

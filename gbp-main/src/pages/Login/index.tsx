@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useToast } from '../../components/ui/use-toast'; // Importação corrigida
 import { CreateCompanyModal } from './components/CreateCompanyModal';
+
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,19 @@ export function Login() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+
+    body.classList.add('public-page-scroll');
+    html.classList.add('public-page-scroll');
+
+    return () => {
+      body.classList.remove('public-page-scroll');
+      html.classList.remove('public-page-scroll');
+    };
+  }, []);
 
   const handleForgotPassword = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -147,7 +161,7 @@ export function Login() {
     <>
       <div className="min-h-screen flex md:flex-row flex-col">
         {/* Parte superior/esquerda - Fundo azul com logo e descrição */}
-        <div className="md:w-1/2 h-[30vh] md:min-h-screen md:static relative bg-blue-600 z-10">
+        <div className="md:w-1/2 h-[30vh] md:min-h-screen md:static relative bg-blue-600">
           <div className="md:flex hidden h-full flex-col items-center justify-center py-8 px-6 text-white relative overflow-hidden">
             {/* Conteúdo desktop - mantido como estava */}
             {/* Marca d'água */}
@@ -234,7 +248,7 @@ export function Login() {
         </div>
 
         {/* Parte inferior/direita - Formulário de login */}
-        <div className="w-full md:w-1/2 flex flex-col items-center justify-center min-h-[60vh] md:min-h-full py-6 px-4 md:px-8 relative">
+        <div className="w-full md:w-1/2 flex flex-col items-center justify-center min-h-[60vh] md:min-h-full py-6 px-4 md:px-8 relative z-20">
           <div className="w-full max-w-md space-y-4 md:space-y-6">
             <div className="bg-white rounded-3xl shadow-lg p-8">
               {/* Título mobile */}

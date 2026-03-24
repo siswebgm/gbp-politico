@@ -1,15 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, ChevronDown, FileText, FolderOpen, Folder, Loader2, Edit2, Trash2, Eye, Calendar, Search, X } from 'lucide-react';
+import { ChevronLeft, Plus, ChevronDown, FileText, FolderOpen, Folder, Loader2, Edit2, Trash2, Eye, Calendar, Search, X, MoreVertical, Download } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useCompany } from '../../../providers/CompanyProvider';
 import { useAuth } from '../../../providers/AuthProvider';
 import { requerimentosService, Requerimento } from '../../../services/requerimentos';
 import { useToast } from '../../../components/ui/use-toast';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import {
@@ -73,6 +77,7 @@ export function Requerimentos() {
   const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [requerimentoParaDeletar, setRequerimentoParaDeletar] = React.useState<Requerimento | null>(null);
+  const [updatingStatusUid, setUpdatingStatusUid] = React.useState<string | null>(null);
 
   const carregarRequerimentos = React.useCallback(async () => {
     if (!company?.uid) return;
@@ -112,6 +117,74 @@ export function Requerimentos() {
     setExpandedItems(prev => 
       prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
     );
+  };
+
+  const handleChangeStatus = async (req: Requerimento, newStatus: string) => {
+    if (!user?.uid) return;
+    if (req.status === newStatus) return;
+
+    try {
+      setUpdatingStatusUid(req.uid);
+      await requerimentosService.atualizar(req.uid, { status: newStatus }, user.uid);
+      toast({ title: 'Status atualizado', variant: 'success' });
+      carregarRequerimentos();
+    } catch (error) {
+      toast({ title: 'Erro ao atualizar status', description: 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setUpdatingStatusUid(null);
+    }
+  };
+
+  const handleDownloadRequerimento = async (req: Requerimento) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const arquivosUrls = (req.arquivos || [])
+        .map(a => a?.url)
+        .filter(Boolean)
+        .join(' ; ');
+
+      const row = {
+        'Número': req.numero,
+        'Título': req.titulo,
+        'Solicitante': req.solicitante,
+        'Descrição': req.descricao || '',
+        'Tipo': req.tipo,
+        'Data Emissão': req.data_emissao ? new Date(req.data_emissao) : '',
+        'Solicitação Específica': req.solicitacao_especifica || '',
+        'Prioridade': req.prioridade,
+        'Status': req.status,
+        'Protocolo': req.protocolo || '',
+        'Arquivo(s)': arquivosUrls,
+      };
+
+      const ws = XLSX.utils.json_to_sheet([row], { cellDates: true });
+
+      const header = Object.keys(row);
+      const columnWidths = header.map((h) => {
+        const allValues = [h, row[h as keyof typeof row]];
+        const maxLength = allValues.reduce((max, val) => {
+          const len = val ? val.toString().length : 0;
+          return Math.max(max, len);
+        }, 0);
+        return { wch: Math.min(Math.max(maxLength + 2, 10), 60) };
+      });
+      ws['!cols'] = columnWidths;
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Requerimento');
+
+      const fileNameSafeNumero = String(req.numero || 'requerimento')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9_.-]/gi, '_');
+
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      saveAs(
+        new Blob([wbout], { type: 'application/octet-stream' }),
+        `requerimento_${fileNameSafeNumero}.xlsx`
+      );
+    } catch (error) {
+      toast({ title: 'Erro ao baixar requerimento', description: 'Tente novamente.', variant: 'destructive' });
+    }
   };
 
   const formatarData = (data: string) => {
@@ -199,34 +272,47 @@ export function Requerimentos() {
             </div>
 
             <div className="mt-4 flex flex-col md:flex-row items-center gap-2">
-              <div className="relative w-full md:flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input 
-                  placeholder="Buscar por título, número ou solicitante..." 
-                  className="pl-10 w-full" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {searchQuery && (
-                  <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchQuery('')}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+              <div className="flex w-full md:flex-1 items-center gap-2">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Input 
+                    placeholder="Buscar por título, número ou solicitante..." 
+                    className="pl-10 w-full" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchQuery('')}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10"
+                      aria-label={statusFilter ? `Filtro: ${statusConfig[statusFilter]?.label}` : 'Filtrar por status'}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      {statusFilter ? `Status: ${statusConfig[statusFilter]?.label}` : 'Filtrar por status'}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setStatusFilter(null)}>Todos</DropdownMenuItem>
+                    {Object.keys(statusConfig).map(status => (
+                      <DropdownMenuItem key={status} onSelect={() => setStatusFilter(status)}>
+                        {statusConfig[status].label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full md:w-auto min-w-[180px] justify-between">
-                    {statusFilter ? statusConfig[statusFilter]?.label : 'Filtrar por status'}
-                    <ChevronDown className="ml-2 h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem onSelect={() => setStatusFilter(null)}>Todos</DropdownMenuItem>
-                  {Object.keys(statusConfig).map(status => (
-                    <DropdownMenuItem key={status} onSelect={() => setStatusFilter(status)}>{statusConfig[status].label}</DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
 
@@ -246,7 +332,7 @@ export function Requerimentos() {
                         <ChevronDown className={`w-5 h-5 transition-transform ${expandedItems.includes(ano) ? 'rotate-180' : ''}`} />
                       </button>
                       {expandedItems.includes(ano) && (
-                        <div className="pl-4 pt-2 space-y-3">
+                        <div className="pl-0 sm:pl-4 pt-2 space-y-3">
                           {Object.keys(filteredRequerimentos[ano]).map(status => (
                             <div key={status}>
                               <button onClick={() => toggleItem(`${ano}-${status}`)} className="w-full flex justify-between items-center text-left py-2">
@@ -257,7 +343,7 @@ export function Requerimentos() {
                                 <ChevronDown className={`w-5 h-5 transition-transform ${expandedItems.includes(`${ano}-${status}`) ? 'rotate-180' : ''}`} />
                               </button>
                               {expandedItems.includes(`${ano}-${status}`) && (
-                                <div className="pl-6 pt-2 space-y-2">
+                                <div className="pl-0 sm:pl-6 pt-2 space-y-2">
                                   {filteredRequerimentos[ano][status].map(req => (
                                     <div key={req.uid} className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/app/documentos/requerimentos/${req.uid}`)}>
                                       <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
@@ -270,14 +356,71 @@ export function Requerimentos() {
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-2 pt-2 sm:pt-0 w-full sm:w-auto">
-                                          <Button variant="ghost" size="sm" className="flex-1 sm:flex-none bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-gray-600 hover:text-gray-700 px-2 sm:px-3" onClick={(e) => { e.stopPropagation(); navigate(`/app/documentos/requerimentos/${req.uid}/editar`); }}>
-                                            <Edit2 className="w-4 h-4" />
-                                            <span className="hidden sm:inline ml-2">Editar</span>
-                                          </Button>
-                                          <Button variant="ghost" size="sm" className="flex-1 sm:flex-none bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-red-600 hover:text-red-700 px-2 sm:px-3" onClick={(e) => { e.stopPropagation(); setRequerimentoParaDeletar(req); }}>
-                                            <Trash2 className="w-4 h-4" />
-                                            <span className="hidden sm:inline ml-2">Excluir</span>
-                                          </Button>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={updatingStatusUid === req.uid}
+                                                className={`flex-1 sm:flex-none justify-between gap-2 bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 px-2 sm:px-3 ${statusConfig[req.status]?.badgeClass || ''}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                {updatingStatusUid === req.uid ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <span className="text-xs font-medium">
+                                                    {statusConfig[req.status]?.label || req.status}
+                                                  </span>
+                                                )}
+                                                <ChevronDown className="h-4 w-4 opacity-70" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+                                              <DropdownMenuLabel>Alterar status</DropdownMenuLabel>
+                                              <DropdownMenuSeparator />
+                                              {Object.keys(statusConfig).map((st) => (
+                                                <DropdownMenuItem
+                                                  key={st}
+                                                  onSelect={() => handleChangeStatus(req, st)}
+                                                >
+                                                  {statusConfig[st]?.label}
+                                                </DropdownMenuItem>
+                                              ))}
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-9 w-9 bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800"
+                                                onClick={(e) => e.stopPropagation()}
+                                                aria-label="Ações"
+                                              >
+                                                <MoreVertical className="h-4 w-4" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                                              <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem onSelect={() => handleDownloadRequerimento(req)}>
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Baixar
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onSelect={() => navigate(`/app/documentos/requerimentos/${req.uid}/editar`)}>
+                                                <Edit2 className="mr-2 h-4 w-4" />
+                                                Editar
+                                              </DropdownMenuItem>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem
+                                                onSelect={() => setRequerimentoParaDeletar(req)}
+                                                className="text-red-600 dark:text-red-400"
+                                              >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Excluir
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
                                         </div>
                                       </div>
                                     </div>

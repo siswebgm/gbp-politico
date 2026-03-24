@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, ChevronDown, FileText, FolderOpen, Folder, Loader2, Edit2, Trash2, Eye, Calendar, Search, X } from 'lucide-react';
+import { ChevronLeft, Plus, ChevronDown, FileText, FolderOpen, Folder, Loader2, Edit2, Trash2, Eye, Calendar, Search, X, MoreVertical } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useCompany } from '../../../providers/CompanyProvider';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -503,7 +503,7 @@ export default function ProjetosLei() {
                             onClick={() => toggleItem(ano)}
                             className="w-full flex items-center gap-4 p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
                           >
-                            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md group-hover:scale-105 transition-all">
+                            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-600 text-white shadow-md group-hover:scale-105 transition-all">
                               {expandedItems.includes(ano) ? (
                                 <FolderOpen className="w-6 h-6" />
                               ) : (
@@ -569,12 +569,13 @@ export default function ProjetosLei() {
                                   {projetosFiltrados.map((projeto) => (
                                     <div 
                                       key={projeto.uid}
-                                      className="w-full group bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden"
+                                      className="w-full group bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer"
+                                      onClick={() => handleView(projeto.uid)}
                                     >
                                       {/* Cabeçalho do Projeto */}
                                       <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 px-3 sm:px-6 py-3 sm:py-4 border-b border-blue-100 dark:border-blue-800">
                                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                                          <div className="flex items-center gap-3 sm:gap-4">
+                                          <div className="flex items-center gap-3 sm:gap-4 flex-1">
                                             <div className={`flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${
                                               projeto.status === 'aprovado' ? 'bg-green-600' :
                                               projeto.status === 'arquivado' ? 'bg-gray-600' :
@@ -584,7 +585,7 @@ export default function ProjetosLei() {
                                             } text-white shadow-md group-hover:scale-105 transition-all duration-200`}>
                                               <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
                                             </div>
-                                            <div>
+                                            <div className="flex-1">
                                               <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                                                 <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
                                                   Projeto {projeto.numero}/{projeto.ano}
@@ -606,44 +607,41 @@ export default function ProjetosLei() {
                                             </div>
                                           </div>
                                           
-                                          <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="flex-1 sm:flex-none bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-blue-600 hover:text-blue-700 px-2 sm:px-3"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleView(projeto.uid);
-                                              }}
-                                            >
-                                              <Eye className="w-4 h-4" />
-                                              <span className="hidden sm:inline ml-2">Visualizar</span>
-                                            </Button>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="flex-1 sm:flex-none bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-gray-600 hover:text-gray-700 px-2 sm:px-3"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/app/documentos/projetos-lei/${projeto.uid}/editar`);
-                                              }}
-                                            >
-                                              <Edit2 className="w-4 h-4" />
-                                              <span className="hidden sm:inline ml-2">Editar</span>
-                                            </Button>
-
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="flex-1 sm:flex-none bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-red-600 hover:text-red-700 px-2 sm:px-3"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setProjetoParaDeletar(projeto);
-                                              }}
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                              <span className="hidden sm:inline ml-2">Excluir</span>
-                                            </Button>
+                                          <div className="flex items-center gap-1 sm:gap-2">
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="bg-white/50 hover:bg-white dark:bg-gray-800/50 dark:hover:bg-gray-800 text-gray-600 hover:text-gray-700 p-2 h-8 w-8"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <MoreVertical className="w-4 h-4" />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/app/documentos/projetos-lei/${projeto.uid}/editar`);
+                                                  }}
+                                                  className="flex items-center gap-2"
+                                                >
+                                                  <Edit2 className="w-4 h-4" />
+                                                  <span>Editar</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setProjetoParaDeletar(projeto);
+                                                  }}
+                                                  className="flex items-center gap-2 text-red-600 focus:text-red-600"
+                                                >
+                                                  <Trash2 className="w-4 h-4" />
+                                                  <span>Excluir</span>
+                                                </DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
                                           </div>
                                         </div>
                                       </div>

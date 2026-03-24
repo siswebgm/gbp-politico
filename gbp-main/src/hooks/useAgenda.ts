@@ -3,6 +3,7 @@ import { supabaseClient } from '../lib/supabase';
 import { AgendaEvent } from '../types/agenda';
 import { useAuth } from '../providers/AuthProvider';
 import { useCompanyStore } from '../store/useCompanyStore';
+import { v4 as uuidv4 } from 'uuid';
 
 export function useAgenda(filters?: {
   startDate?: Date;
@@ -13,6 +14,18 @@ export function useAgenda(filters?: {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const company = useCompanyStore(state => state.company);
+
+  const generateUUID = () => {
+    try {
+      const anyCrypto = (globalThis as any).crypto;
+      if (anyCrypto && typeof anyCrypto.randomUUID === 'function') {
+        return anyCrypto.randomUUID();
+      }
+    } catch {
+      // ignore
+    }
+    return uuidv4();
+  };
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['agenda', filters],
@@ -81,7 +94,7 @@ export function useAgenda(filters?: {
       };
 
       // Se o ID do usuário não for um UUID válido, gera um novo
-      const usuarios_uid = isValidUUID(user.id) ? user.id : crypto.randomUUID();
+      const usuarios_uid = isValidUUID(user.id) ? user.id : generateUUID();
 
       console.log('Dados do usuário:', { 
         user,
@@ -151,7 +164,7 @@ export function useAgenda(filters?: {
         return uuidRegex.test(uuid);
       };
 
-      const usuarios_uid = isValidUUID(user.id) ? user.id : crypto.randomUUID();
+      const usuarios_uid = isValidUUID(user.id) ? user.id : generateUUID();
 
       const updateData = {
         title: event.title,
