@@ -127,46 +127,34 @@ export function Dashboard() {
   const clearDashboardData = useDashboardStore((state) => state.clearData);
   const [aniversariantes, setAniversariantes] = useState<any[]>([]);
   const [loadingAniversariantes, setLoadingAniversariantes] = useState(true);
-  const [periodoSelecionado, setPeriodoSelecionado] = useState('dia'); // 'dia', 'semana', 'mes'
+  const [periodoSelecionado, setPeriodoSelecionado] = useState('dia'); // 'dia', 'ultimos7dias', 'mes', 'ano'
 
-  const estaNoPeridoSelecionado = useCallback((dataNascimento: Date) => {
-    // Criar data no fuso horário de Brasília (UTC-3)
+  const estaNoPeridoSelecionado = useCallback((dataEnvio: Date) => {
     const hoje = new Date();
-    const brasiliaOffset = -3 * 60; // offset em minutos para Brasília
-    
-    // Ajustar para horário de Brasília
-    const hojeBrasilia = new Date(hoje.getTime() + (hoje.getTimezoneOffset() + brasiliaOffset) * 60000);
-    
-    // Converter data de nascimento para horário de Brasília mantendo dia/mês
-    const nascimentoBrasilia = new Date(
-      hojeBrasilia.getFullYear(), // Usar ano atual
-      dataNascimento.getMonth(),
-      dataNascimento.getDate()
-    );
+    hoje.setHours(0, 0, 0, 0);
 
-    // Comparar apenas mês e dia no horário de Brasília
-    const mesHoje = hojeBrasilia.getMonth();
-    const diaHoje = hojeBrasilia.getDate();
-    const mesNascimento = nascimentoBrasilia.getMonth();
-    const diaNascimento = nascimentoBrasilia.getDate();
+    const dataEnvioNormalizada = new Date(dataEnvio);
+    dataEnvioNormalizada.setHours(0, 0, 0, 0);
 
     switch (periodoSelecionado) {
       case 'dia':
-        return mesNascimento === mesHoje && diaNascimento === diaHoje;
-      
-      case 'semana': {
-        // Calcular início e fim da semana em Brasília
-        const inicioSemana = new Date(hojeBrasilia);
-        inicioSemana.setDate(hojeBrasilia.getDate() - hojeBrasilia.getDay()); // Domingo
-        const fimSemana = new Date(hojeBrasilia);
-        fimSemana.setDate(hojeBrasilia.getDate() + (6 - hojeBrasilia.getDay())); // Sábado
+        return dataEnvioNormalizada.getTime() === hoje.getTime();
 
-        return nascimentoBrasilia >= inicioSemana && nascimentoBrasilia <= fimSemana;
+      case 'ultimos7dias': {
+        const inicio7Dias = new Date(hoje);
+        inicio7Dias.setDate(hoje.getDate() - 6); // 7 dias incluindo hoje
+        inicio7Dias.setHours(0, 0, 0, 0);
+
+        return dataEnvioNormalizada >= inicio7Dias && dataEnvioNormalizada <= hoje;
       }
-      
+
       case 'mes':
-        return mesNascimento === mesHoje;
-      
+        return dataEnvioNormalizada.getMonth() === hoje.getMonth() &&
+               dataEnvioNormalizada.getFullYear() === hoje.getFullYear();
+
+      case 'ano':
+        return dataEnvioNormalizada.getFullYear() === hoje.getFullYear();
+
       default:
         return false;
     }
@@ -182,6 +170,10 @@ export function Dashboard() {
     try {
       setLoadingAniversariantes(true);
       
+      const currentYear = new Date().getFullYear();
+      const startOfYear = `${currentYear}-01-01`;
+      const startOfNextYear = `${currentYear + 1}-01-01`;
+
       const { data, error } = await supabaseClient
         .from('gbp_relatorio_niver')
         .select(`
@@ -200,10 +192,13 @@ export function Dashboard() {
           indicado,
           responsavel,
           nascimento,
+          data_envio,
           eleitor_uid
         `)
         .eq('empresa_uid', company.uid)
-        .not('nascimento', 'is', null);
+        .not('data_envio', 'is', null)
+        .gte('date_part', startOfYear)
+        .lt('date_part', startOfNextYear);
 
       if (error) {
         console.error('Erro ao buscar aniversariantes:', error);
@@ -212,32 +207,22 @@ export function Dashboard() {
 
       // Filtrar aniversariantes do período selecionado
       const aniversariantesFiltrados = data?.filter(registro => {
-        if (!registro.nascimento) return false;
-        
+        if (!registro.data_envio) return false;
+
         try {
-          // Criar data UTC para comparação
-          const dataNascimento = new Date(registro.nascimento + 'T12:00:00Z');
-          return estaNoPeridoSelecionado(dataNascimento);
+          const dataEnvio = new Date(registro.data_envio + 'T12:00:00Z');
+          return estaNoPeridoSelecionado(dataEnvio);
         } catch (err) {
-          console.error('Erro ao processar data:', registro.nascimento, err);
+          console.error('Erro ao processar data_envio:', registro.data_envio, err);
           return false;
         }
       }) || [];
 
-      // Ordenar por dia e mês de nascimento usando UTC
+      // Ordenar por data_envio
       const aniversariantesOrdenados = aniversariantesFiltrados.sort((a, b) => {
-        const dateA = new Date(a.nascimento + 'T12:00:00Z');
-        const dateB = new Date(b.nascimento + 'T12:00:00Z');
-        
-        const mesA = dateA.getUTCMonth();
-        const diaA = dateA.getUTCDate();
-        const mesB = dateB.getUTCMonth();
-        const diaB = dateB.getUTCDate();
-        
-        if (mesA === mesB) {
-          return diaA - diaB;
-        }
-        return mesA - mesB;
+        const dateA = new Date(a.data_envio + 'T12:00:00Z');
+        const dateB = new Date(b.data_envio + 'T12:00:00Z');
+        return dateA.getTime() - dateB.getTime();
       });
 
       console.log('Aniversariantes encontrados:', {
@@ -245,7 +230,8 @@ export function Dashboard() {
         quantidade: aniversariantesOrdenados.length,
         registros: aniversariantesOrdenados.map(a => ({
           nome: a.eleitor_nome,
-          data: a.nascimento,
+          data_envio: a.data_envio,
+          nascimento: a.nascimento,
           bairro: a.eleitor_bairro,
           cidade: a.eleitor_cidade
         }))
@@ -496,7 +482,7 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="flex-1 pt-0.5 pb-4 md:pb-6 md:pt-1 px-2 md:px-4">
+      <div className="flex-1 pt-3 pb-4 md:pb-6 md:pt-3 px-2 md:px-4">
         <div className="flex flex-col space-y-2 md:space-y-4 mx-auto">
           <TrialBanner />
           
@@ -522,6 +508,51 @@ export function Dashboard() {
 
           {/* Main Content */}
           <div className="space-y-4">
+            {/* Banner de Demandas - Apenas se houver demandas */}
+            {Number(dashboardData?.totalDemandas || 0) > 0 && (
+              <div 
+                onClick={() => navigate('/app/documentos/demandas-ruas')}
+                className="bg-gradient-to-r from-blue-400 to-cyan-400 dark:from-blue-500 dark:to-cyan-500 rounded-xl shadow-lg p-4 sm:p-6 cursor-pointer hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300 relative overflow-hidden"
+              >
+                {/* Efeito de brilho animado */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                
+                {/* Conteúdo do banner - Layout responsivo */}
+                <div className="relative z-10">
+                  {/* Layout para mobile: empilhado */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-center space-x-3 sm:space-x-4">
+                      <div className="bg-white/20 dark:bg-white/10 p-3 sm:p-4 rounded-full backdrop-blur-sm flex-shrink-0">
+                        <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-lg sm:text-2xl font-bold text-white mb-1 leading-tight">
+                          Você tem {Number(dashboardData?.totalDemandas || 0)} demanda(s) atribuída(s)
+                        </h2>
+                        <p className="text-blue-100 dark:text-blue-200 text-xs sm:text-sm leading-relaxed">
+                          Clique para gerenciar suas demandas
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Botão de acesso - alinhado à direita em desktop, abaixo em mobile */}
+                    <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+                      <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6 text-white animate-pulse" />
+                      <span className="text-white font-medium text-sm sm:text-base whitespace-nowrap">
+                        Acessar agora
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Indicadores visuais */}
+                <div className="absolute top-2 right-2 flex space-x-1">
+                  <div className="w-2 h-2 bg-white/60 rounded-full animate-ping"></div>
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
+              </div>
+            )}
+
             {/* Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <StatCard
