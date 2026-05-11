@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, 
   Search, 
   Share2, 
   Star, 
-  XCircle, 
+  XCircle,
+  X, 
   ImageIcon, 
   ChevronLeft, 
-  CalendarDays, 
-  MapPin, 
   User, 
+  Users, 
   FileText,
   AlertCircle,
   Trash2,
@@ -19,15 +18,20 @@ import {
   Archive,
   ArchiveRestore,
   RefreshCw,
-  Folder
+  Folder,
+  Copy,
+  Check,
+  Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import QRCode from 'qrcode.react';
 import { demandasRuasService, type DemandaRua } from '@/services/demandasRuasService';
 import { indicadoService, type Indicado } from '@/services/indicadoService';
+import { userService } from '@/services/users';
 import { useCompanyStore } from '@/store/useCompanyStore';
 import { useAuth } from '@/providers/AuthProvider';
 import { format } from 'date-fns';
@@ -35,7 +39,6 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings } from 'lucide-react';
-import { DateInput } from '@/components/ui/date-input';
 
 export function DemandasRuas() {
   const navigate = useNavigate();
@@ -56,6 +59,7 @@ export function DemandasRuas() {
   const [indicadoFilter, setIndicadoFilter] = useState<string>('todos'); // filtro de indicados
   const [indicados, setIndicados] = useState<Indicado[]>([]);
   const [showArquivadas, setShowArquivadas] = useState(false); // mostrar arquivadas
+  const [linkCopied, setLinkCopied] = useState(false); // feedback de link copiado
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 9;
@@ -64,10 +68,26 @@ export function DemandasRuas() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [demandaToArchive, setDemandaToArchive] = useState<DemandaRua | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [pastaFilter, setPastaFilter] = useState<string>('todas');
+  const [pastaFilter, setPastaFilter] = useState<string>('todos');
   const [mostrarNovaPasta, setMostrarNovaPasta] = useState(false);
   const [nomePastaArquivo, setNomePastaArquivo] = useState('');
   const [pastasSelecionada, setPastasSelecionada] = useState('');
+  const [popoverOpen, setPopoverOpen] = useState<string | null>(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [usuarioSearchTerm, setUsuarioSearchTerm] = useState('');
+  // Definir filtro padrão baseado no nível de acesso do usuário
+  const [atribuicaoFilter, setAtribuicaoFilter] = useState<string>(() => {
+    return user?.nivel_acesso?.toLowerCase() === 'admin' ? 'todos' : 'minhas_atribuicoes';
+  });
+  const [activeTab, setActiveTab] = useState<'link' | 'qrcode'>('link');
+
+  // Função para lidar com mudança no filtro de atribuição
+  const handleAtribuicaoFilterChange = (value: string) => {
+    setAtribuicaoFilter(value);
+    if (value === 'todos') {
+      setUsuarioSearchTerm(''); // Limpar o filtro de usuário quando 'Todos' for selecionado
+    }
+  };
 
   // Carregar as demandas
   const loadDemandas = async () => {
@@ -104,7 +124,7 @@ export function DemandasRuas() {
     // Inscrever para atualizações em tempo real
     const unsubscribe = demandasRuasService.subscribeToDemandas(
       company.uid,
-      (payload) => {
+      () => {
         // Atualizar a lista quando houver mudanças
         loadDemandas();
       }
@@ -132,6 +152,22 @@ export function DemandasRuas() {
     loadIndicados();
   }, [company?.uid]);
 
+  // Carregar usuários da empresa para atribuição
+  useEffect(() => {
+    const loadUsuarios = async () => {
+      if (!company?.uid) return;
+      
+      try {
+        const usuariosData = await userService.list(company.uid);
+        setUsuarios(usuariosData);
+      } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+      }
+    };
+
+    loadUsuarios();
+  }, [company?.uid]);
+
   // Extrair opções únicas para os filtros
   const { tiposDeDemanda, cidades } = React.useMemo(() => {
     const tipos = new Set<string>();
@@ -147,6 +183,43 @@ export function DemandasRuas() {
       cidades: Array.from(cidadesSet).sort(),
     };
   }, [demandas]);
+
+  // Filtrar usuários que possuem demandas atribuídas
+  const usuariosComDemandas = React.useMemo(() => {
+    const uidsComDemandas = new Set<string>();
+    
+    // Coletar todos os UIDs de usuários que aparecem nas demandas
+    demandas.forEach(demanda => {
+      // Atribuído para (pode ser array)
+      if (demanda.atribuido_para_uid && Array.isArray(demanda.atribuido_para_uid)) {
+        demanda.atribuido_para_uid.forEach(uid => {
+          if (uid) uidsComDemandas.add(uid);
+        });
+      } else if (demanda.atribuido_para_uid) {
+        uidsComDemandas.add(demanda.atribuido_para_uid);
+      }
+      
+      // Atribuído por
+      if (demanda.atribuido_por_uid) {
+        uidsComDemandas.add(demanda.atribuido_por_uid);
+      }
+    });
+
+    // Filtrar usuários que estão na lista e possuem demandas
+    let usuariosFiltrados = usuarios.filter(usuario => uidsComDemandas.has(usuario.uid));
+    
+    // Aplicar busca se houver termo
+    if (usuarioSearchTerm) {
+      usuariosFiltrados = usuariosFiltrados.filter(usuario =>
+        usuario.nome.toLowerCase().includes(usuarioSearchTerm.toLowerCase())
+      );
+    }
+    
+    // Ordenar por nome e limitar para 50 resultados (otimização para muitos usuários)
+    return usuariosFiltrados
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+      .slice(0, 50);
+  }, [demandas, usuarios, usuarioSearchTerm]);
 
   const bairros = React.useMemo(() => {
     const bairrosSet = new Set<string>();
@@ -166,25 +239,49 @@ export function DemandasRuas() {
     setBairroFilter('todos');
   }, [cidadeFilter]);
 
+  // Formatar input de data automático (remove não-números e insere barras)
+  const formatarDataInput = (valor: string): string => {
+    const numeros = valor.replace(/\D/g, '').slice(0, 8);
+    if (numeros.length >= 5) {
+      return `${numeros.slice(0, 2)}/${numeros.slice(2, 4)}/${numeros.slice(4)}`;
+    } else if (numeros.length >= 3) {
+      return `${numeros.slice(0, 2)}/${numeros.slice(2)}`;
+    }
+    return numeros;
+  };
+
+  // Converter data do formato dd/mm/aaaa para yyyy-mm-dd
+  const parseDataInput = (dataStr: string): string | null => {
+    if (!dataStr) return null;
+    const partes = dataStr.split('/');
+    if (partes.length !== 3) return null;
+    const [dia, mes, ano] = partes;
+    if (!dia || !mes || !ano || dia.length !== 2 || mes.length !== 2 || ano.length !== 4) return null;
+    return `${ano}-${mes}-${dia}`;
+  };
+
   // Filtrar demandas por data
   const filterByDate = (dateString: string) => {
-    if (!dataInicio && !dataFim) return true;
+    const dataInicioParsed = parseDataInput(dataInicio);
+    const dataFimParsed = parseDataInput(dataFim);
+    
+    if (!dataInicioParsed && !dataFimParsed) return true;
     
     const date = new Date(dateString);
     date.setHours(0, 0, 0, 0);
     
-    if (dataInicio && dataFim) {
-      const inicio = new Date(dataInicio);
+    if (dataInicioParsed && dataFimParsed) {
+      const inicio = new Date(dataInicioParsed);
       inicio.setHours(0, 0, 0, 0);
-      const fim = new Date(dataFim);
+      const fim = new Date(dataFimParsed);
       fim.setHours(23, 59, 59, 999);
       return date >= inicio && date <= fim;
-    } else if (dataInicio) {
-      const inicio = new Date(dataInicio);
+    } else if (dataInicioParsed) {
+      const inicio = new Date(dataInicioParsed);
       inicio.setHours(0, 0, 0, 0);
       return date >= inicio;
-    } else if (dataFim) {
-      const fim = new Date(dataFim);
+    } else if (dataFimParsed) {
+      const fim = new Date(dataFimParsed);
       fim.setHours(23, 59, 59, 999);
       return date <= fim;
     }
@@ -227,14 +324,20 @@ export function DemandasRuas() {
     const matchesIndicado = indicadoFilter === 'todos' || 
       (indicadoFilter === 'sem_indicado' && !demanda.indicado_uid) ||
       (indicadoFilter !== 'sem_indicado' && demanda.indicado_uid === indicadoFilter);
+    // Filtro de atribuição
+    const matchesAtribuicao = atribuicaoFilter === 'todos' ||
+      (atribuicaoFilter === 'nao_atribuidas' && (!demanda.atribuido_para_uid || demanda.atribuido_para_uid.length === 0)) ||
+      (atribuicaoFilter === 'minhas_atribuicoes' && demanda.atribuido_para_uid?.includes(user?.uid || '')) ||
+      (atribuicaoFilter === 'atribuidas_por_mim' && demanda.atribuido_por_uid === user?.uid) ||
+      (demanda.atribuido_para_uid && demanda.atribuido_para_uid.includes(atribuicaoFilter));
     // Filtro de arquivadas: 
     // se showArquivadas = true, mostra APENAS arquivadas
     // se showArquivadas = false, mostra APENAS não arquivadas
     const matchesArquivadas = showArquivadas ? demanda.arquivado : !demanda.arquivado;
     // Filtro de pasta: só aplica quando showArquivadas está ativo
-    const matchesPasta = !showArquivadas || pastaFilter === 'todas' || demanda.pasta_arquivo === pastaFilter;
+    const matchesPasta = !showArquivadas || pastaFilter === 'todos' || demanda.pasta_arquivo === pastaFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesIndicado && matchesArquivadas && matchesPasta;
+    return matchesSearch && matchesStatus && matchesUrgencia && matchesDate && matchesNivelFavorito && matchesTipoDemanda && matchesCidade && matchesBairro && matchesResposta && matchesIndicado && matchesAtribuicao && matchesArquivadas && matchesPasta;
   });
 
   // Calcular paginação
@@ -243,10 +346,19 @@ export function DemandasRuas() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedDemandas = filteredDemandas.slice(startIndex, endIndex);
 
+  // Atualizar filtro de atribuição quando o usuário mudar
+  useEffect(() => {
+    if (user?.nivel_acesso?.toLowerCase() === 'admin') {
+      setAtribuicaoFilter('todos');
+    } else {
+      setAtribuicaoFilter('minhas_atribuicoes');
+    }
+  }, [user?.uid, user?.nivel_acesso]);
+
   // Resetar para página 1 quando os filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, urgenciaFilter, dataInicio, dataFim, searchTerm, tipoDemandaFilter, cidadeFilter, bairroFilter, nivelFavoritoFilter, respostaFilter, indicadoFilter, showArquivadas]);
+  }, [statusFilter, urgenciaFilter, dataInicio, dataFim, searchTerm, tipoDemandaFilter, cidadeFilter, bairroFilter, nivelFavoritoFilter, respostaFilter, indicadoFilter, showArquivadas, atribuicaoFilter]);
 
   // Formatar data
   const handleToggleFavorito = async (e: React.MouseEvent, demanda: DemandaRua) => {
@@ -388,6 +500,93 @@ export function DemandasRuas() {
     }
   };
 
+  // Função para exportar demandas filtradas como Excel
+  const exportarDemandas = () => {
+    if (filteredDemandas.length === 0) {
+      alert('Não há demandas para exportar com os filtros atuais.');
+      return;
+    }
+
+    import('xlsx').then(XLSX => {
+      // Preparar dados
+      const data = filteredDemandas.map(demanda => ({
+        'Protocolo': demanda.numero_protocolo || 'N/A',
+        'Tipo de Demanda': demanda.tipo_de_demanda || 'N/A',
+        'Descrição': demanda.descricao_do_problema || 'N/A',
+        'Status': demanda.status ? demanda.status.replace('_', ' ').replace(/\b\w/g, (char: string) => char.toUpperCase()) : 'N/A',
+        'Urgência': demanda.nivel_de_urgencia || 'N/A',
+        'Cidade': demanda.cidade || 'N/A',
+        'Bairro': demanda.bairro || 'N/A',
+        'Logradouro': demanda.logradouro || 'N/A',
+        'Número': demanda.numero || 'N/A',
+        'CEP': demanda.cep || 'N/A',
+        'UF': demanda.uf || 'N/A',
+        'Referência': demanda.referencia || 'N/A',
+        // Dados do requerente
+        'Requerente Nome': demanda.requerente?.nome || 'N/A',
+        'Requerente CPF': demanda.requerente?.cpf || 'N/A',
+        'Requerente Telefone': demanda.requerente?.telefone || 'N/A',
+        'Requerente Gênero': demanda.requerente?.genero || 'N/A',
+        'Requerente Nascimento': demanda.requerente?.nascimento ? format(new Date(demanda.requerente.nascimento), "dd/MM/yyyy", { locale: ptBR }) : 'N/A',
+        // Outros dados
+        'Data de Criação': demanda.criado_em ? format(new Date(demanda.criado_em), "dd/MM/yyyy HH:mm", { locale: ptBR }) : 'N/A',
+        'Resposta WhatsApp': demanda.tem_resposta_whatsapp ? 'Sim' : 'Não',
+        // Fotos
+        'Links das Fotos': demanda.fotos_do_problema && demanda.fotos_do_problema.length > 0 
+          ? demanda.fotos_do_problema.join('\n') 
+          : 'Sem fotos'
+      }));
+
+      // Criar worksheet
+      const ws = XLSX.utils.json_to_sheet(data);
+
+      // Definir larguras das colunas
+      const colWidths = [
+        { wch: 12 },  // Protocolo
+        { wch: 25 },  // Tipo de Demanda
+        { wch: 40 },  // Descrição
+        { wch: 15 },  // Status
+        { wch: 12 },  // Urgência
+        { wch: 18 },  // Cidade
+        { wch: 18 },  // Bairro
+        { wch: 30 },  // Logradouro
+        { wch: 10 },  // Número
+        { wch: 12 },  // CEP
+        { wch: 5 },   // UF
+        { wch: 25 },  // Referência
+        { wch: 25 },  // Requerente Nome
+        { wch: 16 },  // Requerente CPF
+        { wch: 18 },  // Requerente Telefone
+        { wch: 12 },  // Requerente Gênero
+        { wch: 16 },  // Requerente Nascimento
+        { wch: 20 },  // Data de Criação
+        { wch: 18 },  // Resposta WhatsApp
+        { wch: 60 },  // Links das Fotos
+      ];
+      ws['!cols'] = colWidths;
+
+      // Estilo do cabeçalho (azul com texto branco)
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (ws[cellRef]) {
+          ws[cellRef].s = {
+            fill: { fgColor: { rgb: '1E40AF' }, patternType: 'solid' },
+            font: { color: { rgb: 'FFFFFF' }, bold: true },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        }
+      }
+
+      // Criar workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Demandas');
+
+      // Gerar arquivo e fazer download
+      XLSX.writeFile(wb, `demandas-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xlsx`);
+    });
+  };
+
   // Função para obter cor e estilo da estrela baseado no nível
   const getStarStyle = (nivel: number) => {
     switch (nivel) {
@@ -496,7 +695,6 @@ export function DemandasRuas() {
         <div className="flex flex-col space-y-2 md:space-y-4">
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-4">
-            <div className="flex flex-col space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <button 
@@ -506,34 +704,179 @@ export function DemandasRuas() {
                 >
                   <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-gray-500 dark:text-gray-400" />
                 </button>
-                <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">
-                  Demandas das Ruas
+                
+                <h1 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  Demandas de Ruas <span className="text-sm font-normal text-gray-500">({filteredDemandas.length})</span>
                 </h1>
               </div>
+              
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => navigate('/app/documentos/demandas-ruas/relatorios')}
-                  className="h-9 hidden md:flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-800/30 dark:text-blue-300"
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Relatórios
-                </Button>
+                {/* Botão de Relatórios - apenas para admins */}
+                {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => navigate('/app/documentos/demandas-ruas/relatorios')}
+                    className="h-9 hidden md:flex items-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Relatórios
+                  </Button>
+                )}
+                
+                {/* Botão de Exportar - para todos os usuários */}
                 <Button 
                   variant="outline"
-                  onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
-                  className="h-9 hidden md:flex items-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
+                  onClick={exportarDemandas}
+                  className="h-9 flex items-center bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
                 >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configurações
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar
                 </Button>
+                
+                {/* Botão de Configurações - apenas para admins */}
+                {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
+                    className="h-9 hidden md:flex items-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configurações
+                  </Button>
+                )}
               </div>
             </div>
-            <div className="flex items-baseline gap-2 ml-8">
-              <p className="text-muted-foreground">Gerencie as demandas da cidade</p>
-            </div>
           </div>
-          </div>
+
+          {/* Link para compartilhamento - apenas para não-admin */}
+          {user?.nivel_acesso?.toLowerCase() !== 'admin' && (
+            <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-full">
+                      <Share2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                      Link da demanda
+                    </h3>
+                  </div>
+                  
+                  {/* Abas - apenas ícones */}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setActiveTab('link')}
+                      className={`p-2 rounded-md transition-colors ${
+                        activeTab === 'link'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      }`}
+                      title="Link"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('qrcode')}
+                      className={`p-2 rounded-md transition-colors ${
+                        activeTab === 'qrcode'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      }`}
+                      title="QR Code"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Conteúdo da aba Link */}
+                {activeTab === 'link' && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <div 
+                      className="flex-1 p-2 text-xs bg-white dark:bg-gray-800 rounded-md border border-purple-200 dark:border-purple-700 truncate overflow-hidden whitespace-nowrap"
+                      title={typeof window !== 'undefined' ? `${window.location.origin}/demanda/${company?.uid}?user=${user?.uid}` : ''}
+                    >
+                      <span className="text-gray-600 dark:text-gray-400">
+                        {typeof window !== 'undefined' ? `${window.location.origin}/demanda/${company?.uid}?user=${user?.uid}` : ''}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const url = typeof window !== 'undefined' ? `${window.location.origin}/demanda/${company?.uid}?user=${user?.uid}` : '';
+                        if (!url) return;
+                        
+                        let copiado = false;
+                        
+                        // Tentar navigator.clipboard primeiro
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            copiado = true;
+                          } catch (err) {
+                            console.log('Clipboard API falhou, tentando fallback');
+                          }
+                        }
+                        
+                        // Fallback para document.execCommand
+                        if (!copiado) {
+                          try {
+                            const textArea = document.createElement('textarea');
+                            textArea.value = url;
+                            textArea.style.position = 'fixed';
+                            textArea.style.left = '-9999px';
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            copiado = document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                          } catch (err) {
+                            console.log('Fallback também falhou');
+                          }
+                        }
+                        
+                        if (copiado) {
+                          setLinkCopied(true);
+                          setTimeout(() => {
+                            setLinkCopied(false);
+                          }, 2000);
+                        }
+                      }}
+                      className={`shrink-0 border-purple-300 hover:bg-purple-50 dark:border-purple-600 dark:hover:bg-purple-900/30 ${
+                        linkCopied
+                          ? 'bg-green-50 border-green-300 text-green-700 dark:bg-green-900/30 dark:border-green-600 dark:text-green-400'
+                          : 'text-purple-700 dark:text-purple-300'
+                      }`}
+                    >
+                      {linkCopied ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Conteúdo da aba QR Code */}
+                {activeTab === 'qrcode' && (
+                  <div className="mt-3 flex justify-center">
+                    <div className="flex flex-col items-center p-4 bg-white dark:bg-gray-800 rounded-md border border-purple-200 dark:border-purple-700">
+                      <QRCode
+                        value={typeof window !== 'undefined' ? `${window.location.origin}/demanda/${company?.uid}?user=${user?.uid}` : ''}
+                        size={150}
+                        level="M"
+                        renderAs="svg"
+                        className="w-full h-full max-w-[150px] max-h-[150px]"
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Main Content */}
           <div className="space-y-2">
@@ -542,14 +885,79 @@ export function DemandasRuas() {
                 <div className="space-y-3">
                   {/* Barra de busca e ações */}
                   <div className="flex flex-col gap-3 w-full">
-                    <div className="relative w-full">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        placeholder="Buscar demandas..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-sm"
-                      />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Buscar demandas..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-3 h-9 text-sm"
+                        />
+                      </div>
+
+                      {/* Filtro de Usuário - apenas para admins */}
+                      {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                        <div className="flex-1 min-w-[150px]">
+                          <Select value={atribuicaoFilter} onValueChange={handleAtribuicaoFilterChange}>
+                            <SelectTrigger className="w-full text-xs sm:text-sm h-9">
+                              <div className="flex items-center gap-2">
+                                <User className="h-3.5 w-3.5 text-gray-500" />
+                                <span className="truncate">
+                                  {atribuicaoFilter === 'todos' ? 'Usuário' : 
+                                   atribuicaoFilter === 'nao_atribuidas' ? 'Não atribuídas' :
+                                   atribuicaoFilter === 'minhas_atribuicoes' ? 'Minhas atribuições' :
+                                   atribuicaoFilter === 'atribuidas_por_mim' ? 'Atribuídas por mim' :
+                                   usuarios.find(u => u.uid === atribuicaoFilter)?.nome || 'Usuário'}
+                                </span>
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[400px]">
+                              <SelectItem value="todos" className="text-xs sm:text-sm">Todos</SelectItem>
+                              <SelectItem value="nao_atribuidas" className="text-xs sm:text-sm">Não atribuídas</SelectItem>
+                              <SelectItem value="minhas_atribuicoes" className="text-xs sm:text-sm">Minhas atribuições</SelectItem>
+                              <SelectItem value="atribuidas_por_mim" className="text-xs sm:text-sm">Atribuídas por mim</SelectItem>
+                              {usuariosComDemandas.length > 0 && (
+                                <>
+                                  <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 sticky top-0 bg-white dark:bg-gray-800 border-b">
+                                    Por usuário ({usuariosComDemandas.length})
+                                  </div>
+                                  {/* Campo de busca para usuários */}
+                                  <div className="px-2 py-1.5 sticky top-6 bg-white dark:bg-gray-800 border-b">
+                                    <div className="relative">
+                                      <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+                                      <Input
+                                        placeholder="Buscar usuário..."
+                                        value={usuarioSearchTerm}
+                                        onChange={(e) => setUsuarioSearchTerm(e.target.value)}
+                                        className="w-full pl-6 pr-2 py-1 text-xs h-7"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="max-h-[200px] overflow-y-auto">
+                                    {usuariosComDemandas.map(usuario => (
+                                      <SelectItem key={usuario.uid} value={usuario.uid} className="text-xs sm:text-sm">
+                                        {usuario.nome}
+                                      </SelectItem>
+                                    ))}
+                                    {usuariosComDemandas.length === 0 && usuarioSearchTerm && (
+                                      <div className="px-3 py-2 text-xs text-gray-500 text-center">
+                                        Nenhum usuário encontrado
+                                      </div>
+                                    )}
+                                    {usuariosComDemandas.length === 50 && !usuarioSearchTerm && (
+                                      <div className="px-3 py-2 text-xs text-gray-500 text-center">
+                                Mostrando 50 primeiros usuários
+                              </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-2 flex-wrap">
@@ -629,7 +1037,7 @@ export function DemandasRuas() {
                           onValueChange={(value) => {
                             if (value === 'ocultar') {
                               setShowArquivadas(false);
-                              setPastaFilter('todas');
+                              setPastaFilter('todos');
                             } else {
                               setShowArquivadas(true);
                               setPastaFilter(value);
@@ -643,7 +1051,7 @@ export function DemandasRuas() {
                               <Archive className={`h-4 w-4 ${showArquivadas ? 'fill-blue-400' : ''}`} />
                               <span className="truncate">
                                 {!showArquivadas ? 'Arquivadas' : 
-                                 pastaFilter === 'todas' ? 'Todas as pastas' : 
+                                 pastaFilter === 'todos' ? 'Todas as pastas' : 
                                  pastaFilter}
                               </span>
                             </div>
@@ -655,7 +1063,7 @@ export function DemandasRuas() {
                                 <span>Ocultar arquivadas</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="todas" className="text-xs font-medium">
+                            <SelectItem value="todos" className="text-xs font-medium">
                               <div className="flex items-center gap-2">
                                 <Archive className="h-3.5 w-3.5 fill-blue-400 text-blue-600" />
                                 <span>Todas as pastas</span>
@@ -679,21 +1087,25 @@ export function DemandasRuas() {
 
                         {/* Filtro de Data Início */}
                         <div className="flex-1 min-w-[130px]">
-                          <DateInput
+                          <Input
+                            type="text"
                             value={dataInicio}
-                            onChange={setDataInicio}
-                            placeholder="Data início"
+                            onChange={(e) => setDataInicio(formatarDataInput(e.target.value))}
+                            placeholder="dd/mm/aaaa"
                             className="w-full pr-3 h-9 text-xs"
+                            maxLength={10}
                           />
                         </div>
 
                         {/* Filtro de Data Fim */}
                         <div className="flex-1 min-w-[130px]">
-                          <DateInput
+                          <Input
+                            type="text"
                             value={dataFim}
-                            onChange={setDataFim}
-                            placeholder="Data fim"
+                            onChange={(e) => setDataFim(formatarDataInput(e.target.value))}
+                            placeholder="dd/mm/aaaa"
                             className="w-full pr-3 h-9 text-xs"
+                            maxLength={10}
                           />
                         </div>
                     </div>
@@ -761,7 +1173,7 @@ export function DemandasRuas() {
                       </Select>
                     </div>
                     
-                    {/* Filtro de Período */}
+                    
                     {/* Filtro de Tipo de Demanda */}
                     <div className="flex-1 min-w-[150px]">
                       <Select value={tipoDemandaFilter} onValueChange={setTipoDemandaFilter}>
@@ -879,7 +1291,7 @@ export function DemandasRuas() {
                             setNivelFavoritoFilter('todos');
                             setRespostaFilter('todos');
                             setIndicadoFilter('todos');
-                            setPastaFilter('todas');
+                            setPastaFilter('todos');
                             setShowArquivadas(false);
                           }}
                           className="whitespace-nowrap text-xs sm:text-sm h-9 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
@@ -896,19 +1308,19 @@ export function DemandasRuas() {
                 {showArquivadas && (
                   <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg dark:bg-blue-900/20 dark:border-blue-400">
                     <div className="flex items-center gap-3">
-                      {pastaFilter === 'todas' ? (
+                      {pastaFilter === 'todos' ? (
                         <Archive className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                       ) : (
                         <Folder className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                       )}
                       <div>
                         <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                          {pastaFilter === 'todas' 
+                          {pastaFilter === 'todos' 
                             ? 'Visualizando Demandas Arquivadas' 
                             : `Pasta: ${pastaFilter}`}
                         </h3>
                         <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                          {pastaFilter === 'todas' 
+                          {pastaFilter === 'todos' 
                             ? 'Você está visualizando todas as demandas arquivadas de todas as pastas.'
                             : `Visualizando apenas demandas da pasta "${pastaFilter}".`}
                           {' '}Clique no botão "Arquivadas" e selecione "Ocultar arquivadas" para voltar às demandas ativas.
@@ -920,7 +1332,8 @@ export function DemandasRuas() {
 
                 <div className="space-y-8">
                   {filteredDemandas.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-6 lg:gap-8 pt-4">
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-6 lg:gap-8 pt-4">
                       {paginatedDemandas.map((demanda) => (
                         <div 
                           key={demanda.uid}
@@ -931,10 +1344,13 @@ export function DemandasRuas() {
                             {/* Botões de Ação */}
                             <div className="absolute top-2 right-2 z-10 flex gap-2">
                               {/* Botão de Favorito com Nível - Popover */}
-                              <Popover>
+                              <Popover open={popoverOpen === demanda.uid} onOpenChange={(open) => setPopoverOpen(open ? demanda.uid : null)}>
                                 <PopoverTrigger asChild>
                                   <button 
-                                    onClick={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPopoverOpen(popoverOpen === demanda.uid ? null : demanda.uid);
+                                    }}
                                     className="relative p-1.5 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-700 transition-colors"
                                     title={`${getStarStyle(demanda.nivel_favorito || 0).label} - Clique para escolher nível`}
                                   >
@@ -966,6 +1382,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 0);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         (!demanda.nivel_favorito || demanda.nivel_favorito === 0) 
@@ -982,6 +1399,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 1);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         demanda.nivel_favorito === 1 
@@ -998,6 +1416,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 2);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         demanda.nivel_favorito === 2 
@@ -1014,6 +1433,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 3);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         demanda.nivel_favorito === 3 
@@ -1030,6 +1450,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 4);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         demanda.nivel_favorito === 4 
@@ -1046,6 +1467,7 @@ export function DemandasRuas() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSetNivelFavorito(demanda, 5);
+                                        setPopoverOpen(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all ${
                                         demanda.nivel_favorito === 5 
@@ -1060,38 +1482,213 @@ export function DemandasRuas() {
                                 </PopoverContent>
                               </Popover>
                               
+                              {/* Botão de Atribuir */}
+                              {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                                <Popover open={popoverOpen === `atribuir-${demanda.uid}`} onOpenChange={(open) => setPopoverOpen(open ? `atribuir-${demanda.uid}` : null)}>
+                                  <PopoverTrigger asChild>
+                                    <button 
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`p-1.5 rounded-full shadow-sm transition-colors group ${
+                                        demanda.atribuido_para_uid && demanda.atribuido_para_uid.length > 0
+                                          ? 'bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/40'
+                                          : 'bg-white/80 dark:bg-gray-800/80 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                                      }`}
+                                      title="Atribuir demanda"
+                                    >
+                                      <Users className={`w-4 h-4 transition-colors ${
+                                        demanda.atribuido_para_uid && demanda.atribuido_para_uid.length > 0
+                                          ? 'text-purple-600 group-hover:text-purple-700'
+                                          : 'text-gray-400 group-hover:text-purple-600'
+                                      }`} />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent 
+                                    className="w-80 p-3 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700" 
+                                    onClick={(e) => e.stopPropagation()}
+                                    align="end"
+                                  >
+                                    <div className="space-y-3">
+                                      <div className="flex items-center justify-between px-1">
+                                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                          {(() => {
+                                            const usuariosAtribuidos = Array.isArray(demanda.atribuido_para_uid) 
+                                              ? demanda.atribuido_para_uid 
+                                              : demanda.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+                                            
+                                            return usuariosAtribuidos.length > 0 
+                                              ? 'Gerenciar atribuição' 
+                                              : 'Atribuir demanda para:';
+                                          })()}
+                                        </p>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPopoverOpen(null); // Fecha o popover
+                                          }}
+                                          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                          title="Fechar"
+                                        >
+                                          <X className="w-5 h-5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" />
+                                        </button>
+                                      </div>
+                                      
+                                      {(() => {
+                                        const usuariosAtribuidos = Array.isArray(demanda.atribuido_para_uid) 
+                                          ? demanda.atribuido_para_uid 
+                                          : demanda.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+                                        
+                                        if (usuariosAtribuidos.length === 0) return null;
+                                        
+                                        return (
+                                          <div className="space-y-2">
+                                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-md">
+                                              <p className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-2">
+                                                Usuários atribuídos ({usuariosAtribuidos.length}):
+                                              </p>
+                                              <div className="space-y-1">
+                                                {usuariosAtribuidos.map(uid => {
+                                                  const usuario = usuarios.find(u => u.uid === uid);
+                                                  return (
+                                                    <div key={uid} className="flex items-center justify-between py-1">
+                                                      <div className="flex items-center gap-2">
+                                                        <User className="w-3 h-3 text-purple-600" />
+                                                        <span className="text-xs text-purple-700 dark:text-purple-300">
+                                                          {usuario?.nome || 'Usuário'}
+                                                        </span>
+                                                      </div>
+                                                      <button
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          demandasRuasService.removerUsuarioAtribuicao(demanda.uid, uid);
+                                                          loadDemandas();
+                                                        }}
+                                                        className="text-xs text-red-600 hover:text-red-700"
+                                                      >
+                                                        Remover
+                                                      </button>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+                                      
+                                      <div className="max-h-60 overflow-y-auto space-y-1">
+                                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 px-1 sticky top-0 bg-white dark:bg-gray-800 py-1">
+                                          {demanda.atribuido_para_uid && demanda.atribuido_para_uid.length > 0 
+                                            ? 'Adicionar usuário:' 
+                                            : 'Selecionar usuário:'
+                                          }
+                                        </p>
+                                        {usuarios.length > 0 ? (
+                                          usuarios
+                                            .filter(usuario => {
+                                              // Filtrar apenas usuários com adm_empresa=false e status=active
+                                              if (usuario.adm_empresa === true) return false;
+                                              if (usuario.status !== 'active') return false;
+                                              
+                                              const usuariosAtribuidos = Array.isArray(demanda.atribuido_para_uid) 
+                                                ? demanda.atribuido_para_uid 
+                                                : demanda.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+                                              return !usuariosAtribuidos.includes(usuario.uid);
+                                            })
+                                            .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+                                            .map(usuario => (
+                                              <button
+                                                key={usuario.uid}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  demandasRuasService.adicionarUsuarioAtribuicao(demanda.uid, usuario.uid, user?.uid || '');
+                                                  loadDemandas();
+                                                  setPopoverOpen(null); // Fecha o popover após selecionar
+                                                }}
+                                                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 text-left"
+                                              >
+                                                <User className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                                <span className="text-gray-700 dark:text-gray-300 truncate">{usuario.nome}</span>
+                                              </button>
+                                            ))
+                                        ) : (
+                                          <p className="text-xs text-gray-500 px-2">Nenhum usuário disponível</p>
+                                        )}
+                                      </div>
+                                      
+                                      {(() => {
+                                        const usuariosAtribuidos = Array.isArray(demanda.atribuido_para_uid) 
+                                          ? demanda.atribuido_para_uid 
+                                          : demanda.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+                                        
+                                        return usuariosAtribuidos.length > 0 ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              demandasRuasService.removerAtribuicaoDemanda(demanda.uid);
+                                              loadDemandas();
+                                            }}
+                                            className="w-full px-2 py-1.5 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30"
+                                          >
+                                            Remover todas as atribuições
+                                          </button>
+                                        ) : null;
+                                      })()}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+
                               {/* Botão de Arquivar */}
                               <button 
-                                onClick={(e) => handleOpenArchiveModal(e, demanda)}
-                                className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
-                                title={demanda.arquivado ? "Desarquivar demanda" : "Arquivar demanda"}
-                              >
-                                {demanda.arquivado ? (
-                                  <ArchiveRestore className="w-4 h-4 text-blue-600 group-hover:text-blue-700 transition-colors" />
-                                ) : (
-                                  <Archive className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
-                                )}
-                              </button>
+                                  onClick={(e) => handleOpenArchiveModal(e, demanda)}
+                                  className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+                                  title={demanda.arquivado ? "Desarquivar demanda" : "Arquivar demanda"}
+                                >
+                                  {demanda.arquivado ? (
+                                    <ArchiveRestore className="w-4 h-4 text-blue-600 group-hover:text-blue-700 transition-colors" />
+                                  ) : (
+                                    <Archive className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                  )}
+                                </button>
 
-                              {/* Botão de Excluir */}
-                              <button 
-                                onClick={(e) => handleOpenDeleteModal(e, demanda)}
-                                className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group"
-                                title="Excluir demanda"
-                              >
-                                <Trash2 
-                                  className="w-4 h-4 text-gray-400 group-hover:text-red-600 dark:group-hover:text-red-500 transition-colors" 
-                                />
-                              </button>
+                              {/* Botão de Excluir - apenas para admins */}
+                              {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                                <button 
+                                  onClick={(e) => handleOpenDeleteModal(e, demanda)}
+                                  className="p-1.5 bg-white/80 dark:bg-gray-800/80 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group"
+                                  title="Excluir demanda"
+                                >
+                                  <Trash2 
+                                    className="w-4 h-4 text-gray-400 group-hover:text-red-600 dark:group-hover:text-red-500 transition-colors" 
+                                  />
+                                </button>
+                              )}
                             </div>
                             
                             {demanda.fotos_do_problema && demanda.fotos_do_problema.length > 0 ? (
-                              <div className="w-full">
+                              <div className="w-full relative">
+                                {/* Status e data - apresentados uma única vez sobre as imagens */}
+                                <div className="absolute bottom-2 left-2 right-2 flex flex-col gap-1.5 z-10">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-full">
+                                      <div className={`w-2 h-2 rounded-full ${getStatusDotColor(demanda.status)}`}></div>
+                                      <span className="text-xs font-medium text-white">
+                                        {demanda.status ? demanda.status.replace('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase()) : 'Sem status'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-full">
+                                      <span className="text-xs font-medium text-white">
+                                        {demanda.criado_em ? format(new Date(demanda.criado_em), "dd/MM/yy HH:mm", { locale: ptBR }) : 'Sem data'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
                                 <div className={`${demanda.fotos_do_problema && demanda.fotos_do_problema.length > 1 ? 'grid grid-cols-2 gap-1' : ''} w-full`}>
                                   {demanda.fotos_do_problema?.slice(0, 2).map((foto, index) => (
                                     <div 
                                       key={index} 
-                                      className="relative h-40 bg-gray-100 dark:bg-gray-700/50 cursor-pointer hover:opacity-90 transition-opacity"
+                                      className="relative h-48 bg-gray-100 dark:bg-gray-700/50 cursor-pointer hover:opacity-90 transition-opacity"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         openFullscreenImage(foto);
@@ -1102,6 +1699,7 @@ export function DemandasRuas() {
                                         alt={`Imagem ${index + 1} da demanda`}
                                         className="w-full h-full object-cover"
                                       />
+                                      
                                       {index === 1 && demanda.fotos_do_problema && demanda.fotos_do_problema.length > 2 && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-medium">
                                           +{demanda.fotos_do_problema.length - 2} mais
@@ -1147,39 +1745,39 @@ export function DemandasRuas() {
                           {/* Cabeçalho do Card */}
                           <div className="px-5 pt-4">
                             <div className="space-y-3">
-                              {/* Linha de status e data */}
+                              {/* Linha de categoria e atribuição */}
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-2 h-2 rounded-full ${getStatusDotColor(demanda.status)}`}></div>
-                                  <span className="text-xs font-medium text-muted-foreground">
-                                    {demanda.status ? demanda.status.replace('_', ' ') : 'Sem status'}
-                                  </span>
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground/70 tracking-wider">
-                                  INFRAESTRUTURA
+                                <span className="text-xs font-bold text-foreground/90 tracking-wider uppercase">
+                                  {demanda.tipo_de_demanda?.split('::')[0] || 'Demanda'}
                                 </span>
+                                {demanda.atribuido_para_uid && (
+                                  (() => {
+                                    const usuariosAtribuidos = Array.isArray(demanda.atribuido_para_uid) 
+                                      ? demanda.atribuido_para_uid 
+                                      : demanda.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+                                    
+                                    if (usuariosAtribuidos.length === 0) return null;
+                                    
+                                    return (
+                                      <div className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 rounded-full">
+                                        <Users className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
+                                        <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                                          {usuariosAtribuidos.length === 1 
+                                            ? usuarios.find(u => u.uid === usuariosAtribuidos[0])?.nome?.split(' ')[0] || 'Atribuído'
+                                            : `${usuariosAtribuidos.length} usuários`
+                                          }
+                                        </span>
+                                      </div>
+                                    );
+                                  })()
+                                )}
                               </div>
-                              
-                              {/* Tipo de demanda */}
-                              <h3 className="font-semibold text-[15px] leading-tight text-foreground">
-                                {demanda.tipo_de_demanda?.replace('Infraestrutura::', '')}
-                              </h3>
                             </div>
-                          </div>
-
-                          {/* Corpo do Card */}
-                          <div className="px-5 pb-5 pt-3 space-y-4 flex-1 flex flex-col">
+                            
                             {/* Informações Principais */}
                             <div className="space-y-3">
-                              <div className="flex items-center gap-2 text-sm">
-                                <CalendarDays className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                                <span className="text-foreground">
-                                  {format(new Date(demanda.criado_em), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                                </span>
-                              </div>
-
                               {/* Dias desde criação e Status de resposta - DESTACADO */}
-                              <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-start justify-between flex-wrap gap-2">
                                 {/* Dias desde criação - Badge */}
                                 {(() => {
                                   const dias = Math.floor((new Date().getTime() - new Date(demanda.criado_em).getTime()) / (1000 * 60 * 60 * 24));
@@ -1187,7 +1785,7 @@ export function DemandasRuas() {
                                   const isRecente = dias <= 7;
                                   
                                   return (
-                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
+                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mt-2 ${
                                       isAtrasado 
                                         ? 'bg-red-100 text-red-700 border border-red-200' 
                                         : isRecente 
@@ -1201,38 +1799,38 @@ export function DemandasRuas() {
                                     </div>
                                   );
                                 })()}
-
-                                {/* Status de resposta - Badge */}
-                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${
-                                  demanda.tem_resposta_whatsapp
+                                
+                                {/* Badge de respondida */}
+                                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full mt-2 ${
+                                  demanda.tem_resposta_whatsapp 
                                     ? 'bg-green-100 text-green-700 border border-green-200' 
-                                    : 'bg-orange-100 text-orange-700 border border-orange-200'
+                                    : 'bg-gray-100 text-gray-700 border border-gray-200'
                                 }`}>
-                                  <MessageCircle className="w-3.5 h-3.5" />
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    demanda.tem_resposta_whatsapp 
+                                      ? 'bg-green-500' 
+                                      : 'bg-gray-400'
+                                  }`}></div>
                                   <span className="text-xs font-semibold">
-                                    {demanda.tem_resposta_whatsapp ? 'Respondido' : 'Sem resposta'}
+                                    {demanda.tem_resposta_whatsapp ? 'Respondida' : 'Não respondida'}
                                   </span>
                                 </div>
                               </div>
                               
-                              <div className="flex items-start gap-2">
-                                <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                                <div>
-                                  <p className="text-sm text-foreground">
-                                    {demanda.logradouro || 'Endereço não informado'}
-                                    {demanda.numero && `, ${demanda.numero}`}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    {[demanda.bairro, demanda.cidade, demanda.uf].filter(Boolean).join(' • ')}
-                                  </p>
-                                  {demanda.referencia && (
-                                    <p className="text-xs mt-1 text-muted-foreground">
-                                      <span className="text-muted-foreground/80">Ref.:</span> {demanda.referencia}
-                                    </p>
-                                  )}
+                              {/* Urgência */}
+                            </div>
+
+                            {/* Número de Protocolo */}
+                            {demanda.numero_protocolo && (
+                              <div className="mt-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Número de Protocolo:</span>
+                                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                    {String(demanda.numero_protocolo)}
+                                  </span>
                                 </div>
                               </div>
-                            </div>
+                            )}
 
                             {/* Urgência */}
                             <div className="mt-2">
@@ -1274,29 +1872,33 @@ export function DemandasRuas() {
                             )}
                           </div>
 
-                          {/* Rodapé do Card */}
-                          <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {demanda.requerente?.nome || 'Requerente não informado'}
-                              </span>
+                          {/* Conteúdo do Card */}
+                          <div className="flex-1 flex flex-col">
+                            {/* Rodapé do Card */}
+                            <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between mt-auto">
+                              <div className="flex items-center gap-2">
+                                <User className="w-3.5 h-3.5 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                  {demanda.requerente?.nome || 'Requerente não informado'}
+                                </span>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/app/documentos/demandas-ruas/${demanda.uid}/detalhes`);
+                                }}
+                              >
+                                Ver detalhes
+                              </Button>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-7 text-xs text-primary hover:bg-primary/5"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/app/documentos/demandas-ruas/${demanda.uid}/detalhes`);
-                              }}
-                            >
-                              Ver detalhes
-                            </Button>
                           </div>
                         </div>
                       ))}
                     </div>
+                    </>
                   ) : (
                     <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed rounded-lg text-center p-6">
                       <FileText className="w-10 h-10 text-muted-foreground/50 mb-3" />
@@ -1348,17 +1950,20 @@ export function DemandasRuas() {
 
       {/* Botão flutuante de configurações para mobile */}
       <div className="md:hidden fixed bottom-6 right-4 z-40">
-        <button
-          onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
-          className="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          aria-label="Configurações da demanda"
-        >
-          <Settings className="w-6 h-6" />
-        </button>
+        {/* Botão de configurações - apenas para admins */}
+        {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+          <button
+            onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
+            className="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            aria-label="Configurações da demanda"
+          >
+            <Settings className="w-6 h-6" />
+          </button>
+        )}
       </div>
 
       {/* Modal de Visualização de Imagem em Tela Cheia */}
-      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && closeFullscreenImage()}>
+      <Dialog open={!!fullscreenImage} onOpenChange={open => !open && closeFullscreenImage()}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/90 border-none shadow-none">
           <div className="relative w-full h-full flex items-center justify-center">
             <button
@@ -1373,7 +1978,7 @@ export function DemandasRuas() {
                 src={fullscreenImage || ''} 
                 alt="Visualização em tela cheia"
                 className="max-w-full max-h-[85vh] object-contain"
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
               />
             </div>
           </div>

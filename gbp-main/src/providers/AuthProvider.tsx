@@ -172,16 +172,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return true;
           }
         }
+        // Se erro PGRST116 (não encontrado), forçar logout
+        if (error.code === 'PGRST116' || error.message?.includes('not found')) {
+          console.error('[AuthProvider] Usuário não encontrado (PGRST116). Forçando logout.');
+          signOut();
+          return false;
+        }
         console.error('Erro ao carregar dados do usuário:', error);
         return false;
       }
 
       if (!userData) {
+        console.error('[AuthProvider] Usuário não encontrado no banco. Forçando logout.');
+        signOut();
         return false;
       }
 
-      // Verifica status apenas quando online
-      if (isOnline && userData.status !== 'active') {
+      // Verifica se o usuário está ativo
+      if (userData.status !== 'active') {
+        console.error('[AuthProvider] Usuário inativo. Forçando logout.');
         signOut();
         return false;
       }

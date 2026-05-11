@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabaseClient } from '@/lib/supabase';
-import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip, Download, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip, Download, MoreVertical, Trash2, Info } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -131,7 +131,9 @@ export function DetalhesDemanda() {
   };
 
   // Safe access to observação_resposta with null checks
-  const observacoes = demanda?.observação_resposta || [];
+  const observacoes = Array.isArray(demanda?.observação_resposta) 
+    ? [...demanda.observação_resposta].reverse() // Ordenar pela mais recente
+    : [];
 
   // Safe access to fotos_do_problema with null checks
   const fotosDoProblema = demanda?.fotos_do_problema || [];
@@ -246,7 +248,7 @@ export function DetalhesDemanda() {
       toast({
         title: 'Sucesso',
         description: 'Observação removida com sucesso!',
-        variant: 'default',
+        className: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800',
       });
     } catch (error) {
       console.error('Erro ao remover observação:', error);
@@ -304,19 +306,34 @@ export function DetalhesDemanda() {
 
     setUpdating(true);
     try {
+      // Validações adicionais
+      if (!demanda.uid) {
+        throw new Error('ID da demanda não encontrado');
+      }
+
+      const nomeUsuario = user?.nome || 'Usuário';
+      const dataHora = new Date().toLocaleString('pt-BR');
+      const observacaoLimpa = novaObservacao.trim();
+      
+      // Validação do conteúdo
+      if (observacaoLimpa.length > 1000) {
+        throw new Error('Observação muito longa (máximo 1000 caracteres)');
+      }
+
+      const observacoesAtuais = Array.isArray(demanda.observação_resposta) ? demanda.observação_resposta : [];
       const observacoesAtualizadas = [
-        ...(demanda.observação_resposta || []),
-        `${new Date().toLocaleString()}: ${novaObservacao.trim()}`,
+        ...observacoesAtuais,
+        `[${dataHora}] - ${nomeUsuario}: ${observacaoLimpa}`,
       ];
 
       await demandasRuasService.updateDemanda(demanda.uid, {
         observação_resposta: observacoesAtualizadas,
       } as Partial<DemandaRua>);
 
-      setDemanda({
-        ...demanda,
+      setDemanda(prev => prev ? {
+        ...prev,
         observação_resposta: observacoesAtualizadas,
-      });
+      } : null);
 
       setNovaObservacao('');
 
@@ -327,9 +344,11 @@ export function DetalhesDemanda() {
       });
     } catch (err) {
       console.error('Erro ao adicionar observação:', err);
+      const mensagemErro = err instanceof Error ? err.message : 'Erro desconhecido';
+      
       toast({
-        title: 'Erro',
-        description: 'Não foi possível adicionar a observação. Tente novamente.',
+        title: 'Erro ao adicionar observação',
+        description: mensagemErro || 'Não foi possível adicionar a observação. Tente novamente.',
         className: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800',
       });
     } finally {
@@ -1516,71 +1535,93 @@ export function DetalhesDemanda() {
       <div className="w-full px-2 pt-2 pb-4 sm:px-4 sm:pt-4 sm:pb-8 flex-1 max-w-full">
         {/* Modal de Upload de Protocolo */}
         <AlertDialog open={showProtocoloModal} onOpenChange={setShowProtocoloModal}>
-          <AlertDialogContent className="w-[95%] sm:w-full max-w-2xl mx-auto p-0 overflow-hidden">
+          <AlertDialogContent className="w-[95vw] sm:w-[95%] sm:max-w-2xl mx-auto p-0 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
               <AlertDialogHeader className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-6 w-6 text-blue-100" />
-                  <AlertDialogTitle className="text-xl font-semibold text-white">
-                    Anexar Documento Protocolado
-                  </AlertDialogTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-6 w-6 text-blue-100" />
+                    <AlertDialogTitle className="text-xl font-semibold text-white">
+                      Anexar Documento
+                    </AlertDialogTitle>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowProtocoloModal(false);
+                      setProtocoloFile(null);
+                      if (demanda) setNovoStatus(getValidStatus(demanda.status));
+                    }}
+                    className="text-blue-100 hover:text-white transition-colors p-1 rounded-lg hover:bg-blue-500/30"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
                 </div>
-                <AlertDialogDescription className="text-blue-100">
-                  Para alterar o status para "Protocolado", é necessário anexar o documento correspondente.
+                <AlertDialogDescription className="text-blue-100 text-sm leading-relaxed">
+                  Anexe aqui o documento protocolado
                 </AlertDialogDescription>
               </AlertDialogHeader>
             </div>
             
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium text-gray-700">Selecione o arquivo</Label>
-                    <span className="text-xs text-gray-500">Formatos: .pdf, .jpg, .jpeg, .png</span>
-                  </div>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-lg">
-                    <div className="space-y-1 text-center">
-                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="flex text-sm text-gray-600">
-                        <label
-                          htmlFor="protocolo-file"
-                          className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
-                        >
-                          <span>Enviar um arquivo</span>
-                          <input
-                            id="protocolo-file"
-                            name="protocolo-file"
-                            type="file"
-                            className="sr-only"
-                            onChange={(e) => setProtocoloFile(e.target.files ? e.target.files[0] : null)}
-                            accept=".pdf,.jpg,.jpeg,.png"
-                          />
-                        </label>
-                        <p className="pl-1">ou arraste e solte</p>
+                <div className="space-y-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                        <Upload className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <p className="text-xs text-gray-500">
-                        {protocoloFile 
-                          ? `Arquivo selecionado: ${protocoloFile.name}`
-                          : 'Tamanho máximo: 10MB'}
-                      </p>
+                      <div>
+                        <Label className="text-sm font-semibold text-gray-800 dark:text-gray-200 block">
+                          Escolha o documento para anexar
+                        </Label>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex justify-center px-6 pt-6 pb-6 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl bg-white dark:bg-gray-800 transition-all duration-200 hover:border-blue-400 hover:bg-blue-50/50">
+                      <div className="space-y-3 text-center">
+                        <Upload className="mx-auto h-12 w-12 text-blue-400" />
+                        <div className="space-y-2">
+                          <label
+                            htmlFor="protocolo-file"
+                            className="relative cursor-pointer inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors duration-200 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 4.9V9a5 5 0 01-1 4.9V16a4 4 0 01-.88 7.903A5 5 0 018.1 16z" />
+                            </svg>
+                            <span>Selecionar Arquivo</span>
+                            <input
+                              id="protocolo-file"
+                              name="protocolo-file"
+                              type="file"
+                              className="sr-only"
+                              onChange={(e) => setProtocoloFile(e.target.files ? e.target.files[0] : null)}
+                              accept=".pdf,.jpg,.jpeg,.png"
+                            />
+                          </label>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            ou arraste o arquivo até aqui
+                          </p>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                          {protocoloFile ? (
+                            <div className="flex items-center justify-center gap-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg py-2 px-4">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="font-semibold text-sm">✓ Documento pronto para protocolar</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg">
+            <div className="bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20 px-6 py-4 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-500">
-                  {protocoloFile && (
-                    <div className="flex items-center text-green-600">
-                      <Paperclip className="h-4 w-4 mr-1.5" />
-                      <span className="truncate max-w-xs">{protocoloFile.name}</span>
-                      <span className="ml-2 text-xs text-gray-400">
-                        ({(protocoloFile.size / 1024).toFixed(1)} KB)
-                      </span>
-                    </div>
-                  )}
+                <div className="text-sm text-gray-600 dark:text-gray-400">
                 </div>
                 <div className="flex items-center gap-3">
                   <AlertDialogCancel 
@@ -1734,7 +1775,7 @@ export function DetalhesDemanda() {
                       <h3 className="font-medium text-sm sm:text-base mb-2 sm:mb-3 text-gray-700 dark:text-gray-300">
                         Informações do Requerente
                       </h3>
-                      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                         {demanda.requerente_nome && (
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">Nome</Label>
@@ -1751,6 +1792,12 @@ export function DetalhesDemanda() {
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">CPF</Label>
                             <p className="text-sm sm:text-base font-mono">{demanda.requerente_cpf}</p>
+                          </div>
+                        )}
+                        {demanda.requerente_nascimento && (
+                          <div className="space-y-0.5">
+                            <Label className="text-xs sm:text-sm text-muted-foreground">Data de Nascimento</Label>
+                            <p className="text-sm sm:text-base font-medium">{demanda.requerente_nascimento.split('-').reverse().join('/')}</p>
                           </div>
                         )}
                         {indicadoNome && (
@@ -1905,13 +1952,12 @@ export function DetalhesDemanda() {
                   {fotosDoProblema.length > 0 ? (
                     <div className="flex flex-wrap gap-2 sm:gap-3">
                       {fotosDoProblema.map((foto, index) => (
-                        <div key={index} className="relative inline-block max-w-[200px]">
+                        <div key={index} className="relative w-[200px] h-[200px] bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
                           <img 
                             src={foto} 
                             alt={`Foto ${index + 1} da demanda`}
-                            className="block max-h-[200px] w-auto max-w-full bg-white"
+                            className="w-full h-full object-cover"
                             loading="lazy"
-                            style={{ maxHeight: '200px' }}
                           />
                           <a 
                             href={foto} 
@@ -1941,23 +1987,32 @@ export function DetalhesDemanda() {
               </Card>
 
               {/* Controle da Demanda e Acompanhamento */}
-              <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow duration-200 mb-6">
-                <CardHeader className="pb-3 bg-gradient-to-r from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900/50 rounded-t-lg">
-                  <CardTitle className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800 dark:text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    Controle e Acompanhamento
+              <Card className="border-2 border-blue-200 dark:border-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 mb-6">
+                <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800">
+                  <CardTitle className="text-xl font-bold flex items-center gap-3 text-blue-900 dark:text-blue-100">
+                    <div className="p-2 bg-blue-600 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <div>
+                      Controle e Acompanhamento
+                      <p className="text-sm font-normal text-blue-700 dark:text-blue-300 mt-1">
+                        Gerencie o status e documentos da demanda
+                      </p>
+                    </div>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6 py-4">
+                <CardContent className="space-y-6 p-6">
                   {/* Seção de Status */}
-                  <div className="space-y-4 bg-gray-50 dark:bg-gray-800/30 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
-                    <div className="space-y-2">
-                      <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
+                  <div className="space-y-4 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800/30 dark:to-blue-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800">
+                    <div className="space-y-3">
+                      <Label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                        <div className="p-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                        </div>
                         Status da Demanda
                       </Label>
                       <div className="relative">
@@ -1965,7 +2020,7 @@ export function DetalhesDemanda() {
                           <select
                             value={novoStatus || ''} // Garante que o valor não seja nulo
                             onChange={(e) => handleStatusChange(e.target.value as DemandaRua['status'])}
-                            className="block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 py-2.5 pl-4 pr-10 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-700 dark:focus:ring-blue-900/50 transition-colors duration-200"
+                            className="block w-full rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800 py-3 pl-4 pr-12 text-sm font-medium text-gray-900 dark:text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/50 transition-all duration-200 shadow-sm hover:shadow-md"
                             disabled={updating}
                           >
                             <option value="" className="text-gray-500">Selecione um status</option>
@@ -2057,18 +2112,20 @@ export function DetalhesDemanda() {
 
                   {/* Documento Protocolado - Apenas visualização */}
                   {demanda?.documento_protocolado && (
-                    <div className="space-y-4 bg-gray-50 dark:bg-gray-800/30 p-4 rounded-lg border border-gray-100 dark:border-gray-700 mt-6">
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                    <div className="space-y-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800 mt-6">
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                          <div className="p-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
                           Documento Protocolado
                         </h3>
                       </div>
                       
-                      <div className="mt-3">
-                        <div className="flex flex-col p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 gap-3 transition-all duration-200 hover:shadow-sm">
+                      <div className="mt-4">
+                        <div className="flex flex-col p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-blue-100 dark:border-blue-900/50 gap-4 transition-all duration-200 hover:shadow-md shadow-sm">
                           {/* Informações do documento */}
                           <div className="flex items-start space-x-3 w-full overflow-hidden">
                             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
@@ -2097,29 +2154,29 @@ export function DetalhesDemanda() {
                           </div>
                           
                           {/* Botões de ação */}
-                          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                          <div className="flex gap-3 justify-end mt-4">
                             <a
                               href={demanda.documento_protocolado}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 h-9 whitespace-nowrap flex-1 sm:flex-initial"
+                              className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 px-4 py-2.5 h-10 shadow-md hover:shadow-lg transform hover:scale-105 min-h-[40px] whitespace-nowrap"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
-                              Visualizar
+                              <span className="ml-2">Visualizar</span>
                             </a>
                             <button
                               type="button"
                               onClick={handleOpenDeleteModal}
                               disabled={uploading}
-                              className="inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 bg-red-600 text-white hover:bg-red-700 px-3 py-2 h-9 whitespace-nowrap disabled:opacity-50 flex-1 sm:flex-initial"
+                              className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800 px-4 py-2.5 h-10 disabled:opacity-50 shadow-md hover:shadow-lg transform hover:scale-105 min-h-[40px] whitespace-nowrap"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
-                              Excluir
+                              <span className="ml-2">Excluir</span>
                             </button>
                           </div>
                         </div>
@@ -2130,19 +2187,21 @@ export function DetalhesDemanda() {
               </Card>
 
               {/* Mensagens WhatsApp */}
-              <Card className="border-l-4 border-l-green-500">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <SendHorizontal className="h-5 w-5 text-green-600" />
-                      <CardTitle className="text-lg sm:text-xl">Mensagens WhatsApp</CardTitle>
+              <Card className="border-2 border-green-200 dark:border-green-800 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-b border-green-200 dark:border-green-800">
+                  <CardTitle className="text-xl font-bold flex items-center gap-3 text-green-900 dark:text-green-100">
+                    <div className="p-2 bg-green-600 rounded-full">
+                      <SendHorizontal className="w-6 h-6 text-white" />
                     </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground pl-7">
-                    Gerencie e visualize as mensagens enviadas para o requerente
-                  </p>
+                    <div>
+                      Mensagens WhatsApp
+                      <p className="text-sm font-normal text-green-700 dark:text-green-300 mt-1">
+                        Gerencie e visualize as mensagens enviadas para o requerente
+                      </p>
+                    </div>
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="p-6 space-y-6">
 
                   {/* Campo de Envio de Mensagem */}
                   {showWhatsAppField && (
@@ -2327,6 +2386,144 @@ export function DetalhesDemanda() {
                 </CardContent>
               </Card>
 
+              {/* Seção de Observações Internas */}
+              <Card className="border-2 border-blue-200 dark:border-blue-800 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800">
+                  <CardTitle className="text-xl font-bold flex items-center gap-3 text-blue-900 dark:text-blue-100">
+                    <div className="p-2 bg-blue-600 rounded-full">
+                      <FileText className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      Observações Internas
+                      <p className="text-sm font-normal text-blue-700 dark:text-blue-300 mt-1">
+                        Acompanhe o processo e registre informações importantes
+                      </p>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  {/* Lista de observações existentes */}
+                  {observacoes.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-px bg-blue-200 dark:bg-blue-800 flex-1"></div>
+                        <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 px-3 bg-white dark:bg-gray-800 rounded-full border border-blue-200 dark:border-blue-800">
+                          📋 Histórico do Processo ({observacoes.length})
+                        </span>
+                        <div className="h-px bg-blue-200 dark:bg-blue-800 flex-1"></div>
+                      </div>
+                      
+                      <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        {observacoes.map((observacao, index) => {
+                          // Extrair informações da observação formatada com tratamento de erro
+                          let dataHora = '';
+                          let usuario = 'Sistema';
+                          let mensagem = observacao;
+                          
+                          try {
+                            const match = observacao.match(/^\[([^\]]+)\] - ([^:]+): (.+)$/);
+                            if (match && match.length >= 4) {
+                              dataHora = match[1] || '';
+                              usuario = match[2] || 'Sistema';
+                              mensagem = match[3] || observacao;
+                            }
+                          } catch (error) {
+                            console.warn('Erro ao parsear observação:', error);
+                            // Mantém valores padrão em caso de erro
+                          }
+                          
+                          return (
+                            <div key={index} className="relative group">
+                              <div className="bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/50 shadow-sm hover:shadow-md transition-all duration-200 p-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {usuario && usuario.length > 0 ? usuario.charAt(0).toUpperCase() : 'S'}
+                                    </div>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                        {usuario}
+                                      </span>
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        {dataHora}
+                                      </span>
+                                    </div>
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border-l-4 border-blue-500">
+                                      <p className="text-gray-800 dark:text-gray-200 whitespace-pre-line text-sm leading-relaxed">
+                                        {mensagem}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setObservacaoParaExcluir(index);
+                                      setShowDeleteObservacaoModal(true);
+                                    }}
+                                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200"
+                                    title="Excluir observação"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Formulário para adicionar nova observação */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-px bg-blue-200 dark:bg-blue-800 flex-1"></div>
+                      <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 px-3 bg-white dark:bg-gray-800 rounded-full border border-blue-200 dark:border-blue-800">
+                        ✍️ Adicionar Nova Observação
+                      </span>
+                      <div className="h-px bg-blue-200 dark:bg-blue-800 flex-1"></div>
+                    </div>
+                    
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                      <div className="space-y-3">
+                        <Label htmlFor="nova-observacao-interna" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                          Sua Observação
+                        </Label>
+                        <Textarea
+                          id="nova-observacao-interna"
+                          placeholder="Descreva o status atual, próximos passos, ou qualquer informação relevante sobre o processo desta demanda..."
+                          value={novaObservacao}
+                          onChange={(e) => setNovaObservacao(e.target.value)}
+                          className="min-h-[120px] resize-none border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                          rows={4}
+                        />
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={adicionarObservacao}
+                            disabled={!novaObservacao.trim() || updating}
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 px-6"
+                          >
+                            {updating ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Registrando...
+                              </>
+                            ) : (
+                              <>
+                                <SendHorizontal className="w-4 h-4 mr-2" />
+                                Registrar Observação
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
 
             </div>
           </div>
@@ -2340,101 +2537,6 @@ export function DetalhesDemanda() {
         onChange={handleDocumentoAnexo}
         accept=".pdf,.jpg,.jpeg,.png"
       />
-
-      {/* Modal de Confirmação de Exclusão de Documento */}
-      <AlertDialog open={showProtocoloModal} onOpenChange={setShowProtocoloModal}>
-        <AlertDialogContent className="w-[95%] sm:w-full max-w-2xl mx-auto p-0 overflow-hidden rounded-lg shadow-2xl">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
-            <AlertDialogHeader className="space-y-2">
-              <div className="flex items-center gap-3">
-                <FileText className="h-6 w-6 text-blue-100" />
-                <AlertDialogTitle className="text-xl font-semibold text-white">
-                  Anexar Documento Protocolado
-                </AlertDialogTitle>
-              </div>
-              <AlertDialogDescription className="text-blue-100">
-                Para alterar o status para "Protocolado", é necessário anexar o documento correspondente.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-          </div>
-          
-          <div className="p-6 space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="protocolo-file" className="text-sm font-medium text-gray-700 dark:text-gray-300">Selecione o arquivo</Label>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Formatos: PDF, JPG, PNG</span>
-                </div>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                  <div className="space-y-1 text-center">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
-                    <div className="flex text-sm text-gray-600 dark:text-gray-300">
-                      <label
-                        htmlFor="protocolo-file"
-                        className="relative cursor-pointer rounded-md font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 focus-within:outline-none"
-                      >
-                        <span>Enviar um arquivo</span>
-                        <input
-                          id="protocolo-file"
-                          name="protocolo-file"
-                          type="file"
-                          className="sr-only"
-                          onChange={(e) => setProtocoloFile(e.target.files ? e.target.files[0] : null)}
-                          accept=".pdf,.jpg,.jpeg,.png"
-                        />
-                      </label>
-                      <p className="pl-1">ou arraste e solte</p>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {protocoloFile 
-                        ? `Arquivo: ${protocoloFile.name}`
-                        : 'Tamanho máximo: 10MB'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div> {/* Fecha o p-6 space-y-6 */}
-            <AlertDialogFooter className="bg-gray-50 dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700 rounded-b-lg mt-0">
-              <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {protocoloFile && (
-                    <div className="flex items-center text-green-600 dark:text-green-400">
-                      <Paperclip className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                      <span className="truncate max-w-[200px] sm:max-w-xs" title={protocoloFile.name}>{protocoloFile.name}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <AlertDialogCancel 
-                    onClick={() => {
-                      setShowProtocoloModal(false);
-                      setProtocoloFile(null);
-                      if (demanda) setNovoStatus(getValidStatus(demanda.status));
-                    }}
-                    className="h-10 px-6 m-0 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-500 w-full sm:w-auto"
-                  >
-                    Cancelar
-                  </AlertDialogCancel>
-                  <Button
-                    onClick={handleUploadProtocolo}
-                    disabled={!protocoloFile || uploading}
-                    className="h-10 px-6 m-0 bg-blue-600 hover:bg-blue-700 text-white focus-visible:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed w-full sm:w-auto"
-                  >
-                    {uploading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        <span>Enviando...</span>
-                      </>
-                    ) : (
-                      'Salvar e Protocolar'
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Modal de Confirmação de Exclusão de Documento */}
       <AlertDialog open={showDeleteDocumentoModal} onOpenChange={setShowDeleteDocumentoModal}>
@@ -2490,5 +2592,3 @@ export function DetalhesDemanda() {
     </div>
   );
 };
-
-export default DetalhesDemanda;

@@ -13,7 +13,7 @@ RUN npm install --no-audit --prefer-offline --no-fund
 COPY gbp-main/ ./
 
 # Construir a aplicação para produção
-RUN npm run build
+RUN npm run build:low-mem
 
 # Etapa de produção
 FROM nginx:alpine

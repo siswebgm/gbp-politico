@@ -78,6 +78,7 @@ export interface DemandaRua {
   requerente_nome?: string;
   requerente_whatsapp?: string;
   requerente_cpf?: string;
+  requerente_nascimento?: string;
   documento_protocolado?: string;
   protocolado_por_nome?: string; // Nome do usuário que protocolou a demanda
   observação_resposta?: string[];
@@ -90,6 +91,10 @@ export interface DemandaRua {
   excluido_em?: string; // Data/hora da exclusão
   excluido_por_uid?: string; // UID do usuário que excluiu
   excluido_por_nome?: string; // Nome do usuário que excluiu
+  // Campos de atribuição
+  atribuido_para_uid?: string[]; // Array de UIDs dos usuários para quem a demanda foi atribuída
+  atribuido_por_uid?: string; // UID do usuário que fez a atribuição
+  data_atribuicao?: string; // Data/hora da atribuição
   // Relacionamentos
   requerente?: {
     nome: string;
@@ -140,7 +145,8 @@ export const demandasRuasService = {
             nome,
             whatsapp,
             cpf,
-            genero
+            genero,
+            nascimento
           )
         `)
         .eq('empresa_uid', empresaUid)
@@ -190,7 +196,8 @@ export const demandasRuasService = {
           nome: demanda.requerente.nome,
           telefone: demanda.requerente.whatsapp,
           cpf: demanda.requerente.cpf,
-          genero: demanda.requerente.genero
+          genero: demanda.requerente.genero,
+          nascimento: demanda.requerente.nascimento
         } : null;
 
         const temResposta = demandasComResposta.has(demanda.uid);
@@ -202,6 +209,7 @@ export const demandasRuasService = {
           requerente_nome: requerente?.nome || '',
           requerente_whatsapp: requerente?.telefone || '',
           requerente_cpf: requerente?.cpf || '',
+          requerente_nascimento: requerente?.nascimento || '',
           // Adiciona flag indicando se tem resposta no WhatsApp
           tem_resposta_whatsapp: temResposta
         };
@@ -229,6 +237,7 @@ export const demandasRuasService = {
           cpf,
           whatsapp,
           genero,
+          nascimento,
           cep,
           logradouro,
           numero,
@@ -254,6 +263,7 @@ export const demandasRuasService = {
         requerente_nome: data.requerente.nome,
         requerente_cpf: data.requerente.cpf,
         requerente_whatsapp: data.requerente.whatsapp,
+        requerente_nascimento: data.requerente.nascimento,
         requerente: {
           nome: data.requerente.nome,
           telefone: data.requerente.whatsapp,
@@ -441,6 +451,116 @@ export const demandasRuasService = {
       return true;
     } catch (error) {
       console.error('Erro ao arquivar/desarquivar demanda:', error);
+      return false;
+    }
+  },
+
+  // Atribuir demanda a múltiplos usuários
+  async atribuirDemanda(uid: string, atribuidoParaUids: string[], atribuidoPorUid: string): Promise<boolean> {
+    try {
+      const { error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({
+          atribuido_para_uid: atribuidoParaUids,
+          atribuido_por_uid: atribuidoPorUid,
+          data_atribuicao: new Date().toISOString(),
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao atribuir demanda:', error);
+      return false;
+    }
+  },
+
+  // Adicionar usuário à atribuição existente
+  async adicionarUsuarioAtribuicao(uid: string, usuarioUid: string, atribuidoPorUid: string): Promise<boolean> {
+    try {
+      // Primeiro, buscar a demanda atual
+      const { data: demanda, error: errorBusca } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .select('atribuido_para_uid')
+        .eq('uid', uid)
+        .single();
+
+      if (errorBusca) throw errorBusca;
+
+      const usuariosAtuais = Array.isArray(demanda?.atribuido_para_uid) 
+        ? demanda.atribuido_para_uid 
+        : demanda?.atribuido_para_uid ? [demanda.atribuido_para_uid] : [];
+      const novosUsuarios = usuariosAtuais.includes(usuarioUid) 
+        ? usuariosAtuais 
+        : [...usuariosAtuais, usuarioUid];
+
+      const { error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({
+          atribuido_para_uid: novosUsuarios,
+          atribuido_por_uid: atribuidoPorUid,
+          data_atribuicao: new Date().toISOString(),
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao adicionar usuário à atribuição:', error);
+      return false;
+    }
+  },
+
+  // Remover usuário específico da atribuição
+  async removerUsuarioAtribuicao(uid: string, usuarioUid: string): Promise<boolean> {
+    try {
+      // Primeiro, buscar a demanda atual
+      const { data: demanda, error: errorBusca } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .select('atribuido_para_uid')
+        .eq('uid', uid)
+        .single();
+
+      if (errorBusca) throw errorBusca;
+
+      const usuariosAtuais = demanda?.atribuido_para_uid || [];
+      const novosUsuarios = usuariosAtuais.filter(uid => uid !== usuarioUid);
+
+      const { error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({
+          atribuido_para_uid: novosUsuarios.length > 0 ? novosUsuarios : null,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao remover usuário da atribuição:', error);
+      return false;
+    }
+  },
+
+  // Remover todas as atribuições da demanda
+  async removerAtribuicaoDemanda(uid: string): Promise<boolean> {
+    try {
+      const { error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .update({
+          atribuido_para_uid: null,
+          atribuido_por_uid: null,
+          data_atribuicao: null,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('uid', uid);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Erro ao remover atribuição da demanda:', error);
       return false;
     }
   },

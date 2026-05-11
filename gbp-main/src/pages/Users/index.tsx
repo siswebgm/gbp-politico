@@ -489,7 +489,8 @@ export function Users() {
     formState: { errors, isSubmitting },
     reset,
     setValue,
-    watch
+    watch,
+    getValues
   } = useForm<CreateUserFormData>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
@@ -656,7 +657,10 @@ export function Users() {
                             // Remove espaços e força minúsculas
                             const value = e.target.value.replace(/\s/g, '').toLowerCase();
                             e.target.value = value;
-                            register('email').onChange(e);
+                            // Evitar loop infinito - só chamar se o valor realmente mudou
+                            if (e.target.value !== getValues('email')) {
+                              setValue('email', value);
+                            }
                           }
                         })}
                         className={errors.email ? 'border-red-500' : ''}

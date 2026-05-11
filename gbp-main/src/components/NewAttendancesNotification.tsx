@@ -34,7 +34,7 @@ interface NewAttendance {
 
 export function NewAttendancesNotification() {
   const [isOpen, setIsOpen] = useState(true);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const [newAttendances, setNewAttendances] = useState<NewAttendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -303,9 +303,12 @@ export function NewAttendancesNotification() {
   return (
     <div className="fixed bottom-0 right-0 left-0 sm:left-auto sm:bottom-4 sm:right-4 z-50 w-full sm:w-auto sm:max-w-md lg:max-w-lg xl:max-w-xl px-2 sm:px-0">
       <div className="bg-white dark:bg-gray-800 rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden border border-b-0 sm:border-b border-gray-200 dark:border-gray-700 w-full">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-3 sm:px-4 py-2 sm:py-2.5">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-300">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center min-w-0 flex-1">
+            <div 
+              className="flex items-center min-w-0 flex-1 cursor-pointer hover:bg-white/10 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+              onClick={handleMinimizeToggle}
+            >
               <div className="relative">
                 <div className="relative bg-white/20 p-1.5 rounded-full flex-shrink-0 mr-2">
                   <Bell className="h-4 w-4 text-white" />
@@ -323,6 +326,11 @@ export function NewAttendancesNotification() {
                     {format(new Date(), 'dd/MM/yyyy')}
                   </span>
                 </div>
+                {isMinimized && (
+                  <p className="text-blue-200 text-xs mt-1">
+                    🔽 Clique para expandir
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -337,13 +345,13 @@ export function NewAttendancesNotification() {
                 </button>
               )}
               <button
-                onClick={handleMinimizeToggle}
-                className="text-white hover:bg-blue-700 focus:outline-none p-1.5 rounded transition-colors flex items-center justify-center w-8 h-8"
-                aria-label={isMinimized ? 'Expandir' : 'Minimizar'}
-                title={isMinimized ? 'Expandir' : 'Minimizar'}
-              >
-                {isMinimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
+                  onClick={handleMinimizeToggle}
+                  className="text-white hover:bg-blue-700 focus:outline-none p-1.5 rounded transition-colors flex items-center justify-center w-8 h-8"
+                  aria-label={isMinimized ? 'Expandir' : 'Minimizar'}
+                  title={isMinimized ? 'Expandir' : 'Minimizar'}
+                >
+                  {isMinimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
               <button
                 onClick={onClose}
                 className="text-white hover:bg-blue-700 focus:outline-none p-1.5 rounded transition-colors flex items-center justify-center w-8 h-8"

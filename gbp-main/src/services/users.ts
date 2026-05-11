@@ -99,6 +99,7 @@ export const userService = {
           adm_empresa
         `)
         .eq('empresa_uid', empresa_uid)
+        .eq('adm_empresa', false)
         .order('ultimo_acesso', { ascending: false, nullsFirst: false });
 
       if (error) {

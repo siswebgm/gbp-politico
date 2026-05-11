@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Fundo azul do sistema -->
+    <item android:drawable="@color/splash_background" />
+    
+    <!-- Logo/Texto GBP Político -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+    
+    <!-- Texto GBP Político centralizado -->
+    <item android:gravity="center">
+        <vector xmlns:android="http://schemas.android.com/apk/res/android"
+            android:width="200dp"
+            android:height="100dp"
+            android:viewportWidth="200"
+            android:viewportHeight="100">
+            
+            <!-- Fundo branco semi-transparente para o texto -->
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.1"
+                android:pathData="M10,10 L190,10 L190,90 L10,90 Z" />
+            
+            <!-- Texto GBP -->
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M30,35 L50,35 L50,40 L35,40 L35,45 L45,45 L45,50 L35,50 L35,60 L30,60 Z M55,35 L60,35 L60,50 L70,50 L70,55 L55,55 Z M75,35 L85,35 L85,40 L80,40 L80,60 L75,60 Z M90,35 L105,35 L105,40 L95,40 L95,45 L103,45 L103,50 L95,50 L95,55 L105,55 L105,60 L90,60 Z M110,35 L130,35 L130,40 L115,40 L115,60 L110,60 Z M135,35 L155,35 L155,40 L145,40 L145,45 L153,45 L153,50 L145,50 L145,55 L155,55 L155,60 L135,60 Z" />
+            
+            <!-- Texto Político -->
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M25,65 L35,65 L35,70 L30,70 L30,75 L40,75 L40,80 L25,80 Z M45,65 L60,65 L60,70 L50,70 L50,75 L58,75 L58,80 L50,80 L50,85 L60,85 L60,90 L45,90 Z M65,65 L80,65 L80,70 L70,70 L70,90 L65,90 Z M85,65 L105,65 L105,70 L90,70 L90,75 L98,75 L98,80 L90,80 L90,85 L105,85 L105,90 L85,90 Z M110,65 L125,65 L125,70 L115,70 L115,90 L110,90 Z M130,65 L145,65 L145,70 L135,70 L135,75 L143,75 L143,80 L135,80 L135,85 L145,85 L145,90 L130,90 Z" />
+        </vector>
+    </item>
+</layer-list>

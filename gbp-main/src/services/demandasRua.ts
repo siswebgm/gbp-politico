@@ -18,6 +18,11 @@ export interface DemandaRuaInput {
   empresa_uid: string;
   indicado_uid?: string;
   
+  // Campos de atribuição (opcionais)
+  atribuido_para_uid?: string[] | null;
+  atribuido_por_uid?: string | null;
+  data_atribuicao?: string | null;
+  
   // Dados da demanda
   fotos_do_problema?: string[];
   boletim_ocorrencia: string;
@@ -69,6 +74,11 @@ export async function createDemandaRua(demanda: DemandaRuaInput): Promise<Demand
       empresa_uid: demanda.empresa_uid,
       requerente_uid: demanda.requerente_uid,
       indicado_uid: demanda.indicado_uid || null,
+      
+      // Campos de atribuição
+      atribuido_para_uid: demanda.atribuido_para_uid || null,
+      atribuido_por_uid: demanda.atribuido_por_uid || null,
+      data_atribuicao: demanda.data_atribuicao || null,
       
       // Dados de endereço (obrigatórios)
       logradouro: demanda.logradouro || 'Não informado',

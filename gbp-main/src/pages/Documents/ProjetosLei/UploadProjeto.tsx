@@ -218,12 +218,18 @@ export default function UploadProjeto() {
       
       // Primeiro verifica se já existe um projeto com o mesmo número e ano
       if (projeto.numero) { // Só verifica se houver número informado
+        console.log('Verificando projeto existente:', {
+          numero: projeto.numero,
+          ano: projeto.ano,
+          empresa_uid: company.uid
+        });
+
         const { data: projetoExistente, error: erroBusca } = await supabaseClient
           .from('gbp_projetos_lei')
-          .select('numero, ano')
-          .eq('numero', projeto.numero)
+          .select('uid, numero, ano, titulo, empresa_uid')
+          .eq('numero', projeto.numero.toString()) // Garantir que seja string como no banco
           .eq('ano', parseInt(projeto.ano))
-          .eq('empresa_uid', company.uid)
+          .eq('empresa_uid', company.uid) // Filtro por empresa é ESSENCIAL
           .maybeSingle();
 
         if (erroBusca) {
@@ -231,8 +237,13 @@ export default function UploadProjeto() {
           throw erroBusca;
         }
 
+        console.log('Resultado da busca:', projetoExistente);
+
         if (projetoExistente) {
-          throw new Error(`Já existe um projeto com o número ${projeto.numero} no ano de ${projeto.ano}.`);
+          console.log('Projeto já existe:', projetoExistente);
+          throw new Error(`Já existe um projeto com o número ${projeto.numero} no ano de ${projeto.ano}. Projeto: ${projetoExistente.titulo}`);
+        } else {
+          console.log('Nenhum projeto existente encontrado, pode continuar');
         }
       }
 
@@ -242,11 +253,22 @@ export default function UploadProjeto() {
       console.log('URLs dos arquivos:', arquivosUrls);
       
       console.log('Inserindo dados na tabela gbp_projetos_lei...');
+      console.log('Dados a serem inseridos:', {
+        ano: parseInt(projeto.ano),
+        numero: projeto.numero ? projeto.numero.toString() : null, // Garantir string como no banco
+        status: projeto.status,
+        titulo: projeto.titulo,
+        empresa_uid: company.uid,
+        data_protocolo: dataAtual.toISOString().split('T')[0],
+        autor: company.nome,
+        responsavel: user.uid
+      });
+
       const { error } = await supabaseClient
         .from('gbp_projetos_lei')
         .insert({
           ano: parseInt(projeto.ano),
-          numero: projeto.numero || null,
+          numero: projeto.numero ? projeto.numero.toString() : null, // Garantir string como no banco
           status: projeto.status,
           titulo: projeto.titulo,
           arquivos: arquivosUrls,

@@ -1,4 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import React from 'react';
+import { supabaseClient } from './lib/supabase';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { Dashboard } from './pages/Dashboard';
@@ -48,6 +50,7 @@ import UploadRequerimento from './pages/Documents/Requerimentos/UploadRequerimen
 import EditRequerimento from './pages/Documents/Requerimentos/EditRequerimento';
 import ViewRequerimento from './pages/Documents/Requerimentos/ViewRequerimento';
 import EmendasParlamentares from './pages/Documents/EmendasParlamentares';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import EmendaParlamentarForm from './pages/Documents/EmendasParlamentares/Form';
 import NovoOficio from './pages/Documents/Oficios/NovoOficio';
 import ListaAnualOficios from './pages/Documents/Oficios/ListaAnual';
@@ -106,6 +109,12 @@ function AmbienteRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/app" replace />;
   }
 
+  return <>{children}</>;
+}
+
+function DemandaRuasRoute({ children }: { children: React.ReactNode }) {
+  // Permite acesso a todos os usuários autenticados
+  // A filtragem será feita no componente da página
   return <>{children}</>;
 }
 
@@ -312,12 +321,12 @@ export function AppRoutes() {
           <Route path="novo" element={<RestrictedRoute blockedRoles={['visitante']}><NewDocument /></RestrictedRoute>} />
           <Route path=":id/editar" element={<RestrictedRoute blockedRoles={['visitante']}><EditDocument /></RestrictedRoute>} />
           <Route path="demandas-ruas">
-            <Route index element={<AdminRoute><DemandasRuas /></AdminRoute>} />
+            <Route index element={<PrivateRoute><DemandasRuas /></PrivateRoute>} />
             <Route path="nova" element={<AdminRoute><EditarDemanda /></AdminRoute>} />
-            <Route path=":id" element={<AdminRoute><EditarDemanda /></AdminRoute>} />
-            <Route path=":id/detalhes" element={<AdminRoute><DetalhesDemanda /></AdminRoute>} />
+            <Route path=":id" element={<PrivateRoute><EditarDemanda /></PrivateRoute>} />
+            <Route path=":id/detalhes" element={<PrivateRoute><DetalhesDemanda /></PrivateRoute>} />
             <Route path="relatorios" element={<AdminRoute><RelatoriosDemandas /></AdminRoute>} />
-            <Route path="configuracoes" element={<AdminRoute><ConfiguracoesDemanda /></AdminRoute>} />
+            <Route path="configuracoes" element={<PrivateRoute><ConfiguracoesDemanda /></PrivateRoute>} />
           </Route>
           <Route path="oficios">
             <Route index element={<RestrictedRoute blockedRoles={['visitante']}><Oficios /></RestrictedRoute>} />
@@ -423,6 +432,16 @@ export function AppRoutes() {
         element={
           <PublicLayout>
             <GerenciarEmpreendimentos />
+          </PublicLayout>
+        } 
+      />
+
+      {/* Rota Pública - Política de Privacidade */}
+      <Route 
+        path="/privacy-policy" 
+        element={
+          <PublicLayout>
+            <PrivacyPolicy />
           </PublicLayout>
         } 
       />

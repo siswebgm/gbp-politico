@@ -1,9 +1,10 @@
-import { useState, FormEvent, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, FormEvent, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseClient as supabase } from '../../../lib/supabase';
 import { getEmpresa } from '../../../services/empresa';
 import { createDemandaRua, uploadDemandaFiles, uploadBoletimOcorrencia, DemandaRuaInput } from '../../../services/demandasRua';
 import { indicadoService, type Indicado } from '../../../services/indicadoService';
+import { compressImages } from '../../../utils/imageCompression';
 import { toast } from 'react-toastify';
 import { X, Loader2 } from 'lucide-react';
 import './global.css';
@@ -32,6 +33,7 @@ type FormData = {
   requerente_nome: string;
   requerente_cpf: string;
   requerente_whatsapp: string;
+  requerente_data_nascimento: string;
   genero: 'masculino' | 'feminino' | 'outro' | 'prefiro_nao_informar' | '';
   logradouro: string;
   numero: string;
@@ -49,6 +51,7 @@ type FormData = {
 
 export function NovaDemanda() {
   const { empresa_uid } = useParams<{ empresa_uid: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEmpresa, setIsLoadingEmpresa] = useState(true);
@@ -58,8 +61,13 @@ export function NovaDemanda() {
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [boletimFile, setBoletimFile] = useState<File | null>(null);
-  // Removido setErrors não utilizado
+  // Estado para erro de data de nascimento
+  const [dataNascimentoError, setDataNascimentoError] = useState<string>('');
+  const dataNascimentoRef = useRef<HTMLInputElement>(null);
   const [temEnderecoRequerente, setTemEnderecoRequerente] = useState(false);
+  
+  // Capturar usuário que compartilhou o link
+  const usuarioCompartilhador = searchParams.get('user');
   
   // FORÇA scroll na página pública e previne reload
   useEffect(() => {
@@ -114,11 +122,8 @@ export function NovaDemanda() {
         // Atualiza o estado da empresa mesmo se o link estiver desativado
         setEmpresa(empresaData);
 
-        // Verifica se o link de demanda está disponível
-        if (empresaData.link_demanda_disponivel !== true) {
-          setIsLoadingEmpresa(false);
-          return;
-        }
+        // Link de demanda está sempre disponível
+        setIsLoadingEmpresa(false);
         
       } catch (error) {
         console.error('Erro ao carregar empresa:', error);
@@ -229,6 +234,7 @@ export function NovaDemanda() {
     requerente_nome: '',
     requerente_cpf: '',
     requerente_whatsapp: '',
+    requerente_data_nascimento: '',
     genero: '',
     logradouro: '',
     numero: '',
@@ -284,6 +290,16 @@ export function NovaDemanda() {
         .replace(/(\-\d{2})\d+?$/, '$1');
     }
     return value;
+  };
+
+  const formatarDataNascimento = (value: string): string => {
+    // Remove tudo que não for dígito
+    const cleaned = value.replace(/\D/g, '');
+    
+    // Aplica a formatação dd/mm/yyyy
+    if (cleaned.length <= 2) return cleaned;
+    if (cleaned.length <= 4) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+    return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
   };
 
   const formatarNome = (value: string): string => {
@@ -360,11 +376,17 @@ export function NovaDemanda() {
         
         setTemEnderecoRequerente(!!temEnderecoValido);
         
+        // Converte data de nascimento do formato do banco (yyyy-mm-dd) para o formato do input (dd/mm/yyyy)
+        const dataNascimentoFormatada = requerente.nascimento
+          ? requerente.nascimento.split('-').reverse().join('/')
+          : '';
+
         // Carrega apenas os dados pessoais, NÃO carrega o endereço
         setFormData(prev => ({
           ...prev,
           requerente_nome: requerente.nome || '',
           requerente_whatsapp: requerente.whatsapp || '',
+          requerente_data_nascimento: dataNascimentoFormatada,
           genero: requerente.genero || ''
         }));
         
@@ -439,6 +461,8 @@ export function NovaDemanda() {
     
     if (name === 'requerente_whatsapp') {
       formattedValue = formatPhone(value);
+    } else if (name === 'requerente_data_nascimento') {
+      formattedValue = formatarDataNascimento(value);
     } else if (name === 'cep') {
       formattedValue = formatCEP(value);
     } else if (name === 'requerente_nome' || name === 'logradouro' || name === 'bairro' || name === 'cidade' || name === 'referencia') {
@@ -451,7 +475,9 @@ export function NovaDemanda() {
     }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!e.target.files || e.target.files.length === 0) {
         return;
@@ -476,21 +502,45 @@ export function NovaDemanda() {
       }
       
       // Limita ao máximo de 2 imagens
-      const filesToAdd = validFiles.slice(0, 2 - files.length);
+      const filesToProcess = validFiles.slice(0, 2 - files.length);
       
-      setFiles(prev => [...prev, ...filesToAdd]);
+      // Comprime as imagens automaticamente
+      setIsCompressing(true);
+      toast.info('Comprimindo imagens...', { autoClose: 2000 });
+      
+      const compressedFiles = await compressImages(filesToProcess, {
+        maxWidth: 1920,
+        maxHeight: 1080,
+        quality: 0.85,
+        maxSizeMB: 1.5 // Target: 1.5MB máximo
+      });
+      
+      setFiles(prev => [...prev, ...compressedFiles]);
       
       // Criar URLs de visualização
-      const urls = filesToAdd.map(file => URL.createObjectURL(file));
+      const urls = compressedFiles.map(file => URL.createObjectURL(file));
       setPreviewUrls(prev => [...prev, ...urls]);
       
-      toast.success(`${filesToAdd.length} imagem(ns) adicionada(s)`);
+      // Mostrar informações sobre a compressão
+      const originalSize = filesToProcess.reduce((acc, f) => acc + f.size, 0);
+      const compressedSize = compressedFiles.reduce((acc, f) => acc + f.size, 0);
+      const reduction = ((originalSize - compressedSize) / originalSize * 100).toFixed(0);
+      
+      if (parseInt(reduction) > 10) {
+        toast.success(`${compressedFiles.length} imagem(ns) adicionada(s) - ${reduction}% menor`, {
+          autoClose: 3000
+        });
+      } else {
+        toast.success(`${compressedFiles.length} imagem(ns) adicionada(s)`);
+      }
       
       // Limpa o input para permitir selecionar o mesmo arquivo novamente
       e.target.value = '';
     } catch (error) {
       console.error('Erro no handleFileChange:', error);
       toast.error('Erro ao processar as imagens');
+    } finally {
+      setIsCompressing(false);
     }
   };
 
@@ -547,28 +597,93 @@ export function NovaDemanda() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    console.log('[DEBUG] handleSubmit iniciado');
+    
     if (!empresa_uid) {
+      console.log('[DEBUG] Empresa não identificada');
       toast.error('Empresa não identificada');
       return;
     }
 
+    console.log('[DEBUG] Validando termos...');
     if (!formData.aceite_termos) {
+      console.log('[DEBUG] Termos não aceitos');
       toast.error('Você precisa aceitar os termos de uso para continuar');
       return;
     }
 
+    console.log('[DEBUG] Validando boletim...');
     // Validar se o boletim foi anexado quando necessário
     if (formData.boletim_ocorrencia === 'sim' && !boletimFile) {
+      console.log('[DEBUG] Boletim obrigatório mas não anexado');
       toast.error('Por favor, anexe o boletim de ocorrência');
       return;
     }
 
     // Validar se pelo menos uma foto foi anexada
+    console.log('[DEBUG] Validando fotos...');
     if (files.length === 0) {
+      console.log('[DEBUG] Nenhuma foto anexada');
       toast.error('Por favor, anexe pelo menos uma foto do problema');
       return;
     }
 
+    // Validar data de nascimento
+    console.log('[DEBUG] Validando data de nascimento...');
+    setDataNascimentoError(''); // Limpa erro anterior
+    
+    if (!formData.requerente_data_nascimento) {
+      console.log('[DEBUG] Data de nascimento vazia');
+      setDataNascimentoError('Por favor, informe a data de nascimento');
+      dataNascimentoRef.current?.focus();
+      toast.error('Por favor, informe a data de nascimento');
+      return;
+    }
+
+    // Validar formato da data (dd/mm/aaaa)
+    const dataRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/(19|20)\d{2}$/;
+    if (!dataRegex.test(formData.requerente_data_nascimento)) {
+      console.log('[DEBUG] Formato de data inválido:', formData.requerente_data_nascimento);
+      setDataNascimentoError('Data inválida. Use o formato: dd/mm/aaaa');
+      dataNascimentoRef.current?.focus();
+      toast.error('Data de nascimento inválida. Use o formato: dd/mm/aaaa');
+      return;
+    }
+
+    // Validar se a data é válida (ex: não aceitar 31/02/2020)
+    const [dia, mes, ano] = formData.requerente_data_nascimento.split('/').map(Number);
+    const dataObj = new Date(ano, mes - 1, dia);
+    if (dataObj.getDate() !== dia || dataObj.getMonth() !== mes - 1 || dataObj.getFullYear() !== ano) {
+      console.log('[DEBUG] Data inválida:', formData.requerente_data_nascimento);
+      setDataNascimentoError('Data inválida. Verifique dia, mês e ano');
+      dataNascimentoRef.current?.focus();
+      toast.error('Data de nascimento inválida. Verifique dia, mês e ano');
+      return;
+    }
+
+    // Validar se a data não é futura
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    if (dataObj > hoje) {
+      console.log('[DEBUG] Data no futuro:', formData.requerente_data_nascimento);
+      setDataNascimentoError('Data não pode ser no futuro');
+      dataNascimentoRef.current?.focus();
+      toast.error('Data de nascimento não pode ser no futuro');
+      return;
+    }
+
+    // Validar idade mínima (18 anos)
+    const idadeMinima = new Date();
+    idadeMinima.setFullYear(idadeMinima.getFullYear() - 18);
+    if (dataObj > idadeMinima) {
+      console.log('[DEBUG] Menor de 18 anos:', formData.requerente_data_nascimento);
+      setDataNascimentoError('O requerente deve ter pelo menos 18 anos');
+      dataNascimentoRef.current?.focus();
+      toast.error('O requerente deve ter pelo menos 18 anos');
+      return;
+    }
+
+    console.log('[DEBUG] Todas validações passadas! Prosseguindo...');
     setIsLoading(true);
 
     try {
@@ -585,10 +700,16 @@ export function NovaDemanda() {
 
       // 2. Se não existir ou se o endereço for diferente, criar/atualizar o requerente
       if (!requerenteUid || !usarEnderecoRequerente) {
+        // Converte data de nascimento de dd/mm/yyyy para yyyy-mm-dd (formato do banco)
+        const dataNascimentoFormatada = formData.requerente_data_nascimento
+          ? formData.requerente_data_nascimento.split('/').reverse().join('-')
+          : null;
+
         const dadosRequerente = {
           nome: formData.requerente_nome,
           cpf: formData.requerente_cpf.replace(/\D/g, ''),
           whatsapp: formData.requerente_whatsapp,
+          nascimento: dataNascimentoFormatada,
           genero: formData.genero,
           empresa_uid: empresa_uid
         };
@@ -680,6 +801,9 @@ export function NovaDemanda() {
         empresa_uid: empresa_uid!,
         requerente_uid: requerenteUid,
         indicado_uid: formData.indicado_uid || undefined,
+        atribuido_para_uid: usuarioCompartilhador ? [usuarioCompartilhador] : null,
+        atribuido_por_uid: usuarioCompartilhador,
+        data_atribuicao: usuarioCompartilhador ? new Date().toISOString() : null,
         
         // Dados do endereço (obrigatórios)
         logradouro: endereco.logradouro || 'Não informado',
@@ -815,31 +939,7 @@ export function NovaDemanda() {
     );
   }
 
-  // Verifica se o link de demanda está disponível
-  if (empresa.link_demanda_disponivel === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-sm p-8 text-center">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
-            <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Estamos com problemas técnicos</h2>
-          <p className="text-gray-600 mb-6">Nossa equipe já foi notificada e está trabalhando para resolver o mais rápido possível. Pedimos desculpas pelo transtorno.</p>
-          <a
-            href="https://www.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Voltar para a página inicial
-          </a>
-        </div>
-      </div>
-    );
-  }
-
+  // Renderiza o formulário (link sempre disponível)
   return (
     <div className="page-wrapper">
       <div className="content-wrapper">
@@ -962,6 +1062,39 @@ export function NovaDemanda() {
                     onChange={handleInputChange}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   />
+                </div>
+
+                <div className="col-span-full">
+                  <label htmlFor="requerente_data_nascimento" className={`block text-sm font-medium ${dataNascimentoError ? 'text-red-600' : 'text-gray-700'}`}>
+                    Data de Nascimento *
+                  </label>
+                  <input
+                    type="text"
+                    name="requerente_data_nascimento"
+                    id="requerente_data_nascimento"
+                    ref={dataNascimentoRef}
+                    required
+                    maxLength={10}
+                    placeholder="dd/mm/aaaa"
+                    value={formData.requerente_data_nascimento}
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      if (dataNascimentoError) setDataNascimentoError(''); // Limpa erro ao digitar
+                    }}
+                    className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm ${
+                      dataNascimentoError 
+                        ? 'border-red-500 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                        : 'border-gray-300'
+                    }`}
+                  />
+                  {dataNascimentoError && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {dataNascimentoError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="col-span-full">
@@ -1518,9 +1651,18 @@ export function NovaDemanda() {
                         <div className="flex flex-row gap-2 justify-center items-center">
                           <label
                             htmlFor="file-upload-more"
-                            className="cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50"
+                            className={`cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50 ${isCompressing ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            <span>Adicionar mais fotos</span>
+                            <span className="flex items-center gap-2">
+                              {isCompressing ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Comprimindo...
+                                </>
+                              ) : (
+                                'Adicionar mais fotos'
+                              )}
+                            </span>
                             <input
                               id="file-upload-more"
                               name="file-upload-more"
@@ -1529,6 +1671,7 @@ export function NovaDemanda() {
                               className="sr-only"
                               multiple
                               onChange={handleFileChange}
+                              disabled={isCompressing}
                             />
                           </label>
                         </div>
@@ -1557,9 +1700,18 @@ export function NovaDemanda() {
                     <div className="flex flex-row gap-2 justify-center items-center">
                       <label
                         htmlFor="file-upload"
-                        className="cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50"
+                        className={`cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50 ${isCompressing ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        <span>Enviar fotos</span>
+                        <span className="flex items-center gap-2">
+                          {isCompressing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Comprimindo...
+                            </>
+                          ) : (
+                            'Enviar fotos'
+                          )}
+                        </span>
                         <input
                           id="file-upload"
                           name="file-upload"
@@ -1568,6 +1720,7 @@ export function NovaDemanda() {
                           className="sr-only"
                           multiple
                           onChange={handleFileChange}
+                          disabled={isCompressing}
                         />
                       </label>
                     </div>
@@ -1612,6 +1765,7 @@ export function NovaDemanda() {
                 <button
                   type="submit"
                   disabled={isLoading || isUploadingBoletim}
+                  onClick={() => console.log('[DEBUG] Botão clicado - isLoading:', isLoading, 'isUploadingBoletim:', isUploadingBoletim)}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (

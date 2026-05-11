@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cor azul do sistema para o splash -->
+    <color name="splash_background">#1E40AF</color>
+    <color name="splash_text">#FFFFFF</color>
+</resources>

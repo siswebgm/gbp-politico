@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { supabaseClient } from '../lib/supabase';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useDashboardStore } from '../store/useDashboardStore';
+import { useAuth } from '../providers/AuthProvider';
+import { demandasRuasService } from '../services/demandasRuasService';
 import { format, subDays, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -24,6 +26,7 @@ interface DashboardData {
   totalRequerimentos: number;
   totalProjetosLei: number;
   totalAgendamentos: number;
+  totalDemandas: number;
   evolucaoEleitores: Record<string, number>;
   evolucaoAtendimentos: Record<string, number>;
   atendimentosPorStatus: Record<string, number>;
@@ -34,6 +37,7 @@ interface DashboardData {
   requerimentosStats: StatsData;
   projetosLeiStats: StatsData;
   agendamentosStats: StatsData;
+  demandasStats: StatsData;
 }
 
 interface CacheData {
@@ -97,6 +101,7 @@ function processarEstatisticas(dados: any[], sevenDaysAgo: Date, period: number 
 
 export function useDashboardData() {
   const company = useCompanyStore((state) => state.company);
+  const { user } = useAuth();
   const {
     data,
     lastUpdate,
@@ -144,7 +149,8 @@ export function useDashboardData() {
         { data: oficios, error: oficiosError },
         { data: requerimentos, error: requerimentosError },
         { data: projetosLei, error: projetosLeiError },
-        { data: agendamentos, error: agendamentosError }
+        { data: agendamentos, error: agendamentosError },
+        demandas
       ] = await Promise.all([
         supabaseClient
           .from('gbp_eleitores')
@@ -172,7 +178,9 @@ export function useDashboardData() {
         supabaseClient
           .from('gbp_agendamentos')
           .select('uid, created_at')
-          .eq('empresa_uid', company.uid)
+          .eq('empresa_uid', company.uid),
+        // Buscar demandas do usuário
+        demandasRuasService.getDemandas(company.uid).catch(() => [])
       ]);
 
       // Verificar erros
@@ -183,6 +191,54 @@ export function useDashboardData() {
       if (projetosLeiError) throw projetosLeiError;
       if (agendamentosError) throw agendamentosError;
 
+      // Filtrar demandas do usuário logado com as novas regras
+      const demandasDoUsuario = (demandas || []).filter(demanda => {
+        console.log('Filtrando demanda:', {
+          uid: demanda.uid,
+          status: demanda.status,
+          arquivado: demanda.arquivado,
+          excluido: demanda.excluido,
+          atribuido_para_uid: demanda.atribuido_para_uid,
+          userUid: user?.uid,
+          userNivel: user?.nivel_acesso
+        });
+        
+        // Não contar demandas excluídas
+        if (demanda.excluido === true) {
+          console.log('Demanda excluída, ignorando');
+          return false;
+        }
+        
+        // Se não for admin, mostrar apenas demandas atribuídas ao usuário
+        if (user?.nivel_acesso?.toLowerCase() !== 'admin') {
+          if (!demanda.atribuido_para_uid?.includes(user?.uid || '')) {
+            console.log('Demanda não atribuída ao usuário, ignorando');
+            return false;
+          }
+        }
+        
+        // Para todos os usuários (incluindo admin), filtrar por status e arquivado
+        // Não exibir card se status for 'protocolado' ou 'concluido'
+        if (demanda.status === 'protocolado' || demanda.status === 'concluido') {
+          console.log('Demanda com status protocolado/concluído, ignorando');
+          return false;
+        }
+        
+        // Não exibir card se estiver arquivado
+        if (demanda.arquivado === true) {
+          console.log('Demanda arquivada, ignorando');
+          return false;
+        }
+        
+        console.log('Demanda incluída no filtro');
+        // Admins podem ver todas as outras demandas
+        return true;
+      });
+      
+      console.log('Total de demandas antes do filtro:', demandas?.length || 0);
+      console.log('Total de demandas após filtro:', demandasDoUsuario.length);
+      console.log('Demandas filtradas:', demandasDoUsuario.map(d => ({ uid: d.uid, status: d.status, arquivado: d.arquivado })));
+
       const dashboardData = {
         totalAtendimentos: atendimentos?.length || 0,
         totalEleitores: eleitores?.length || 0,
@@ -190,6 +246,7 @@ export function useDashboardData() {
         totalRequerimentos: requerimentos?.length || 0,
         totalProjetosLei: projetosLei?.length || 0,
         totalAgendamentos: agendamentos?.length || 0,
+        totalDemandas: demandasDoUsuario.length,
         evolucaoEleitores: {},
         evolucaoAtendimentos: {},
         atendimentosPorStatus: {},
@@ -199,7 +256,8 @@ export function useDashboardData() {
         oficiosStats: processarEstatisticas(oficios || [], sevenDaysAgo),
         requerimentosStats: processarEstatisticas(requerimentos || [], sevenDaysAgo),
         projetosLeiStats: processarEstatisticas(projetosLei || [], sevenDaysAgo),
-        agendamentosStats: processarEstatisticas(agendamentos || [], sevenDaysAgo)
+        agendamentosStats: processarEstatisticas(agendamentos || [], sevenDaysAgo),
+        demandasStats: processarEstatisticas(demandasDoUsuario || [], sevenDaysAgo)
       };
 
       if (isMountedRef.current) {

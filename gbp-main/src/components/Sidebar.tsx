@@ -245,10 +245,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         console.log(' Total de demandas:', demandas.length);
         
         const demandasDoDia = demandas.filter(demanda => {
+          // Não contar demandas excluídas
+          if (demanda.excluido === true) {
+            return false;
+          }
+          
           const dataCriacao = new Date(demanda.criado_em);
           const isDoDia = dataCriacao >= hoje && dataCriacao < amanha;
+          
+          // Se não for admin, mostrar apenas demandas atribuídas ao usuário
+          if (!isAdmin) {
+            const isAtribuidaAoUsuario = demanda.atribuido_para_uid?.includes(user?.uid || '');
+            if (!isAtribuidaAoUsuario) {
+              return false;
+            }
+          }
+          
           if (isDoDia) {
-            console.log(' Demanda do dia encontrada:', demanda.uid, dataCriacao.toISOString());
+            console.log(' Demanda do dia encontrada:', demanda.uid, dataCriacao.toISOString(), 'atribuída ao usuário:', !isAdmin ? demanda.atribuido_para_uid?.includes(user?.uid || '') : 'admin - todas');
           }
           return isDoDia;
         });
@@ -301,12 +315,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       return true;
     });
 
-    // Filtrar Demandas Ruas por plano e nível de acesso
+    // Filtrar Demandas Ruas por nível de acesso
     filtered = filtered.filter(item => {
       if (item.href === '/app/documentos/demandas-ruas') {
-        const niveisPermitidos = ['admin', 'coordenador', 'analista'];
-        const temNivelAcesso = user?.nivel_acesso && niveisPermitidos.includes(user.nivel_acesso);
-        return temNivelAcesso && temAcessoDemandasRuas;
+        // Permitir todos os níveis inclusive visitantes
+        return true;
       }
       return true;
     });

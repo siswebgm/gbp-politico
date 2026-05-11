@@ -1,0 +1,3 @@
+FROM siswebgm/gbp-politico:2.9
+
+COPY gbp-main/public/sw.js /usr/share/nginx/html/sw.js

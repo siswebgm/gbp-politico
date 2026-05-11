@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
-import { Users, Calendar, Clock } from 'lucide-react';
+import { Users, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -15,6 +15,7 @@ interface StatCardProps {
   stats: any;
   showDetailsLink?: boolean;
   detailsUrl?: string;
+  highlight?: boolean;
 }
 
 export function StatCard({ 
@@ -25,7 +26,8 @@ export function StatCard({
   color, 
   stats,
   showDetailsLink,
-  detailsUrl
+  detailsUrl,
+  highlight
 }: StatCardProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('7');
@@ -40,8 +42,23 @@ export function StatCard({
 
   return (
     <div className="relative">
+      {highlight && (
+        <div className="absolute -top-1 -right-1 z-20">
+          <div className="relative">
+            <div className="absolute inset-0 bg-red-500 rounded-full animate-ping"></div>
+            <div className="relative bg-red-500 rounded-full p-1">
+              <AlertCircle className="h-3 w-3 text-white" />
+            </div>
+          </div>
+        </div>
+      )}
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow h-[90px]"
+        className={cn(
+          "rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow h-[90px]",
+          highlight 
+            ? "bg-red-50 dark:bg-red-900/20 border-2 border-red-500 dark:border-red-400 hover:shadow-lg hover:border-red-600 dark:hover:border-red-500" 
+            : "bg-white dark:bg-gray-800"
+        )}
         onClick={() => setIsDetailsOpen(!isDetailsOpen)}
       >
         <div className="flex items-center justify-between">
@@ -63,9 +80,9 @@ export function StatCard({
           </div>
           <div className="text-right">
             <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              stats.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+              stats?.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
             }`}>
-              {stats.crescimento >= 0 ? '+' : ''}{stats.crescimento.toFixed(1)}%
+              {stats?.crescimento >= 0 ? '+' : ''}{(stats?.crescimento || 0).toFixed(1)}%
             </div>
           </div>
         </div>
@@ -142,31 +159,31 @@ export function StatCard({
             <div className="space-y-4">
               <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-blue-900 dark:text-blue-200">Total no Período</h4>
-                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{stats.total}</p>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{stats?.total || 0}</p>
               </div>
 
               <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-green-900 dark:text-green-200">Crescimento</h4>
-                <p className={`text-2xl font-bold ${stats.crescimento >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                  {stats.crescimento >= 0 ? '+' : ''}{stats.crescimento.toFixed(1)}%
+                <p className={`text-2xl font-bold ${stats?.crescimento >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                  {stats?.crescimento >= 0 ? '+' : ''}{(stats?.crescimento || 0).toFixed(1)}%
                 </p>
               </div>
 
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Distribuição por Dia</h4>
-                {Object.entries(stats.distribuicaoPorDia).map(([dia, valor]) => (
+                {Object.entries(stats?.distribuicaoPorDia || {}).map(([dia, valor]) => (
                   <div key={dia} className="mb-3">
                     <div className="flex justify-between items-center text-sm mb-1.5">
                       <span className="font-medium text-gray-700 dark:text-gray-300">{dia}</span>
                       <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
-                        {valor} registros
+                        {Number(valor)} registros
                       </span>
                     </div>
                     <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3">
                       <div
                         className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"
                         style={{
-                          width: `${(valor / total) * 100}%`,
+                          width: `${(Number(valor) / total) * 100}%`,
                           transition: 'width 0.5s ease-in-out'
                         }}
                       />
@@ -177,7 +194,7 @@ export function StatCard({
 
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Distribuição por Horário</h4>
-                {Object.entries(stats.distribuicaoPorHorario).map(([horario, valor], index) => {
+                {Object.entries(stats?.distribuicaoPorHorario || {}).map(([horario, valor]) => {
                   const colors = {
                     'Manhã (6h-12h)': 'from-yellow-500 to-yellow-600',
                     'Tarde (12h-18h)': 'from-orange-500 to-orange-600',
@@ -194,7 +211,7 @@ export function StatCard({
                         <span className="font-medium text-gray-700 dark:text-gray-300">{horario}</span>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${bgColors[horario as keyof typeof bgColors]}`}>
-                            {valor} registros
+                            {Number(valor)} registros
                           </span>
                         </div>
                       </div>
@@ -202,7 +219,7 @@ export function StatCard({
                         <div
                           className={`h-3 rounded-full bg-gradient-to-r ${colors[horario as keyof typeof colors]}`}
                           style={{
-                            width: `${(valor / total) * 100}%`,
+                            width: `${(Number(valor) / (total || 1)) * 100}%`,
                             transition: 'width 0.5s ease-in-out'
                           }}
                         />

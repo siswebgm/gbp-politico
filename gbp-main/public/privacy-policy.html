@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidade - GBP Político CRM</title>
+    <meta name="description" content="Política de privacidade completa do GBP Político CRM em conformidade com a LGPD.">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="Política de Privacidade - GBP Político CRM">
+    <meta property="og:description" content="Proteção total dos seus dados em conformidade com a LGPD.">
+    <meta property="og:type" content="website">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        :root {
+            --primary-color: #1e40af;
+            --secondary-color: #3b82f6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+            min-height: 100vh;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 4rem 0;
+            text-align: center;
+        }
+        
+        .card-custom {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .icon-feature {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        
+        .icon-blue { background: #dbeafe; color: var(--primary-color); }
+        .icon-green { background: #d1fae5; color: var(--success-color); }
+        .icon-purple { background: #e9d5ff; color: #9333ea; }
+        .icon-orange { background: #fed7aa; color: var(--warning-color); }
+        
+        .section-title {
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .alert-custom {
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .list-custom li {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        
+        .list-custom li::before {
+            content: "•";
+            color: var(--primary-color);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+        
+        .footer-custom {
+            background: #1f2937;
+            color: white;
+            padding: 2rem 0;
+            margin-top: 4rem;
+        }
+        
+        @media (max-width: 768px) {
+            .hero-section {
+                padding: 2rem 0;
+            }
+            
+            .section-title {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-8 text-center">
+                    <i data-lucide="shield" class="mb-3" style="width: 64px; height: 64px; color: #93c5fd;"></i>
+                    <h1 class="display-4 fw-bold mb-3">Política de Privacidade</h1>
+                    <p class="lead mb-4">GBP Político CRM - Proteção e Transparência em Conformidade com a LGPD</p>
+                    <div class="text-white-50">
+                        <p class="mb-1">Última atualização: <span id="current-date"></span></p>
+                        <p>Versão: 2.9.18</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                
+                <!-- Introduction -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="users" class="icon-blue"></i>
+                            Introdução
+                        </h2>
+                        <p class="text-muted">
+                            Bem-vindo ao <strong>GBP Político CRM</strong>! Esta Política de Privacidade descreve como 
+                            coletamos, usamos, armazenamos e protegemos suas informações pessoais em conformidade com a 
+                            <strong> Lei Geral de Proteção de Dados (LGPD)</strong> - Lei nº 13.709/2018.
+                        </p>
+                        <div class="alert alert-info alert-custom" role="alert">
+                            <strong>Nosso compromisso:</strong> Respeitar sua privacidade e garantir a segurança dos seus dados.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Collection -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="database" class="icon-blue"></i>
+                            Dados Coletados
+                        </h2>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="icon-feature icon-green">
+                                        <i data-lucide="user"></i>
+                                    </div>
+                                    <h5 class="fw-bold">Dados Pessoais</h5>
+                                    <ul class="list-custom text-muted">
+                                        <li>Nome completo</li>
+                                        <li>CPF (com criptografia)</li>
+                                        <li>Data de nascimento</li>
+                                        <li>Endereço completo</li>
+                                        <li>Telefone/WhatsApp</li>
+                                        <li>E-mail</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="icon-feature icon-blue">
+                                        <i data-lucide="vote"></i>
+                                    </div>
+                                    <h5 class="fw-bold">Dados Políticos</h5>
+                                    <ul class="list-custom text-muted">
+                                        <li>Preferências políticas</li>
+                                        <li>Histórico de votação</li>
+                                        <li>Posicionamento ideológico</li>
+                                        <li>Partido político de preferência</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="icon-feature icon-purple">
+                                        <i data-lucide="map-pin"></i>
+                                    </div>
+                                    <h5 class="fw-bold">Dados de Geolocalização</h5>
+                                    <ul class="list-custom text-muted">
+                                        <li>Endereço residencial</li>
+                                        <li>Zona e seção eleitoral</li>
+                                        <li>Coordenadas geográficas</li>
+                                        <li>Bairro e cidade</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="icon-feature icon-orange">
+                                        <i data-lucide="shield-alert"></i>
+                                    </div>
+                                    <h5 class="fw-bold">Dados Sensíveis</h5>
+                                    <ul class="list-custom text-muted">
+                                        <li>Opinião política (com consentimento)</li>
+                                        <li>Convicções filosóficas</li>
+                                        <li>Informações sobre origem social</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legal Basis -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="lock" class="icon-blue"></i>
+                            Base Legal para Tratamento
+                        </h2>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="alert alert-success">
+                                    <h6 class="fw-bold">1. Consentimento Explícito</h6>
+                                    <p class="small mb-0">
+                                        Você autoriza o tratamento de dados específicos. Consentimento pode ser revogado a qualquer momento.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="alert alert-info">
+                                    <h6 class="fw-bold">2. Legítimo Interesse</h6>
+                                    <p class="small mb-0">
+                                        Gestão de campanhas políticas, organização de atividades, comunicação com eleitores.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="alert alert-primary">
+                                    <h6 class="fw-bold">3. Cumprimento de Obrigação Legal</h6>
+                                    <p class="small mb-0">
+                                        Obrigações eleitorais, prestação de contas, fiscalização política.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Rights -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="eye" class="icon-blue"></i>
+                            Seus Direitos (LGPD)
+                        </h2>
+                        <div class="row">
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="search"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Acesso</h6>
+                                    <p class="small text-muted">Solicitar cópia de seus dados</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="edit"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Correção</h6>
+                                    <p class="small text-muted">Atualizar dados desatualizados</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="trash-2"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Eliminação</h6>
+                                    <p class="small text-muted">Solicitar exclusão de dados</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="download"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Portabilidade</h6>
+                                    <p class="small text-muted">Transferir dados para outro serviço</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="ban"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Oposição</h6>
+                                    <p class="small text-muted">Opor-se a tratamento específico</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <div class="text-center p-3 bg-light rounded">
+                                    <div class="icon-feature icon-green mx-auto">
+                                        <i data-lucide="refresh-cw"></i>
+                                    </div>
+                                    <h6 class="fw-bold">Revisão</h6>
+                                    <p class="small text-muted">Revisar decisões automatizadas</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Measures -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="shield" class="icon-blue"></i>
+                            Como Protegemos Seus Dados
+                        </h2>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="icon-feature icon-blue me-3">
+                                        <i data-lucide="lock"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold">Criptografia</h6>
+                                        <p class="text-muted small">
+                                            Dados criptografados em trânsito (TLS 1.3) e em repouso (AES-256)
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="icon-feature icon-blue me-3">
+                                        <i data-lucide="key"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold">Controle de Acesso</h6>
+                                        <p class="text-muted small">
+                                            Autenticação multifator e controle de acesso baseado em função
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="icon-feature icon-blue me-3">
+                                        <i data-lucide="hard-drive"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold">Backup e Recuperação</h6>
+                                        <p class="text-muted small">
+                                            Backups diários criptografados com retenção de 30 dias
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="icon-feature icon-blue me-3">
+                                        <i data-lucide="activity"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold">Monitoramento</h6>
+                                        <p class="text-muted small">
+                                            Monitoramento 24/7 com detecção de anomalias
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Important Notes -->
+                <div class="alert alert-warning alert-custom" role="alert">
+                    <h6 class="fw-bold mb-3">⚠️ Aspectos Políticos Específicos</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="list-custom mb-0">
+                                <li><strong>Nunca vendemos dados pessoais</strong> para terceiros</li>
+                                <li><strong>Nunca compartilhamos dados</strong> sem autorização explícita</li>
+                                <li><strong>Respeitamos a diversidade</strong> de opiniões políticas</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-custom mb-0">
+                                <li><strong>Transparência total</strong> em metodologias e fontes</li>
+                                <li><strong>Compromisso democrático</strong> com liberdade de expressão</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact -->
+                <div class="card card-custom">
+                    <div class="card-body p-4">
+                        <h2 class="section-title">
+                            <i data-lucide="mail" class="icon-blue"></i>
+                            Contato e Exercício de Direitos
+                        </h2>
+                        <div class="alert alert-info">
+                            <h6 class="fw-bold mb-3">Canais de Contato</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong>E-mail:</strong> jmapps.tec@gmail.com</p>
+                                    <p class="mb-2"><strong>Telefone:</strong> (81) 97914-6126</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong>Site:</strong> https://seu-dominio.com/privacidade</p>
+                                    <p class="mb-2"><strong>DPO:</strong> jmapps.tec@gmail.com</p>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p class="small mb-2"><strong>Prazo de resposta:</strong> Até 15 dias para solicitações simples</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="small mb-0"><strong>Horário de atendimento:</strong> Segunda a Sexta, 9h às 18h</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="text-center text-muted py-4">
+                    <p class="mb-2">
+                        Ao usar o GBP Político CRM, você concorda com esta Política de Privacidade.
+                    </p>
+                    <p class="small">
+                        Esta política foi elaborada com atenção especial aos aspectos políticos e eleitorais, 
+                        garantindo conformidade total com a LGPD e legislação eleitoral brasileira.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer-custom">
+        <div class="container text-center">
+            <p class="mb-2">© 2026 GBP Político CRM. Todos os direitos reservados.</p>
+            <p class="small text-white-50">
+                Em conformidade com a Lei Geral de Proteção de Dados (LGPD) - Lei nº 13.709/2018
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Lucide Icons -->
+    <script>
+        lucide.createIcons();
+        
+        // Set current date
+        const currentDate = new Date().toLocaleDateString('pt-BR', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+        document.getElementById('current-date').textContent = currentDate;
+    </script>
+</body>
+</html>
