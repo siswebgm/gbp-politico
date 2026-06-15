@@ -2780,9 +2780,9 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
         }
       `}</style>
       {/* Barra superior com controles */}
-      <div className={`absolute top-2 left-2 z-[1000] flex flex-col sm:flex-row gap-2 transition-all duration-200 ${showCategoryFilter ? 'right-2 sm:right-[466px]' : 'right-2'}`}>
+      <div className={`absolute top-2 left-2 z-[1000] flex flex-row flex-nowrap gap-2 transition-all duration-200 ${showCategoryFilter ? 'right-2 sm:right-[466px]' : 'right-2'}`}>
         {/* Searchbox e botão de estatísticas */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <input
               type="text"
               placeholder="Buscar por cidade, bairro, CEP ou endereço..."
@@ -2808,10 +2808,10 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
           </div>
 
         {/* Controles do mapa */}
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-1.5 sm:gap-2 justify-end flex-shrink-0">
           <button
             onClick={() => setShowCategoryFilter(!showCategoryFilter)}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-1.5 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative flex-shrink-0"
             title="Filtrar Categorias"
           >
             <svg className="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2831,7 +2831,7 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
                   map.setView([userLocation.lat, userLocation.lng], 15);
                 }
               }}
-              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-1.5 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
               title="Ir para minha localização"
             >
               <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2843,7 +2843,7 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
 
           <button
             onClick={handleCaptureMap}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-1.5 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
             title="Capturar/Imprimir Mapa"
           >
             <Camera className="h-5 w-5 text-gray-700 dark:text-gray-300" />
@@ -2851,7 +2851,7 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
 
           <button
             onClick={toggleFullscreen}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-1.5 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
             title={isFullscreen ? "Pressione ESC para sair da tela cheia" : "Tela cheia"}
           >
             {isFullscreen ? (
