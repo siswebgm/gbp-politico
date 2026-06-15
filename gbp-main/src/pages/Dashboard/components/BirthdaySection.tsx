@@ -45,12 +45,41 @@ export function BirthdaySection({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); 
   const itemsPerPage = 7;
 
+  // Generate year options (from 2022 to current year)
+  const currentYear = new Date().getFullYear();
+  const startYear = 2022;
+  const yearOptions = [];
+  for (let year = currentYear; year >= startYear; year--) {
+    yearOptions.push(year);
+  } // 2026, 2025, 2024, 2023, 2022
+  
+  // Extract year from periodoSelecionado if it's a year format
+  const getYearFromPeriodo = () => {
+    if (periodoSelecionado.startsWith('ano_')) {
+      return periodoSelecionado.replace('ano_', '');
+    }
+    return currentYear.toString();
+  };
+  
+  const [yearInput, setYearInput] = useState(getYearFromPeriodo());
+
   // Se não for admin, força o período para 'dia'
   useEffect(() => {
     if (!isAdmin && periodoSelecionado !== 'dia') {
       onPeriodoChange('dia');
     }
   }, [isAdmin, periodoSelecionado, onPeriodoChange]);
+
+  // Sync year input when periodoSelecionado changes
+  useEffect(() => {
+    setYearInput(getYearFromPeriodo());
+  }, [periodoSelecionado]);
+
+  // Handle year change
+  const handleYearChange = (year: string) => {
+    setYearInput(year);
+    onPeriodoChange(`ano_${year}`);
+  };
 
   // Ordenar aniversariantes
   const sortedAniversariantes = [...aniversariantes].sort((a, b) => {
@@ -86,7 +115,12 @@ export function BirthdaySection({
         mes: 'Este_Mes',
         ano: 'Este_Ano'
       };
-      const periodoLabel = periodoLabels[periodoSelecionado as keyof typeof periodoLabels] || periodoSelecionado;
+      let periodoLabel;
+      if (periodoSelecionado.startsWith('ano_')) {
+        periodoLabel = `Ano_${getYearFromPeriodo()}`;
+      } else {
+        periodoLabel = periodoLabels[periodoSelecionado as keyof typeof periodoLabels] || periodoSelecionado;
+      }
       const today = new Date();
       const fileName = `aniversariantes_${periodoLabel}_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}.xlsx`;
 
@@ -246,10 +280,10 @@ export function BirthdaySection({
               <button
                 onClick={handleExportExcel}
                 disabled={!aniversariantes.length}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center justify-center px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Exportar"
               >
                 <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Exportar</span>
               </button>
             )}
             
@@ -285,16 +319,36 @@ export function BirthdaySection({
                 >
                   Mês
                 </button>
-                <button
-                  onClick={() => onPeriodoChange('ano')}
-                  className={`px-3 py-1.5 rounded-md whitespace-nowrap ${
-                    periodoSelecionado === 'ano'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  Ano
-                </button>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="2000"
+                    max="2030"
+                    value={yearInput}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    className={`px-3 py-1.5 rounded-md whitespace-nowrap w-20 text-sm ${
+                      periodoSelecionado.startsWith('ano_')
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    placeholder="Ano"
+                  />
+                  <select
+                    value={yearInput}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    className={`absolute inset-0 px-3 py-1.5 rounded-md whitespace-nowrap w-20 text-sm appearance-none bg-transparent ${
+                      periodoSelecionado.startsWith('ano_')
+                        ? 'text-white'
+                        : 'text-gray-700 dark:text-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  >
+                    {yearOptions.map(year => (
+                      <option key={year} value={year} className="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
@@ -344,7 +398,8 @@ export function BirthdaySection({
             <Gift className="w-12 h-12 mx-auto mb-3 text-gray-400" />
             <p>Nenhum aniversariante {periodoSelecionado === 'dia' ? 'hoje' :
               periodoSelecionado === 'ultimos7dias' ? 'nos últimos 7 dias' :
-              periodoSelecionado === 'mes' ? 'este mês' : 'este ano'}</p>
+              periodoSelecionado === 'mes' ? 'este mês' : 
+              periodoSelecionado.startsWith('ano_') ? `em ${getYearFromPeriodo()}` : 'este ano'}</p>
           </div>
         ) : (
           <>
@@ -495,23 +550,94 @@ export function BirthdaySection({
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-center px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 gap-3">
+              <div className="flex items-center justify-start px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 gap-1">
+                {/* Previous button */}
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
-                  className="p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  className={`w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${
+                    currentPage === 1
+                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                  title="Anterior"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[40px] text-center">
-                  {currentPage} / {totalPages}
-                </span>
+                
+                {/* Page numbers with ellipsis */}
+                <div className="flex items-center gap-0.5 mx-1">
+                  {(() => {
+                    const pages = [];
+                    const showEllipsis = totalPages > 7;
+                    
+                    if (!showEllipsis) {
+                      // Show all pages if 7 or fewer
+                      for (let i = 1; i <= totalPages; i++) {
+                        pages.push(i);
+                      }
+                    } else {
+                      // Smart pagination with ellipsis
+                      if (currentPage <= 4) {
+                        // Show 1,2,3,4,5,...,last
+                        for (let i = 1; i <= 5; i++) {
+                          pages.push(i);
+                        }
+                        pages.push('...');
+                        pages.push(totalPages);
+                      } else if (currentPage >= totalPages - 3) {
+                        // Show 1,...,last-4,last-3,last-2,last-1,last
+                        pages.push(1);
+                        pages.push('...');
+                        for (let i = totalPages - 4; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Show 1,...,current-1,current,current+1,...,last
+                        pages.push(1);
+                        pages.push('...');
+                        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                          pages.push(i);
+                        }
+                        pages.push('...');
+                        pages.push(totalPages);
+                      }
+                    }
+                    
+                    return pages.map((page, index) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${index}`} className="px-1.5 text-gray-400 dark:text-gray-500 text-xs">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`w-7 h-7 flex items-center justify-center text-xs font-medium border transition-colors ${
+                            currentPage === page
+                              ? 'bg-blue-500 dark:bg-blue-600 border-blue-500 dark:border-blue-600 text-white'
+                              : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    ));
+                  })()}
+                </div>
+                
+                {/* Next button */}
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
-                  className="p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  className={`w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${
+                    currentPage === totalPages
+                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                  title="Próxima"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}

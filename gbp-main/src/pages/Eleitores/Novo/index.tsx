@@ -142,7 +142,7 @@ export function NovoEleitor() {
 
               <div className="md:col-span-1 lg:col-span-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Nome*
+                  Apelido/Nome*
                 </label>
                 <input
                   type="text"

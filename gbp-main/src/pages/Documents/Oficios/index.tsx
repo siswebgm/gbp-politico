@@ -124,6 +124,9 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [oficioToDelete, setOficioToDelete] = useState<string | null>(null);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [isNovoTipoDemandaModalOpen, setIsNovoTipoDemandaModalOpen] = useState(false);
+  const [novoTipoDemanda, setNovoTipoDemanda] = useState('');
+  const [novaSecretaria, setNovaSecretaria] = useState('');
   const [selectedOficioResume, setSelectedOficioResume] = useState<Oficio | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isProtocoloModalOpen, setIsProtocoloModalOpen] = useState(false);
@@ -855,6 +858,25 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
     fetchTiposDemanda();
   }, [company]);
 
+  const handleAddNovoTipoDemanda = async () => {
+    if (!novoTipoDemanda.trim() || !novaSecretaria.trim()) {
+      toast.error('Preencha todos os campos');
+      return;
+    }
+
+    const novoTipo = `${novaSecretaria}::${novoTipoDemanda}`;
+    
+    // Adicionar à lista local
+    setTiposDemanda([...tiposDemanda, novoTipo]);
+    
+    // Limpar campos e fechar modal
+    setNovoTipoDemanda('');
+    setNovaSecretaria('');
+    setIsNovoTipoDemandaModalOpen(false);
+    
+    toast.success('Tipo de demanda adicionado com sucesso!');
+  };
+
   // Efeito para atualizar em tempo real
   useEffect(() => {
     // Inscreve-se para atualizações em tempo real
@@ -1515,6 +1537,15 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                         <span className="hidden md:inline">Filtros</span>
                       </button>
 
+                      <button
+                        onClick={() => setIsNovoTipoDemandaModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                        title="Adicionar novo tipo de demanda"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span className="hidden md:inline">Novo Tipo</span>
+                      </button>
+
                       <Link
                         to="/app/documentos/oficios/novo"
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
@@ -1875,16 +1906,25 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                   <label className="block text-sm font-medium mb-1">
                     Tipo de Demanda
                   </label>
-                  <select
-                    value={filters.tipo_de_demanda}
-                    onChange={(e) => setFilters({...filters, tipo_de_demanda: e.target.value})}
-                    className="w-full rounded-md border border-gray-300 p-2"
-                  >
-                    <option value="">Todos</option>
-                    {tiposDemanda.map((tipo) => (
-                      <option key={tipo} value={tipo}>{tipo.split('::')[1]}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={filters.tipo_de_demanda}
+                      onChange={(e) => setFilters({...filters, tipo_de_demanda: e.target.value})}
+                      className="flex-1 rounded-md border border-gray-300 p-2"
+                    >
+                      <option value="">Todos</option>
+                      {tiposDemanda.map((tipo) => (
+                        <option key={tipo} value={tipo}>{tipo.split('::')[1]}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => setIsNovoTipoDemandaModalOpen(true)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      title="Adicionar novo tipo de demanda"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -2108,15 +2148,24 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                   <label className="block text-sm font-medium text-gray-700">
                     Tipo de Demanda
                   </label>
-                  <select
-                    value={selectedOficio.tipo_de_demanda || ''}
-                    onChange={(e) => setSelectedOficio({...selectedOficio, tipo_de_demanda: e.target.value})}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {tiposDemanda.map((tipo) => (
-                      <option key={tipo} value={tipo}>{tipo}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedOficio.tipo_de_demanda || ''}
+                      onChange={(e) => setSelectedOficio({...selectedOficio, tipo_de_demanda: e.target.value})}
+                      className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {tiposDemanda.map((tipo) => (
+                        <option key={tipo} value={tipo}>{tipo}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => setIsNovoTipoDemandaModalOpen(true)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      title="Adicionar novo tipo de demanda"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -2273,6 +2322,61 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
                 className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700"
               >
                 Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Novo Tipo de Demanda */}
+      {isNovoTipoDemandaModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Novo Tipo de Demanda
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  Secretaria
+                </label>
+                <input
+                  type="text"
+                  value={novaSecretaria}
+                  onChange={(e) => setNovaSecretaria(e.target.value)}
+                  placeholder="Ex: Saúde, Educação, Obras..."
+                  className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  Tipo de Demanda
+                </label>
+                <input
+                  type="text"
+                  value={novoTipoDemanda}
+                  onChange={(e) => setNovoTipoDemanda(e.target.value)}
+                  placeholder="Ex: Buraco na rua, Iluminação pública..."
+                  className="w-full rounded-md border border-gray-300 p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setIsNovoTipoDemandaModalOpen(false);
+                  setNovoTipoDemanda('');
+                  setNovaSecretaria('');
+                }}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddNovoTipoDemanda}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              >
+                Adicionar
               </button>
             </div>
           </div>

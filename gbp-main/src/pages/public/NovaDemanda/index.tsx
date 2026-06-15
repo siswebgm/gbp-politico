@@ -58,6 +58,7 @@ export function NovaDemanda() {
   const [isUploadingBoletim, setIsUploadingBoletim] = useState(false);
   const [isConsultingCpf, setIsConsultingCpf] = useState(false);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
+  const [linkDesativado, setLinkDesativado] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [boletimFile, setBoletimFile] = useState<File | null>(null);
@@ -65,6 +66,7 @@ export function NovaDemanda() {
   const [dataNascimentoError, setDataNascimentoError] = useState<string>('');
   const dataNascimentoRef = useRef<HTMLInputElement>(null);
   const [temEnderecoRequerente, setTemEnderecoRequerente] = useState(false);
+  const [geoStatus, setGeoStatus] = useState<'idle' | 'buscando' | 'ok' | 'nao_localizado'>('idle');
   
   // Capturar usuário que compartilhou o link
   const usuarioCompartilhador = searchParams.get('user');
@@ -117,6 +119,11 @@ export function NovaDemanda() {
           toast.error('Empresa não encontrada');
           navigate('/');
           return;
+        }
+
+        // Se o link de demanda público não estiver ativo/disponível
+        if (!empresaData.link_demanda_disponivel) {
+          setLinkDesativado(true);
         }
 
         // Atualiza o estado da empresa mesmo se o link estiver desativado
@@ -246,6 +253,8 @@ export function NovaDemanda() {
     boletim_ocorrencia: 'não',
     link_da_demanda: '',
     aceite_termos: false,
+    latitude: '',
+    longitude: '',
   });
   
   // Estado para controlar se o endereço da demanda é o mesmo do requerente
@@ -326,6 +335,55 @@ export function NovaDemanda() {
       .join(' ');
   };
 
+  const buscarCoordenadas = async (logradouro: string, bairro: string, cidade: string, uf: string, cep: string = '', numero: string = '') => {
+    setGeoStatus('buscando');
+    try {
+      const enderecoCompleto = numero
+        ? `${logradouro} ${numero}, ${bairro}, ${cidade} - ${uf}, Brasil`
+        : `${logradouro}, ${bairro}, ${cidade} - ${uf}, Brasil`;
+      const enderecoSemBairro = numero
+        ? `${logradouro} ${numero}, ${cidade} - ${uf}, Brasil`
+        : `${logradouro}, ${cidade} - ${uf}, Brasil`;
+      const queries = [
+        // 1. Endereço completo com número
+        logradouro && cidade && uf ? enderecoCompleto : '',
+        // 2. Endereço sem bairro com número
+        logradouro && cidade && uf ? enderecoSemBairro : '',
+        // 3. CEP
+        cep ? cep : '',
+        // 4. Bairro + cidade + UF
+        bairro && cidade && uf ? `${bairro}, ${cidade} - ${uf}, Brasil` : '',
+        // 5. Cidade + UF
+        cidade && uf ? `${cidade} - ${uf}, Brasil` : ''
+      ].filter(q => q.length > 0);
+
+      for (const query of queries) {
+        const encodedQuery = encodeURIComponent(query);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=1`, {
+          headers: {
+            'Accept-Language': 'pt-BR',
+            'User-Agent': 'GBPPolitico/1.0'
+          }
+        });
+        const data = await response.json();
+        if (data && data.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            latitude: data[0].lat,
+            longitude: data[0].lon
+          }));
+          setGeoStatus('ok');
+          return;
+        }
+      }
+
+      setGeoStatus('nao_localizado');
+    } catch (error) {
+      console.error('Erro ao buscar coordenadas:', error);
+      setGeoStatus('nao_localizado');
+    }
+  };
+
   const buscarEndereco = async (cep: string) => {
     const cepLimpo = cep.replace(/\D/g, '');
     if (cepLimpo.length !== 8) return;
@@ -342,6 +400,8 @@ export function NovaDemanda() {
           cidade: data.localidade || '',
           uf: data.uf || ''
         }));
+        // Busca latitude e longitude automaticamente pelo endereço
+        buscarCoordenadas(data.logradouro || '', data.bairro || '', data.localidade || '', data.uf || '', cepLimpo, formData.numero);
       }
     } catch (error) {
       console.error('Erro ao buscar endereço:', error);
@@ -465,6 +525,40 @@ export function NovaDemanda() {
       formattedValue = formatarDataNascimento(value);
     } else if (name === 'cep') {
       formattedValue = formatCEP(value);
+      const cepLimpo = value.replace(/\D/g, '');
+      if (cepLimpo.length < 8) {
+        // Limpa endereço e coordenadas quando o CEP é apagado ou incompleto
+        setFormData(prev => ({
+          ...prev,
+          cep: formattedValue,
+          logradouro: '',
+          bairro: '',
+          cidade: '',
+          uf: '',
+          referencia: '',
+          latitude: '',
+          longitude: ''
+        }));
+        return;
+      }
+      // Se é um CEP válido (8 dígitos), limpa coordenadas antigas antes de buscar novas
+      setFormData(prev => ({
+        ...prev,
+        cep: formattedValue,
+        latitude: '',
+        longitude: ''
+      }));
+      return;
+    } else if (name === 'numero') {
+      // Quando o número é preenchido e o endereço já existe, rebusca coordenadas com número
+      setFormData(prev => ({
+        ...prev,
+        numero: value
+      }));
+      if (formData.logradouro && formData.cidade && formData.uf && (formData.latitude || formData.longitude)) {
+        buscarCoordenadas(formData.logradouro, formData.bairro, formData.cidade, formData.uf, formData.cep.replace(/\D/g, ''), value);
+      }
+      return;
     } else if (name === 'requerente_nome' || name === 'logradouro' || name === 'bairro' || name === 'cidade' || name === 'referencia') {
       formattedValue = formatarNome(value);
     }
@@ -901,6 +995,8 @@ export function NovaDemanda() {
           cidade: data.localidade || '',
           uf: data.uf || '',
         }));
+        // Busca latitude e longitude automaticamente pelo endereço
+        buscarCoordenadas(data.logradouro || '', data.bairro || '', data.localidade || '', data.uf || '', cep, formData.numero);
       }
     } catch (error) {
       console.error('Erro ao buscar endereço:', error);
@@ -912,6 +1008,112 @@ export function NovaDemanda() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Verifica se o link de demanda público não está ativo
+  if (linkDesativado) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-6 py-12 font-sans light">
+        <div className="max-w-3xl w-full flex flex-col md:flex-row items-center justify-between gap-8 md:gap-16">
+          
+          {/* Lado Esquerdo: Conteúdo de Texto */}
+          <div className="flex-1 text-center md:text-left space-y-5">
+            {/* Logo da Instituição */}
+            <div className="flex items-center justify-center md:justify-start gap-3 mb-6">
+              {empresa?.logo_url ? (
+                <img
+                  className="h-10 w-auto max-w-[150px] object-contain"
+                  src={empresa.logo_url}
+                  alt={`Logo ${empresa.nome}`}
+                />
+              ) : (
+                <span className="text-xl font-bold tracking-tight text-gray-800">
+                  {empresa?.nome || 'GBP Político'}
+                </span>
+              )}
+            </div>
+            
+            <div className="space-y-3">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                <span className="text-blue-600 font-extrabold">404.</span> Ops, ocorreu um erro.
+              </h1>
+              <p className="text-gray-600 text-base leading-relaxed max-w-md">
+                A página que você está tentando acessar está temporariamente indisponível devido a instabilidades técnicas.
+              </p>
+            </div>
+            
+            <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center md:justify-start">
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex justify-center items-center py-2 px-5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors font-semibold"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+          
+          {/* Lado Direito: Ilustração SVG Robô Quebrado */}
+          <div className="flex-shrink-0 flex items-center justify-center text-blue-500/80">
+            <svg className="w-56 h-56 md:w-64 md:h-64" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Ground Shadow */}
+              <path d="M30 180 H170" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="5 5" />
+              
+              {/* Antenna */}
+              <path d="M100 40 V20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx="100" cy="17" r="4" fill="currentColor" />
+              
+              {/* Head */}
+              <rect x="70" y="40" width="60" height="40" rx="8" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+              
+              {/* Left Eye (Normal) */}
+              <circle cx="88" cy="55" r="5" stroke="currentColor" strokeWidth="2" />
+              <circle cx="88" cy="55" r="2" fill="currentColor" />
+              
+              {/* Right Eye (X shape for broken/error) */}
+              <path d="M108 51 L116 59 M116 51 L108 59" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              
+              {/* Mouth (Sad/Wavy) */}
+              <path d="M85 70 Q100 64 115 70" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              
+              {/* Neck */}
+              <rect x="92" y="80" width="16" height="10" stroke="currentColor" strokeWidth="2.5" />
+              
+              {/* Body */}
+              <rect x="60" y="90" width="80" height="60" rx="10" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+              
+              {/* Heart/Battery indicator on chest */}
+              <rect x="75" y="105" width="20" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
+              <line x1="78" y1="110" x2="84" y2="110" stroke="currentColor" strokeWidth="2" />
+              
+              {/* Broken gauge meter scale on chest */}
+              <path d="M110 115 A 10 10 0 0 1 125 115" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <line x1="117.5" y1="115" x2="113" y2="108" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              
+              {/* Left Arm (Holding wrench) */}
+              <path d="M60 105 H40 V125" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              {/* Wrench head */}
+              <path d="M35 125 H45 M35 130 H45 M37 125 V130 M40 120 L40 125" stroke="currentColor" strokeWidth="2" />
+              <path d="M35 130 A 5 5 0 0 0 45 130" stroke="currentColor" strokeWidth="2" fill="none" />
+              
+              {/* Right Arm (Disconnected/Sparking) */}
+              <path d="M140 105 Q155 105 160 115" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              {/* Sparkles */}
+              <path d="M165 110 L170 112 M162 120 L165 125 M155 120 L153 125" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              
+              {/* Debris on ground */}
+              <circle cx="145" cy="165" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
+              <circle cx="145" cy="165" r="4" stroke="currentColor" strokeWidth="2" />
+              
+              <line x1="55" y1="165" x2="65" y2="165" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              <line x1="60" y1="161" x2="60" y2="169" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              
+              <line x1="80" y1="175" x2="95" y2="171" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+          
+        </div>
       </div>
     );
   }
@@ -1158,6 +1360,15 @@ export function NovaDemanda() {
                               uf: requerente.uf || '',
                               referencia: requerente.referencia || ''
                             }));
+                            // Busca latitude e longitude pelo endereço do cadastro
+                            buscarCoordenadas(
+                              requerente.logradouro || '',
+                              requerente.bairro || '',
+                              requerente.cidade || '',
+                              requerente.uf || '',
+                              (requerente.cep || '').replace(/\D/g, ''),
+                              requerente.numero || ''
+                            );
                             toast.success('Endereço do cadastro carregado!');
                           }
                         } catch (error) {
@@ -1204,6 +1415,15 @@ export function NovaDemanda() {
                                   uf: requerente.uf || '',
                                   referencia: requerente.referencia || ''
                                 }));
+                                // Busca latitude e longitude pelo endereço do cadastro
+                                buscarCoordenadas(
+                                  requerente.logradouro || '',
+                                  requerente.bairro || '',
+                                  requerente.cidade || '',
+                                  requerente.uf || '',
+                                  (requerente.cep || '').replace(/\D/g, ''),
+                                  requerente.numero || ''
+                                );
                               }
                             } catch (error) {
                               console.error('Erro ao buscar endereço do requerente:', error);
@@ -1344,6 +1564,22 @@ export function NovaDemanda() {
                     value={formData.uf}
                     onChange={handleInputChange}
                     className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm uppercase`}
+                  />
+                </div>
+
+                {/* Campos provisórios para conferir geocoding - OCULTOS */}
+                <div className="hidden">
+                  <input
+                    type="hidden"
+                    name="latitude"
+                    id="latitude"
+                    value={formData.latitude || ''}
+                  />
+                  <input
+                    type="hidden"
+                    name="longitude"
+                    id="longitude"
+                    value={formData.longitude || ''}
                   />
                 </div>
               </div>

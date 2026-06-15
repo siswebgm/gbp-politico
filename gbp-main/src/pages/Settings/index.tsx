@@ -2,14 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { CategorySettings } from './components/CategorySettings';
 import { IndicadoSettings } from './components/IndicadoSettings';
 import { BirthdaySettings } from './components/BirthdaySettings';
-import { Cog, Users, Gift, Upload, FormInput, CreditCard, MessageSquare, ListChecks, ChevronLeft } from 'lucide-react';
+import { Cog, Users, Gift, Upload, FormInput, CreditCard, MessageSquare, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useNavigate } from 'react-router-dom';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
-import TiposDemanda from './TiposDemanda';
 
-type SettingsTab = 'categories' | 'indicados' | 'birthday' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'tipos-demanda';
+type SettingsTab = 'categories' | 'indicados' | 'birthday' | 'whatsapp' | 'upload' | 'form' | 'planos';
 
 // Helper para adicionar scroll horizontal com touch
 const setupHorizontalScroll = (el: HTMLDivElement | null) => {
@@ -115,7 +114,6 @@ export function Settings() {
   const tabs = [
     { id: 'categories', label: 'Categorias', icon: Cog },
     { id: 'indicados', label: 'Indicados', icon: Users },
-    { id: 'tipos-demanda', label: 'Tipos de Demanda', icon: ListChecks },
     { id: 'birthday', label: 'Aniversário', icon: Gift },
     { id: 'form', label: 'Formulário de Cadastro', icon: FormInput },
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
@@ -185,7 +183,6 @@ export function Settings() {
                     {activeTab === 'categories' && <CategorySettings />}
                     {activeTab === 'indicados' && <IndicadoSettings />}
                     {activeTab === 'birthday' && <BirthdaySettings />}
-                    {activeTab === 'tipos-demanda' && <TiposDemanda />}
                   </div>
                 </div>
               </div>

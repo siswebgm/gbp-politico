@@ -1,0 +1,103 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 2.51kB 0.5s done
+#1 DONE 1.8s
+
+#2 [internal] load metadata for docker.io/library/node:18-alpine
+#2 ...
+
+#3 [auth] library/node:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 [auth] library/nginx:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [internal] load metadata for docker.io/library/nginx:stable-alpine
+#5 DONE 1.6s
+
+#2 [internal] load metadata for docker.io/library/node:18-alpine
+#2 DONE 1.6s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 616B 0.0s done
+#6 DONE 0.1s
+
+#7 [internal] load build context
+#7 DONE 0.0s
+
+#8 [deps 1/5] FROM docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
+#8 resolve docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
+#8 resolve docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e 2.0s done
+#8 DONE 2.3s
+
+#7 [internal] load build context
+#7 ...
+
+#9 [stage-2 1/6] FROM docker.io/library/nginx:stable-alpine@sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883
+#9 resolve docker.io/library/nginx:stable-alpine@sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883 1.9s done
+#9 DONE 2.5s
+
+#7 [internal] load build context
+#7 transferring context: 25.56kB 1.4s
+#7 transferring context: 183.70kB 17.7s
+#7 transferring context: 245.92kB 17.8s done
+#7 DONE 18.3s
+
+#10 [stage-2 2/6] RUN rm -f /etc/nginx/conf.d/default.conf
+#10 CACHED
+
+#11 [stage-2 3/6] COPY gbp-main/nginx.conf /etc/nginx/conf.d/default.conf
+#11 CACHED
+
+#12 [build 3/8] WORKDIR /app
+#12 CACHED
+
+#13 [deps 2/5] RUN apk add --no-cache --update     python3     make     g++     git     curl     && rm -rf /var/cache/apk/*
+#13 CACHED
+
+#14 [build 4/8] COPY gbp-main/package*.json ./
+#14 CACHED
+
+#15 [deps 3/5] WORKDIR /app
+#15 CACHED
+
+#16 [deps 4/5] COPY gbp-main/package*.json ./
+#16 CACHED
+
+#17 [build 5/8] COPY --from=deps /app/node_modules ./node_modules
+#17 CACHED
+
+#18 [build 6/8] COPY gbp-main/ .
+#18 CACHED
+
+#19 [deps 5/5] RUN npm cache clean --force     && npm config set fetch-retries 5     && npm config set fetch-retry-mintimeout 20000     && npm config set fetch-retry-maxtimeout 120000     && NODE_OPTIONS="--max_old_space_size=4096" npm ci --omit=dev --no-audit --prefer-offline     && rm -rf /root/.npm/_cacache
+#19 CACHED
+
+#20 [build 2/8] RUN apk add --no-cache --update     python3     make     g++     && rm -rf /var/cache/apk/*
+#20 CACHED
+
+#21 [build 7/8] RUN npm cache clean --force     && npm config set fetch-retries 5     && npm config set fetch-retry-mintimeout 20000     && npm config set fetch-retry-maxtimeout 120000     && npm ci --no-audit --prefer-offline
+#21 CACHED
+
+#22 [build 8/8] RUN NODE_OPTIONS="--max_old_space_size=12288" npm run build:optimized
+#22 1.733 
+#22 1.733 > gbp-politico-crm@0.0.0 build:optimized
+#22 1.733 > cross-env NODE_OPTIONS=--max_old_space_size=12288 node scripts/generate-version.js && vite build --mode production --sourcemap=false --minify=terser
+#22 1.733 
+#22 2.822 Ô£à Vers├úo gerada: 1778482811858 (2026-05-11T07:00:11.858Z)
+#22 3.855 vite v5.4.21 building for production...
+#22 4.084 transforming...
+#22 36.55 src/components/ui/label.tsx (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+#22 37.15 src/components/ui/select.tsx (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+#22 37.17 src/components/ui/switch.tsx (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+#22 38.41 src/components/ui/popover.tsx (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+#22 38.43 src/components/ui/avatar.tsx (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+#22 146.8 Ô£ô 8003 modules transformed.
+#22 181.7 rendering chunks...
+
+ 2 warnings found (use docker --debug to expand):
+ - FromAsCasing: 'as' and 'FROM' keywords' casing do not match (line 2)
+ - FromAsCasing: 'as' and 'FROM' keywords' casing do not match (line 27)
+ERROR: failed to build: failed to receive status: rpc error: code = Unavailable desc = error reading from server: EOF

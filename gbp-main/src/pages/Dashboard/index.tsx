@@ -127,7 +127,7 @@ export function Dashboard() {
   const clearDashboardData = useDashboardStore((state) => state.clearData);
   const [aniversariantes, setAniversariantes] = useState<any[]>([]);
   const [loadingAniversariantes, setLoadingAniversariantes] = useState(true);
-  const [periodoSelecionado, setPeriodoSelecionado] = useState('dia'); // 'dia', 'ultimos7dias', 'mes', 'ano'
+  const [periodoSelecionado, setPeriodoSelecionado] = useState('dia'); // 'dia', 'ultimos7dias', 'mes', 'ano', 'ano_YYYY'
 
   const estaNoPeridoSelecionado = useCallback((dataEnvio: Date) => {
     const hoje = new Date();
@@ -156,6 +156,11 @@ export function Dashboard() {
         return dataEnvioNormalizada.getFullYear() === hoje.getFullYear();
 
       default:
+        // Handle ano_YYYY format
+        if (periodoSelecionado.startsWith('ano_')) {
+          const selectedYear = parseInt(periodoSelecionado.replace('ano_', ''));
+          return dataEnvioNormalizada.getFullYear() === selectedYear;
+        }
         return false;
     }
   }, [periodoSelecionado]);
@@ -170,9 +175,14 @@ export function Dashboard() {
     try {
       setLoadingAniversariantes(true);
       
-      const currentYear = new Date().getFullYear();
-      const startOfYear = `${currentYear}-01-01`;
-      const startOfNextYear = `${currentYear + 1}-01-01`;
+      // Determine the year to filter based on periodoSelecionado
+      let filterYear = new Date().getFullYear();
+      if (periodoSelecionado.startsWith('ano_')) {
+        filterYear = parseInt(periodoSelecionado.replace('ano_', ''));
+      }
+      
+      const startOfYear = `${filterYear}-01-01`;
+      const startOfNextYear = `${filterYear + 1}-01-01`;
 
       const { data, error } = await supabaseClient
         .from('gbp_relatorio_niver')

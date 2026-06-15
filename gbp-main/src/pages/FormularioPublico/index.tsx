@@ -450,27 +450,87 @@ export function FormularioPublico() {
 
     // Verificar CPF quando estiver completo
     if (numericValue.length === 11) {
+      // Garantir que temos empresa_uid antes de verificar
+      const empresaUid = formConfig?.empresa_uid || empresa_uid;
+      if (!empresaUid) {
+        console.warn('⚠️ Empresa UID não disponível para verificação de CPF');
+        setCpfChecking(false);
+        return;
+      }
+
       try {
         setCpfChecking(true);
-        const { data: existingCpf, error } = await supabase
+        console.log('🔍 Verificando CPF:', numericValue, 'na empresa:', empresaUid);
+        
+        // Tentar buscar CPF sem formatação (apenas números)
+        // Usar .limit(1) ao invés de .maybeSingle() para evitar erro PGRST116 quando há duplicatas
+        const { data: cpfList, error: cpfError } = await supabase
           .from('gbp_eleitores')
-          .select('id')
+          .select('uid, nome, cpf, created_at')
           .eq('cpf', numericValue)
-          .eq('empresa_uid', formConfig?.empresa_uid)
-          .maybeSingle();
+          .eq('empresa_uid', empresaUid)
+          .limit(1);
+
+        let existingCpf = cpfList && cpfList.length > 0 ? cpfList[0] : null;
+        let error = cpfError;
+        console.log('📊 Resultado verificação (sem formatação):', { existingCpf, error, foundCount: cpfList?.length });
+
+        // Se não encontrou, tentar com formatação (com pontos e traço)
+        if (!existingCpf && !error) {
+          const formattedCpf = numericValue.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+          console.log('🔍 Tentando com formatação:', formattedCpf);
+          
+          const { data: formattedList, error: formattedError } = await supabase
+            .from('gbp_eleitores')
+            .select('uid, nome, cpf, created_at')
+            .eq('cpf', formattedCpf)
+            .eq('empresa_uid', empresaUid)
+            .limit(1);
+          
+          if (formattedList && formattedList.length > 0) {
+            existingCpf = formattedList[0];
+          }
+          if (formattedError) error = formattedError;
+          console.log('📊 Resultado verificação (com formatação):', { existingCpf, error, foundCount: formattedList?.length });
+        }
+
+        // Se ainda não encontrou, fazer uma busca mais ampla com ilike
+        if (!existingCpf && !error) {
+          console.log('🔍 Tentando busca ampla com ilike...');
+          
+          const { data: allMatches, error: searchError } = await supabase
+            .from('gbp_eleitores')
+            .select('uid, nome, cpf, created_at')
+            .eq('empresa_uid', empresaUid)
+            .ilike('cpf', `%${numericValue}%`)
+            .limit(5);
+          
+          console.log('📊 Busca ampla resultados:', { allMatches, searchError, count: allMatches?.length });
+          
+          if (allMatches && allMatches.length > 0) {
+            existingCpf = allMatches[0];
+            console.log('✅ CPF encontrado na busca ampla:', existingCpf);
+          }
+        }
 
         if (error) {
-          console.error('Erro ao verificar CPF:', error);
+          console.error('❌ Erro ao verificar CPF:', error);
           return;
         }
 
         if (existingCpf) {
-          setFieldErrors(prev => ({ ...prev, cpf: 'CPF já cadastrado para esta empresa' }));
+          console.error('🚫 CPF JÁ CADASTRADO:', existingCpf);
+          setFieldErrors(prev => ({ 
+            ...prev, 
+            cpf: `CPF já cadastrado para ${existingCpf.nome || 'esta empresa'}` 
+          }));
           setFormData(prev => ({ ...prev, cpf: '' }));
           setOpenModal(true);
+        } else {
+          console.log('✅ CPF disponível para cadastro');
         }
       } catch (error) {
-        console.error('Erro ao verificar CPF:', error);
+        console.error('💥 Erro ao verificar CPF:', error);
       } finally {
         setCpfChecking(false);
       }
@@ -522,18 +582,44 @@ export function FormularioPublico() {
           return;
         }
 
-        // Verificar se CPF já existe
-        const { data: existingCpf } = await supabase
-          .from('gbp_eleitores')
-          .select('id')
-          .eq('cpf', cpfNumerico)
-          .eq('empresa_uid', formConfig.empresa_uid)
-          .maybeSingle();
-
-        if (existingCpf) {
-          setFieldErrors(prev => ({ ...prev, cpf: 'CPF já cadastrado' }));
+        // Verificar se CPF já existe - BLOQUEIO FINAL
+        const empresaUid = formConfig?.empresa_uid || empresa_uid;
+        if (!empresaUid) {
+          setFieldErrors(prev => ({ ...prev, cpf: 'Erro: Empresa não identificada' }));
           return;
         }
+
+        console.log('🔒 Verificação final de CPF antes de enviar:', cpfNumerico);
+        
+        // Usar .limit(1) ao invés de .maybeSingle() para evitar erro PGRST116
+        const { data: cpfCheckList, error: cpfCheckError } = await supabase
+          .from('gbp_eleitores')
+          .select('uid, nome, cpf, created_at')
+          .eq('cpf', cpfNumerico)
+          .eq('empresa_uid', empresaUid)
+          .limit(1);
+
+        const existingCpf = cpfCheckList && cpfCheckList.length > 0 ? cpfCheckList[0] : null;
+        console.log('📊 Resultado verificação final:', { existingCpf, error: cpfCheckError, foundCount: cpfCheckList?.length });
+
+        if (cpfCheckError) {
+          console.error('❌ Erro ao verificar CPF no submit:', cpfCheckError);
+          setFieldErrors(prev => ({ ...prev, cpf: 'Erro ao verificar CPF. Tente novamente.' }));
+          return;
+        }
+
+        if (existingCpf) {
+          console.error('🚫 CPF DUPLICADO DETECTADO:', existingCpf);
+          setFieldErrors(prev => ({ 
+            ...prev, 
+            cpf: `CPF já cadastrado para ${existingCpf.nome || 'esta empresa'}. Não é possível duplicar.` 
+          }));
+          setOpenModal(true);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        console.log('✅ CPF disponível para cadastro');
       }
 
       setIsSubmitting(true);

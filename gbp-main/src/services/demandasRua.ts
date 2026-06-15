@@ -88,6 +88,8 @@ export async function createDemandaRua(demanda: DemandaRuaInput): Promise<Demand
       uf: demanda.uf || 'PE',
       cep: demanda.cep || '00000-000',
       referencia: demanda.referencia || null,
+      latitude: demanda.latitude || null,
+      longitude: demanda.longitude || null,
       
       // Outros campos
       boletim_ocorrencia: demanda.boletim_ocorrencia || 'não',

@@ -13,6 +13,9 @@ export const handleSupabaseError = (error: any, operation: string) => {
     if (error.details?.includes('gbp_categorias_atendimento')) {
       throw new Error('Categoria de atendimento inválida');
     }
+    if (error.details?.includes('gbp_whatsapp_demanda')) {
+      throw new Error('Não é possível excluir este usuário porque existem demandas de WhatsApp vinculadas a ele. Remova ou transfira as demandas antes de excluir.');
+    }
     if (error.details?.includes('gbp_usuarios')) {
       throw new Error('Usuário não encontrado');
     }

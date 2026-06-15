@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Bell, Calendar, Clock, AlertCircle, MessageCircle, Trash2, MessageSquare, CheckCircle, XCircle, Edit2 } from 'lucide-react';
+import { X, Send, Bell, Calendar, Clock, AlertCircle, MessageCircle, Trash2, MessageSquare, CheckCircle, XCircle, Edit2, Paperclip, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabaseClient } from '../../../lib/supabase';
@@ -51,6 +51,7 @@ interface Atendimento {
   status: string;
   responsavel: string;
   created_at: string;
+  anexos?: any[];
   gbp_eleitores?: {
     nome: string;
     zona: string;
@@ -77,6 +78,7 @@ interface Company {
   token: string;
   instancia: string;
   porta: string;
+  storage?: string;
 }
 
 interface ObservationFormData {
@@ -138,11 +140,34 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'observation' | 'reminder'; id: string } | null>(null);
+  const [deleteAnexoModalOpen, setDeleteAnexoModalOpen] = useState(false);
+  const [anexoToDelete, setAnexoToDelete] = useState<{ anexo: any; index: number } | null>(null);
   const [editingCategory, setEditingCategory] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [categories, setCategories] = useState<Array<{ uid: string; nome: string }>>([]);
   const [selectedCategory, setSelectedCategory] = useState(initialAtendimento?.categoria_uid || '');
   const [descriptionText, setDescriptionText] = useState(initialAtendimento?.descricao || '');
+  const [anexos, setAnexos] = useState<any[]>(() => {
+    // Normalizar anexos iniciais
+    if (initialAtendimento?.anexos) {
+      return initialAtendimento.anexos.map((anexo: any) => {
+        if (typeof anexo === 'string') {
+          const urlParts = anexo.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          return {
+            nome: fileName,
+            url: anexo,
+            tipo: 'application/octet-stream',
+            tamanho: 0,
+            data_upload: null
+          };
+        }
+        return anexo;
+      });
+    }
+    return [];
+  });
+  const [isUploading, setIsUploading] = useState(false);
 
   // Detect if iOS
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -210,6 +235,8 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
     const loadData = async () => {
       try {
         setIsLoading(true);
+        // Limpar anexos ao mudar de atendimento
+        setAnexos([]);
         await Promise.all([
           loadObservations(),
           loadReminders(),
@@ -228,10 +255,12 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
 
   useEffect(() => {
     const fetchCategories = async () => {
+      if (!atendimento?.empresa_uid) return;
+      
       const { data: categoriesData } = await supabaseClient
         .from('gbp_categorias')
         .select('uid, nome')
-        .eq('empresa_uid', atendimento?.empresa_uid)
+        .eq('empresa_uid', atendimento.empresa_uid)
         .order('nome');
       
       if (categoriesData) {
@@ -350,6 +379,36 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
 
       if (categoriasError) throw categoriasError;
       setCategories(categoriasData || []);
+
+      // Carregar anexos do atendimento
+      const { data: atendimentoData } = await supabaseClient
+        .from('gbp_atendimentos')
+        .select('anexos')
+        .eq('uid', atendimento.uid)
+        .single();
+
+      if (atendimentoData?.anexos) {
+        // Normalizar anexos: converter strings para objetos se necessário
+        const anexosNormalizados = atendimentoData.anexos.map((anexo: any) => {
+          if (typeof anexo === 'string') {
+            // Se for apenas uma URL, converter para objeto
+            const urlParts = anexo.split('/');
+            const fileName = urlParts[urlParts.length - 1];
+            return {
+              nome: fileName,
+              url: anexo,
+              tipo: 'application/octet-stream',
+              tamanho: 0,
+              data_upload: null
+            };
+          }
+          return anexo;
+        });
+        
+        setAnexos(anexosNormalizados);
+      } else {
+        setAnexos([]);
+      }
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -628,6 +687,121 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
       setDeleteModalOpen(false);
       setItemToDelete(null);
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+
+    try {
+      const file = files[0];
+      
+      // Usar o bucket configurado na empresa ou padrão
+      const bucketName = (company as any)?.storage || 'gbp_oficios';
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${company?.uid || 'default'}/atendimentos/${atendimento.uid}/${fileName}`;
+
+      // Upload para o storage
+      const { error: uploadError } = await supabaseClient.storage
+        .from(bucketName)
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabaseClient.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      // Adicionar ao array de anexos
+      const novoAnexo = {
+        nome: file.name,
+        url: publicUrl,
+        tipo: file.type,
+        tamanho: file.size,
+        data_upload: new Date().toISOString()
+      };
+
+      const novosAnexos = [...anexos, novoAnexo];
+
+      // Atualizar no banco
+      const { error: updateError } = await supabaseClient
+        .from('gbp_atendimentos')
+        .update({ anexos: novosAnexos })
+        .eq('uid', atendimento.uid);
+
+      if (updateError) throw updateError;
+
+      setAnexos(novosAnexos);
+      toast.success('Arquivo anexado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      toast.error('Erro ao anexar arquivo');
+    } finally {
+      setIsUploading(false);
+      // Limpar input
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteAnexo = async (index: number) => {
+    try {
+      const anexo = anexos[index];
+      
+      // Remover do storage se possível
+      if (anexo.url) {
+        const urlParts = anexo.url.split('/');
+        const filePath = urlParts.slice(urlParts.indexOf(company?.uid || '')).join('/');
+        
+        const bucketName = (company as any)?.storage || 'gbp_oficios';
+        
+        await supabaseClient.storage
+          .from(bucketName)
+          .remove([filePath]);
+      }
+
+      // Remover do array
+      const novosAnexos = anexos.filter((_, i) => i !== index);
+
+      // Atualizar no banco
+      const { error } = await supabaseClient
+        .from('gbp_atendimentos')
+        .update({ anexos: novosAnexos })
+        .eq('uid', atendimento.uid);
+
+      if (error) throw error;
+
+      setAnexos(novosAnexos);
+      toast.success('Anexo removido com sucesso!');
+    } catch (error) {
+      console.error('Erro ao remover anexo:', error);
+      toast.error('Erro ao remover anexo');
+    }
+  };
+
+  const openDeleteAnexoModal = (anexo: any, index: number) => {
+    setAnexoToDelete({ anexo, index });
+    setDeleteAnexoModalOpen(true);
+  };
+
+  const confirmDeleteAnexo = async () => {
+    if (anexoToDelete) {
+      await handleDeleteAnexo(anexoToDelete.index);
+      setDeleteAnexoModalOpen(false);
+      setAnexoToDelete(null);
+    }
+  };
+
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes || isNaN(bytes) || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   useEffect(() => {
@@ -916,6 +1090,88 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                     </div>
                   </div>
 
+                  {/* Anexos */}
+                  <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <div className="px-6 py-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-2">
+                          <Paperclip className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Anexos</h3>
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {anexos.length} {anexos.length === 1 ? 'anexo' : 'anexos'}
+                        </div>
+                      </div>
+
+                      {/* Upload de arquivo */}
+                      <div className="mb-4">
+                        <label className="relative flex items-center justify-center w-full h-12 px-4 transition bg-white border-2 border-gray-300 border-dashed rounded-lg appearance-none cursor-pointer hover:border-blue-500 focus:outline-none">
+                          <span className="flex items-center space-x-2">
+                            <Upload className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-600 dark:text-gray-300">
+                              {isUploading ? 'Enviando...' : 'Clique para adicionar anexo'}
+                            </span>
+                          </span>
+                          <input
+                            type="file"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            onChange={handleFileUpload}
+                            disabled={isUploading}
+                          />
+                        </label>
+                      </div>
+
+                      {/* Lista de anexos */}
+                      <div className="space-y-2">
+                        {anexos.map((anexo, index) => (
+                          <div
+                            key={index}
+                            className="group relative flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                          >
+                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                              <div className="flex-shrink-0">
+                                <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                  {anexo.nome || 'Arquivo sem nome'}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {anexo.tamanho ? formatFileSize(anexo.tamanho) : 'Tamanho desconhecido'} • {anexo.data_upload ? format(new Date(anexo.data_upload), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 'Data desconhecida'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 flex-shrink-0">
+                              <a
+                                href={anexo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                Abrir
+                              </a>
+                              {user?.nivel_acesso?.toLowerCase() !== 'visitante' && (
+                                <button
+                                  onClick={() => openDeleteAnexoModal(anexo, index)}
+                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                  title="Remover anexo"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                        {anexos.length === 0 && (
+                          <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">
+                            Nenhum anexo registrado
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Lembretes */}
                   <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="px-6 py-5">
@@ -1085,6 +1341,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                       </div>
                     </div>
                   </div>
+
                 </div>
               </div>
             </div>
@@ -1148,6 +1405,60 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                       ) : (
                         'Excluir'
                       )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
+
+      {/* Modal de confirmação de exclusão de anexo */}
+      {deleteAnexoModalOpen && (
+        <Dialog.Root open={deleteAnexoModalOpen} onOpenChange={setDeleteAnexoModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[10000]" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl shadow-xl z-[10001] p-8">
+              <div className="relative">
+                {/* Botão de fechar */}
+                <Dialog.Close className="absolute right-0 top-0 p-2 text-gray-400 hover:text-gray-500">
+                  <X className="h-5 w-5" />
+                </Dialog.Close>
+
+                <div className="flex flex-col items-center text-center">
+                  {/* Ícone de alerta */}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4">
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  </div>
+
+                  {/* Título */}
+                  <Dialog.Title className="text-lg font-semibold text-gray-900 mb-2">
+                    Excluir anexo
+                  </Dialog.Title>
+
+                  {/* Descrição */}
+                  <Dialog.Description className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                    Tem certeza que deseja excluir o anexo <strong>"{anexoToDelete?.anexo?.nome || 'Arquivo sem nome'}"</strong>? 
+                    Esta ação não pode ser desfeita.
+                  </Dialog.Description>
+
+                  {/* Botões */}
+                  <div className="flex gap-3 w-full">
+                    <Dialog.Close asChild>
+                      <button
+                        type="button"
+                        className="flex-1 justify-center inline-flex items-center px-4 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        Cancelar
+                      </button>
+                    </Dialog.Close>
+                    <button
+                      type="button"
+                      onClick={confirmDeleteAnexo}
+                      className="flex-1 justify-center inline-flex items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Excluir
                     </button>
                   </div>
                 </div>

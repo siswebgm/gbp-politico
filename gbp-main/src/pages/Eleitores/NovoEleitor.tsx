@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Loader2, X, CheckCircle, FileText, MoreVertical } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -8,6 +8,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useCategories } from '../../hooks/useCategories';
 import { useIndicados } from '../../hooks/useIndicados';
+import { useCategoriaTipos } from '../../hooks/useCategoriaTipos';
 import { useCep } from '../../hooks/useCep';
 import { useCPF } from '../../hooks/useCPF';
 import { useToast } from "../../components/ui/use-toast";
@@ -16,6 +17,16 @@ import { NovoIndicadoModal } from './components/NovoIndicadoModal';
 import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import jsPDF from 'jspdf';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '../../components/ui/dialog';
+import { FileUpload } from '../../components/ui/file-upload';
 
 interface Indicado {
   uid: string;
@@ -167,6 +178,7 @@ export const NovoEleitor: React.FC = () => {
   const [companySettings, setCompanySettings] = useState<{ campos_adicionais: boolean }>({ campos_adicionais: false });
   const { data: categorias, isLoading: isLoadingCategorias } = useCategories();
   const { data: indicados, isLoading: isLoadingIndicados } = useIndicados();
+  const { tipos: categoriaTipos, isLoading: isLoadingCategoriaTipos } = useCategoriaTipos();
   const { fetchAddress, isLoading: isLoadingCep } = useCep();
   const { fetchCPFData, isLoading: isLoadingCPF, error: cpfError } = useCPF();
   // Estado para controlar quais campos são obrigatórios
@@ -237,7 +249,54 @@ export const NovoEleitor: React.FC = () => {
   const [descricaoAtendimento, setDescricaoAtendimento] = useState('');
   const [statusAtendimento, setStatusAtendimento] = useState('');
   const [categoriaAtendimento, setCategoriaAtendimento] = useState('');
+  const [anexosPrimeiroAtendimento, setAnexosPrimeiroAtendimento] = useState<File[]>([]);
   const [showDadosEleitorais, setShowDadosEleitorais] = useState(false);
+  const [atendimentosAdicionais, setAtendimentosAdicionais] = useState<Array<{
+    categoria_uid: string;
+    categoria_principal_uid: string;
+    descricao: string;
+    status: string;
+    anexos?: File[];
+  }>>([]);
+  const [showModalAtendimentos, setShowModalAtendimentos] = useState(false);
+  const [showConfirmarLimpar, setShowConfirmarLimpar] = useState(false);
+  const [showModalPDF, setShowModalPDF] = useState(false);
+  const [showMenuPDF, setShowMenuPDF] = useState(false);
+  const [camposPDF, setCamposPDF] = useState({
+    nomeCompleto: true,
+    cpf: true,
+    nascimento: true,
+    nomeMae: true,
+    whatsapp: true,
+    telefone: true,
+    genero: true,
+    titulo: true,
+    zona: true,
+    secao: true,
+    sus: true,
+    cep: true,
+    numero: true,
+    endereco: true,
+    bairro: true,
+    cidade: true,
+    uf: true,
+    complemento: true,
+    categoria: true,
+    indicadoPor: true,
+    statusAtendimento: true,
+    observacoes: true
+  });
+  const [novoAtendimentoCategoria, setNovoAtendimentoCategoria] = useState('');
+  const [novoAtendimentoCategoriaPrincipal, setNovoAtendimentoCategoriaPrincipal] = useState('');
+  const [novoAtendimentoDescricao, setNovoAtendimentoDescricao] = useState('');
+  const [novoAtendimentoStatus, setNovoAtendimentoStatus] = useState('Pendente');
+  const [novoAtendimentoAnexos, setNovoAtendimentoAnexos] = useState<File[]>([]);
+  const [novoAtendimentoErrors, setNovoAtendimentoErrors] = useState({
+    categoria: '',
+    categoriaPrincipal: '',
+    descricao: '',
+    status: ''
+  });
 
   const categoriaUid = watch('categoria_uid');
   
@@ -245,10 +304,409 @@ export const NovoEleitor: React.FC = () => {
   useEffect(() => {
     if (primeiroAtendimento) {
       setCategoriaAtendimento(categoriaUid);
+    } else {
+      setAnexosPrimeiroAtendimento([]);
     }
   }, [primeiroAtendimento, categoriaUid]);
+  // Efeito para fechar o menu PDF ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showMenuPDF && !target.closest('.relative')) {
+        setShowMenuPDF(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenuPDF]);
+
   const cpfValue = watch('cpf');
   const [lastCheckedCPF, setLastCheckedCPF] = useState<string>('');
+
+  // Função para abrir o modal de atendimentos
+  const abrirModalAtendimentos = () => {
+    setShowModalAtendimentos(true);
+    setNovoAtendimentoCategoria(categoriaUid);
+    setNovoAtendimentoCategoriaPrincipal('');
+    setNovoAtendimentoErrors({ categoria: '', categoriaPrincipal: '', descricao: '', status: '' });
+  };
+
+  // Função para adicionar atendimento à lista (dentro do modal)
+  const adicionarAtendimentoNoModal = () => {
+    if (!novoAtendimentoCategoria || !novoAtendimentoCategoriaPrincipal || !novoAtendimentoDescricao || !novoAtendimentoStatus) {
+      setNovoAtendimentoErrors({
+        categoria: !novoAtendimentoCategoria ? 'Campo obrigatório' : '',
+        categoriaPrincipal: !novoAtendimentoCategoriaPrincipal ? 'Campo obrigatório' : '',
+        descricao: !novoAtendimentoDescricao ? 'Campo obrigatório' : '',
+        status: !novoAtendimentoStatus ? 'Campo obrigatório' : ''
+      });
+      return;
+    }
+
+    setAtendimentosAdicionais(prev => [
+      ...prev,
+      {
+        categoria_uid: novoAtendimentoCategoria,
+        categoria_principal_uid: novoAtendimentoCategoriaPrincipal,
+        descricao: novoAtendimentoDescricao,
+        status: novoAtendimentoStatus,
+        anexos: novoAtendimentoAnexos
+      }
+    ]);
+
+    // Limpar todos os campos após adicionar
+    setNovoAtendimentoCategoria(categoriaUid);
+    setNovoAtendimentoCategoriaPrincipal('');
+    setNovoAtendimentoDescricao('');
+    setNovoAtendimentoStatus('Pendente');
+    setNovoAtendimentoAnexos([]);
+    setNovoAtendimentoErrors({ categoria: '', categoriaPrincipal: '', descricao: '', status: '' });
+
+    // Feedback visual
+    toast({
+      title: (
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-5 w-5 text-green-500" />
+          <span>Atendimento adicionado</span>
+        </div>
+      ),
+      description: "O atendimento foi adicionado à lista com sucesso.",
+      variant: "success",
+    });
+  };
+
+  // Função para remover atendimento da lista
+  const removerAtendimento = (index: number) => {
+    setAtendimentosAdicionais(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Função para gerar PDF em branco do formulário
+  const gerarPDFEmBranco = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPosition = 12;
+    const margin = 12;
+    const fieldHeight = 6;
+    const labelSpacing = 3;
+
+    // Título
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Formulário de Cadastro de Eleitor', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    // Data
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Data: _____/_____/______`, pageWidth - 50, yPosition);
+    yPosition += 10;
+
+    // Função auxiliar para adicionar campo único
+    const addField = (label: string) => {
+      const availableWidth = pageWidth - (margin * 2);
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text(label, margin, yPosition);
+      yPosition += labelSpacing;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, availableWidth, fieldHeight);
+      yPosition += fieldHeight + 4;
+    };
+
+    // Função para adicionar dois campos lado a lado
+    const addTwoFields = (label1: string, label2: string) => {
+      const availableWidth = pageWidth - (margin * 2);
+      const width1 = availableWidth / 2 - 4;
+      const width2 = availableWidth / 2 - 4;
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text(label1, margin, yPosition);
+      doc.text(label2, margin + width1 + 8, yPosition);
+      yPosition += labelSpacing;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, width1, fieldHeight);
+      doc.rect(margin + width1 + 8, yPosition, width2, fieldHeight);
+      yPosition += fieldHeight + 4;
+    };
+
+    // Função para adicionar três campos lado a lado
+    const addThreeFields = (label1: string, label2: string, label3: string) => {
+      const availableWidth = pageWidth - (margin * 2);
+      const width1 = availableWidth / 3 - 5;
+      const width2 = availableWidth / 3 - 5;
+      const width3 = availableWidth / 3 - 5;
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text(label1, margin, yPosition);
+      doc.text(label2, margin + width1 + 8, yPosition);
+      doc.text(label3, margin + width1 + width2 + 16, yPosition);
+      yPosition += labelSpacing;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, width1, fieldHeight);
+      doc.rect(margin + width1 + 8, yPosition, width2, fieldHeight);
+      doc.rect(margin + width1 + width2 + 16, yPosition, width3, fieldHeight);
+      yPosition += fieldHeight + 4;
+    };
+
+    // Função para adicionar quatro campos lado a lado
+    const addFourFields = (label1: string, label2: string, label3: string, label4: string) => {
+      const availableWidth = pageWidth - (margin * 2);
+      const width1 = availableWidth / 4 - 6;
+      const width2 = availableWidth / 4 - 6;
+      const width3 = availableWidth / 4 - 6;
+      const width4 = availableWidth / 4 - 6;
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text(label1, margin, yPosition);
+      doc.text(label2, margin + width1 + 8, yPosition);
+      doc.text(label3, margin + width1 + width2 + 16, yPosition);
+      doc.text(label4, margin + width1 + width2 + width3 + 24, yPosition);
+      yPosition += labelSpacing;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, width1, fieldHeight);
+      doc.rect(margin + width1 + 8, yPosition, width2, fieldHeight);
+      doc.rect(margin + width1 + width2 + 16, yPosition, width3, fieldHeight);
+      doc.rect(margin + width1 + width2 + width3 + 24, yPosition, width4, fieldHeight);
+      yPosition += fieldHeight + 4;
+    };
+
+    // Função para adicionar cinco campos lado a lado
+    const addFiveFields = (label1: string, label2: string, label3: string, label4: string, label5: string) => {
+      const availableWidth = pageWidth - (margin * 2);
+      const width1 = availableWidth / 5 - 4;
+      const width2 = availableWidth / 5 - 4;
+      const width3 = availableWidth / 5 - 4;
+      const width4 = availableWidth / 5 - 4;
+      const width5 = availableWidth / 5 - 4;
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text(label1, margin, yPosition);
+      doc.text(label2, margin + width1 + 4, yPosition);
+      doc.text(label3, margin + width1 + width2 + 8, yPosition);
+      doc.text(label4, margin + width1 + width2 + width3 + 12, yPosition);
+      doc.text(label5, margin + width1 + width2 + width3 + width4 + 16, yPosition);
+      yPosition += labelSpacing;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, width1, fieldHeight);
+      doc.rect(margin + width1 + 4, yPosition, width2, fieldHeight);
+      doc.rect(margin + width1 + width2 + 8, yPosition, width3, fieldHeight);
+      doc.rect(margin + width1 + width2 + width3 + 12, yPosition, width4, fieldHeight);
+      doc.rect(margin + width1 + width2 + width3 + width4 + 16, yPosition, width5, fieldHeight);
+      yPosition += fieldHeight + 4;
+    };
+
+    // Função para adicionar seção
+    const addSection = (title: string) => {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, margin, yPosition);
+      yPosition += 6;
+      doc.setDrawColor(100);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 8;
+    };
+
+    // Dados Pessoais
+    const dadosPessoaisCampos = [
+      camposPDF.nomeCompleto,
+      camposPDF.cpf,
+      camposPDF.nascimento,
+      camposPDF.nomeMae,
+      camposPDF.whatsapp,
+      camposPDF.telefone,
+      camposPDF.genero,
+      camposPDF.titulo,
+      camposPDF.zona,
+      camposPDF.secao,
+      camposPDF.sus
+    ];
+    if (dadosPessoaisCampos.some(campo => campo)) {
+      addSection('Dados Pessoais');
+      if (camposPDF.nomeCompleto) addField('Nome Completo:');
+      if (camposPDF.cpf && camposPDF.nascimento) {
+        addTwoFields('CPF:', 'Nascimento:');
+      } else if (camposPDF.cpf) {
+        addField('CPF:');
+      } else if (camposPDF.nascimento) {
+        addField('Nascimento:');
+      }
+      if (camposPDF.nomeMae) addField('Nome da Mãe:');
+      if (camposPDF.whatsapp && camposPDF.telefone) {
+        addTwoFields('WhatsApp:', 'Telefone:');
+      } else if (camposPDF.whatsapp) {
+        addField('WhatsApp:');
+      } else if (camposPDF.telefone) {
+        addField('Telefone:');
+      }
+      if (camposPDF.genero || camposPDF.titulo || camposPDF.zona || camposPDF.secao || camposPDF.sus) {
+        const camposLinha5 = [];
+        if (camposPDF.genero) camposLinha5.push('Gênero:');
+        if (camposPDF.titulo) camposLinha5.push('Título:');
+        if (camposPDF.zona) camposLinha5.push('Zona:');
+        if (camposPDF.secao) camposLinha5.push('Seção:');
+        if (camposPDF.sus) camposLinha5.push('SUS:');
+        
+        if (camposLinha5.length === 5) {
+          addFiveFields(camposLinha5[0], camposLinha5[1], camposLinha5[2], camposLinha5[3], camposLinha5[4]);
+        } else if (camposLinha5.length === 4) {
+          addFourFields(camposLinha5[0], camposLinha5[1], camposLinha5[2], camposLinha5[3]);
+        } else if (camposLinha5.length === 3) {
+          addThreeFields(camposLinha5[0], camposLinha5[1], camposLinha5[2]);
+        } else if (camposLinha5.length === 2) {
+          addTwoFields(camposLinha5[0], camposLinha5[1]);
+        } else if (camposLinha5.length === 1) {
+          addField(camposLinha5[0]);
+        }
+      }
+      yPosition += 6;
+    }
+
+    // Endereço
+    const enderecoCampos = [
+      camposPDF.cep,
+      camposPDF.numero,
+      camposPDF.endereco,
+      camposPDF.bairro,
+      camposPDF.cidade,
+      camposPDF.uf,
+      camposPDF.complemento
+    ];
+    if (enderecoCampos.some(campo => campo)) {
+      addSection('Endereço');
+      if (camposPDF.cep && camposPDF.numero) {
+        addTwoFields('CEP:', 'Número:');
+      } else if (camposPDF.cep) {
+        addField('CEP:');
+      } else if (camposPDF.numero) {
+        addField('Número:');
+      }
+      if (camposPDF.endereco && camposPDF.uf) {
+        addTwoFields('Endereço:', 'UF:');
+      } else if (camposPDF.endereco) {
+        addField('Endereço:');
+      } else if (camposPDF.uf) {
+        addField('UF:');
+      }
+      if (camposPDF.bairro && camposPDF.cidade && camposPDF.complemento) {
+        addThreeFields('Bairro:', 'Cidade:', 'Complemento:');
+      } else if (camposPDF.bairro && camposPDF.cidade) {
+        addTwoFields('Bairro:', 'Cidade:');
+      } else if (camposPDF.bairro && camposPDF.complemento) {
+        addTwoFields('Bairro:', 'Complemento:');
+      } else if (camposPDF.cidade && camposPDF.complemento) {
+        addTwoFields('Cidade:', 'Complemento:');
+      } else if (camposPDF.bairro) {
+        addField('Bairro:');
+      } else if (camposPDF.cidade) {
+        addField('Cidade:');
+      } else if (camposPDF.complemento) {
+        addField('Complemento:');
+      }
+      yPosition += 6;
+    }
+
+    // Informações Adicionais
+    const infoAdicionaisCampos = [
+      camposPDF.categoria,
+      camposPDF.indicadoPor
+    ];
+    if (infoAdicionaisCampos.some(campo => campo)) {
+      addSection('Informações Adicionais');
+      if (camposPDF.categoria && camposPDF.indicadoPor) {
+        addTwoFields('Categoria:', 'Indicado por:');
+      } else if (camposPDF.categoria) {
+        addField('Categoria:');
+      } else if (camposPDF.indicadoPor) {
+        addField('Indicado por:');
+      }
+      yPosition += 6;
+    }
+
+    // Atendimento
+    if (camposPDF.statusAtendimento) {
+      addSection('Primeiro Atendimento');
+      
+      // Adicionar caixas de seleção para status
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Status do Atendimento:', margin, yPosition);
+      yPosition += 6;
+      
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      const statusOptions = ['Concluído', 'Em Andamento', 'Pendente'];
+      const statusX = margin;
+      const statusY = yPosition;
+      const checkboxSize = 5;
+      const checkboxSpacing = 50;
+      
+      statusOptions.forEach((option, index) => {
+        const x = statusX + (index * checkboxSpacing);
+        // Checkbox
+        doc.setDrawColor(180);
+        doc.setLineWidth(0.3);
+        doc.rect(x, statusY, checkboxSize, checkboxSize);
+        // Label
+        doc.text(option, x + checkboxSize + 2, statusY + 4);
+      });
+      yPosition += 12;
+      yPosition += 6;
+    }
+
+    // Observações
+    if (camposPDF.observacoes) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Observações', margin, yPosition);
+      yPosition += 6;
+      doc.setDrawColor(100);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 8;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.3);
+      doc.rect(margin, yPosition, pageWidth - (margin * 2), 30);
+      yPosition += 40;
+    }
+
+    // Rodapé
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Formulário para preenchimento manual', pageWidth / 2, pageHeight - 8, { align: 'center' });
+
+    // Salvar PDF
+    doc.save('formulario-eleitor-em-branco.pdf');
+
+    // Toast de sucesso
+    toast({
+      title: (
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-5 w-5 text-green-500" />
+          <span>PDF gerado com sucesso</span>
+        </div>
+      ),
+      description: "O formulário em branco foi baixado.",
+      variant: "success",
+    });
+  };
+
+  // Efeito para limpar categoria principal quando o tipo mudar
+  useEffect(() => {
+    setNovoAtendimentoCategoriaPrincipal('');
+  }, [novoAtendimentoCategoria]);
   const [atendimentoErrors, setAtendimentoErrors] = useState({
     categoria: '',
     descricao: '',
@@ -602,8 +1060,8 @@ export const NovoEleitor: React.FC = () => {
         return;
       }
 
-      // Criar atendimento se for primeiro atendimento
-      if (primeiroAtendimento) {
+      // Criar atendimentos (primeiro + adicionais)
+      if (primeiroAtendimento || atendimentosAdicionais.length > 0) {
         // Buscar o último número de atendimento para a empresa atual
         const { data: ultimosAtendimentos, error: erroUltimoAtendimento } = await supabaseClient
           .from('gbp_atendimentos')
@@ -625,10 +1083,6 @@ export const NovoEleitor: React.FC = () => {
 
         // Definir o próximo número
         const ultimoNumero = ultimosAtendimentos && ultimosAtendimentos.length > 0 ? ultimosAtendimentos[0].numero : 0;
-        const proximoNumero = ultimoNumero + 1;
-
-        console.log('Último número encontrado:', ultimoNumero);
-        console.log('Próximo número a ser usado:', proximoNumero);
 
         // Buscar o nome do indicado selecionado no formulário
         let nomeIndicado = null;
@@ -640,53 +1094,182 @@ export const NovoEleitor: React.FC = () => {
           }
         }
 
-        console.log('Endereço do formulário:', currentValues.endereco);
-        console.log('Logradouro formatado:', formattedData.logradouro);
+        // Preparar lista de atendimentos para criar
+        const atendimentosParaCriar = [];
 
-        const atendimentoData = {
-          eleitor_uid: eleitorData.uid,
-          usuario_uid: user?.uid || null,
-          categoria_uid: categoriaAtendimento || null,
-          descricao: descricaoAtendimento,
-          empresa_uid: company?.uid || null,
-          status: statusAtendimento || 'pendente',
-          responsavel: user?.nome || null,
-          data_atendimento: new Date().toISOString(),
-          created_at: new Date().toLocaleDateString('en-CA'),
-          numero: proximoNumero,
-          indicado: nomeIndicado,
-          tipo_de_atendimento: 'Primeiro Atendimento',
-          bairro: formattedData.bairro || null,
-          cidade: formattedData.cidade || null,
-          logradouro: currentValues.endereco || null, // Pegando diretamente do formulário
-          uf: formattedData.uf || null,
-          cep: formattedData.cep || null,
-          whatsapp: formattedData.whatsapp || null,
-          eleitor: formattedData.nome,
-          numero_do_sus: formattedData.numero_do_sus || null,
-          cpf: formattedData.cpf || null,
-          nascimento: formattedData.nascimento || null,
-          complemento: formattedData.complemento || null,
-          latitude: formattedData.latitude || null,
-          longitude: formattedData.longitude || null,
-          updated_at: new Date().toLocaleDateString('en-CA')
-        };
+        // Adicionar primeiro atendimento se marcado
+        if (primeiroAtendimento) {
+          const proximoNumero = ultimoNumero + 1;
+          
+          // Upload dos anexos do primeiro atendimento se houver
+          const anexosUrls: string[] = [];
+          if (anexosPrimeiroAtendimento && anexosPrimeiroAtendimento.length > 0) {
+            const { data: empresaData, error: storageError } = await supabaseClient
+              .from('gbp_empresas')
+              .select('storage')
+              .eq('uid', company?.uid)
+              .single();
 
-        // Log do objeto completo
-        console.log('Dados do atendimento:', atendimentoData);
+            if (storageError) {
+              console.error('Erro ao buscar storage:', storageError);
+              throw storageError;
+            }
 
-        const { error: atendimentoError } = await supabaseClient
-          .from('gbp_atendimentos')
-          .insert([atendimentoData]);
+            const storageBucket = empresaData?.storage || 'atendimentos';
 
-        if (atendimentoError) {
-          console.error('Erro ao criar atendimento:', atendimentoError);
-          console.error('Dados do atendimento:', atendimentoData);
-          toast({
-            title: "Erro",
-            description: `Erro ao criar atendimento: ${atendimentoError.message}`,
-            variant: "destructive",
-          });
+            for (const anexo of anexosPrimeiroAtendimento) {
+              const fileExt = anexo.name.split('.').pop();
+              const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+              const filePath = `atendimentos/${company?.uid}/${fileName}`;
+
+              const { error: uploadError } = await supabaseClient
+                .storage
+                .from(storageBucket)
+                .upload(filePath, anexo);
+
+              if (uploadError) {
+                console.error('Erro no upload:', uploadError);
+                throw uploadError;
+              }
+
+              const { data: { publicUrl } } = supabaseClient
+                .storage
+                .from(storageBucket)
+                .getPublicUrl(filePath);
+
+              anexosUrls.push(publicUrl);
+            }
+          }
+          
+          const atendimentoData = {
+            eleitor_uid: eleitorData.uid,
+            usuario_uid: user?.uid || null,
+            categoria_uid: categoriaAtendimento || null,
+            descricao: descricaoAtendimento,
+            empresa_uid: company?.uid || null,
+            status: statusAtendimento || 'pendente',
+            responsavel: user?.nome || null,
+            data_atendimento: new Date().toISOString(),
+            created_at: new Date().toLocaleDateString('en-CA'),
+            numero: proximoNumero,
+            indicado: nomeIndicado,
+            tipo_de_atendimento: 'Primeiro Atendimento',
+            anexos: anexosUrls.length > 0 ? anexosUrls : null,
+            bairro: formattedData.bairro || null,
+            cidade: formattedData.cidade || null,
+            logradouro: currentValues.endereco || null,
+            uf: formattedData.uf || null,
+            cep: formattedData.cep || null,
+            whatsapp: formattedData.whatsapp || null,
+            eleitor: formattedData.nome,
+            numero_do_sus: formattedData.numero_do_sus || null,
+            cpf: formattedData.cpf || null,
+            nascimento: formattedData.nascimento || null,
+            complemento: formattedData.complemento || null,
+            latitude: formattedData.latitude || null,
+            longitude: formattedData.longitude || null,
+            updated_at: new Date().toLocaleDateString('en-CA')
+          };
+          atendimentosParaCriar.push(atendimentoData);
+        }
+
+        // Adicionar atendimentos adicionais
+        for (const atendimento of atendimentosAdicionais) {
+          const proximoNumero = ultimoNumero + 1 + (primeiroAtendimento ? 1 : 0) + atendimentosAdicionais.indexOf(atendimento);
+          const categoriaTipo = categoriaTipos?.find(cat => cat.uid === atendimento.categoria_uid);
+          const categoriaNome = categoriaTipo?.nome || '';
+          const categoriaPrincipal = categorias?.find(cat => cat.uid === atendimento.categoria_principal_uid);
+          const categoriaPrincipalNome = categoriaPrincipal?.nome || '';
+          const tipoDeAtendimento = `${categoriaNome} - ${categoriaPrincipalNome}`;
+          
+          // Upload dos anexos se houver
+          const anexosUrls: string[] = [];
+          if (atendimento.anexos && atendimento.anexos.length > 0) {
+            const { data: empresaData, error: storageError } = await supabaseClient
+              .from('gbp_empresas')
+              .select('storage')
+              .eq('uid', company?.uid)
+              .single();
+
+            if (storageError) {
+              console.error('Erro ao buscar storage:', storageError);
+              throw storageError;
+            }
+
+            const storageBucket = empresaData?.storage || 'atendimentos';
+
+            for (const anexo of atendimento.anexos) {
+              const fileExt = anexo.name.split('.').pop();
+              const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+              const filePath = `atendimentos/${company?.uid}/${fileName}`;
+
+              const { error: uploadError } = await supabaseClient
+                .storage
+                .from(storageBucket)
+                .upload(filePath, anexo);
+
+              if (uploadError) {
+                console.error('Erro no upload:', uploadError);
+                throw uploadError;
+              }
+
+              const { data: { publicUrl } } = supabaseClient
+                .storage
+                .from(storageBucket)
+                .getPublicUrl(filePath);
+
+              anexosUrls.push(publicUrl);
+            }
+          }
+          
+          const atendimentoData = {
+            eleitor_uid: eleitorData.uid,
+            usuario_uid: user?.uid || null,
+            categoria_uid: atendimento.categoria_principal_uid,
+            descricao: atendimento.descricao,
+            empresa_uid: company?.uid || null,
+            status: atendimento.status || 'pendente',
+            responsavel: user?.nome || null,
+            data_atendimento: new Date().toISOString(),
+            created_at: new Date().toLocaleDateString('en-CA'),
+            numero: proximoNumero,
+            indicado: nomeIndicado,
+            tipo_de_atendimento: tipoDeAtendimento,
+            anexos: anexosUrls.length > 0 ? anexosUrls : null,
+            bairro: formattedData.bairro || null,
+            cidade: formattedData.cidade || null,
+            logradouro: currentValues.endereco || null,
+            uf: formattedData.uf || null,
+            cep: formattedData.cep || null,
+            whatsapp: formattedData.whatsapp || null,
+            eleitor: formattedData.nome,
+            numero_do_sus: formattedData.numero_do_sus || null,
+            cpf: formattedData.cpf || null,
+            nascimento: formattedData.nascimento || null,
+            complemento: formattedData.complemento || null,
+            latitude: formattedData.latitude || null,
+            longitude: formattedData.longitude || null,
+            updated_at: new Date().toLocaleDateString('en-CA')
+          };
+          atendimentosParaCriar.push(atendimentoData);
+        }
+
+        // Inserir todos os atendimentos
+        if (atendimentosParaCriar.length > 0) {
+          console.log('Dados dos atendimentos:', atendimentosParaCriar);
+          const { error: atendimentoError } = await supabaseClient
+            .from('gbp_atendimentos')
+            .insert(atendimentosParaCriar);
+
+          if (atendimentoError) {
+            console.error('Erro ao criar atendimentos:', atendimentoError);
+            console.error('Dados dos atendimentos:', atendimentosParaCriar);
+            toast({
+              title: "Erro",
+              description: `Erro ao criar atendimentos: ${atendimentoError.message}`,
+              variant: "destructive",
+            });
+          }
         }
       }
 
@@ -759,6 +1342,40 @@ export const NovoEleitor: React.FC = () => {
                   Novo Eleitor
                 </h1>
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModalPDF(true)}
+                  className="hidden sm:inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Baixar formulário
+                </button>
+                <div className="relative sm:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowMenuPDF(!showMenuPDF)}
+                    className="inline-flex items-center px-3 py-2 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                  {showMenuPDF && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMenuPDF(false);
+                          setShowModalPDF(true);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Baixar formulário
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </header>
@@ -801,7 +1418,7 @@ export const NovoEleitor: React.FC = () => {
                   {/* Nome Field */}
                   <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                    Nome <span className="text-red-500">*</span>
+                    Apelido/Nome <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1525,6 +2142,47 @@ export const NovoEleitor: React.FC = () => {
                       <p className="mt-1 text-sm text-red-500">{atendimentoErrors.status}</p>
                     )}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Anexos (PDF, Imagens)
+                    </label>
+                    <FileUpload
+                      value={anexosPrimeiroAtendimento}
+                      onChange={setAnexosPrimeiroAtendimento}
+                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                      multiple={true}
+                      maxFiles={5}
+                      maxSize={50 * 1024 * 1024} // 50MB
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Botão para adicionar atendimento adicional */}
+              {primeiroAtendimento && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={abrirModalAtendimentos}
+                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
+                  >
+                    {atendimentosAdicionais.length > 0 
+                      ? `${atendimentosAdicionais.length} atendimento(s) adicional(is)` 
+                      : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={abrirModalAtendimentos}
+                    disabled={!descricaoAtendimento || !statusAtendimento}
+                    className={`inline-flex items-center px-3 py-2 text-sm font-medium ${
+                      !descricaoAtendimento || !statusAtendimento
+                        ? 'text-gray-400 cursor-not-allowed'
+                        : 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300'
+                    }`}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Atendimento
+                  </button>
                 </div>
               )}
             </div>
@@ -1567,6 +2225,577 @@ export const NovoEleitor: React.FC = () => {
           isOpen={showNovoIndicadoModal}
           onClose={() => setShowNovoIndicadoModal(false)}
         />
+
+        {/* Modal de Atendimentos Adicionais */}
+        <Dialog open={showModalAtendimentos} onOpenChange={setShowModalAtendimentos}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Gerenciar Atendimentos</DialogTitle>
+              <DialogDescription>
+                Atendimentos adicionais para este eleitor
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {/* Coluna da esquerda: Lista de atendimentos */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Atendimentos ({(primeiroAtendimento && descricaoAtendimento ? 1 : 0) + atendimentosAdicionais.length})
+                  </h4>
+                  {atendimentosAdicionais.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmarLimpar(true)}
+                      className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      Limpar todos
+                    </button>
+                  )}
+                </div>
+                
+                {(primeiroAtendimento && descricaoAtendimento ? 1 : 0) + atendimentosAdicionais.length === 0 ? (
+                  <div className="text-center py-8 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhum atendimento adicionado ainda
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {/* Primeiro Atendimento */}
+                    {primeiroAtendimento && descricaoAtendimento && (
+                      <div className="flex items-start justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex-1 min-w-0">
+                          <p 
+                            className="text-sm font-medium text-gray-900 dark:text-white truncate cursor-help"
+                            title="Primeiro Atendimento"
+                          >
+                            Primeiro Atendimento
+                          </p>
+                          <p 
+                            className="text-xs text-gray-600 dark:text-gray-400 truncate mt-1 cursor-help"
+                            title={descricaoAtendimento}
+                          >
+                            {descricaoAtendimento}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              statusAtendimento === 'Concluído' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                              statusAtendimento === 'Em Andamento' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                              statusAtendimento === 'Cancelado' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                              'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200'
+                            }`}>
+                              {statusAtendimento}
+                            </span>
+                            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                              Principal
+                            </span>
+                            {anexosPrimeiroAtendimento && anexosPrimeiroAtendimento.length > 0 && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                {anexosPrimeiroAtendimento.length} anexo(s)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Atendimentos Adicionais */}
+                    {atendimentosAdicionais.map((atendimento, index) => {
+                      const categoriaTipo = categoriaTipos?.find(cat => cat.uid === atendimento.categoria_uid);
+                      const categoriaNome = categoriaTipo?.nome || '';
+                      const categoriaPrincipal = categorias?.find(cat => cat.uid === atendimento.categoria_principal_uid);
+                      const categoriaPrincipalNome = categoriaPrincipal?.nome || '';
+                      const label = `${categoriaNome} - ${categoriaPrincipalNome}`;
+                      return (
+                        <div key={index} className="flex items-start justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                          <div className="flex-1 min-w-0">
+                            <p 
+                              className="text-sm font-medium text-gray-900 dark:text-white truncate cursor-help"
+                              title={label}
+                            >
+                              {label}
+                            </p>
+                            <p 
+                              className="text-xs text-gray-600 dark:text-gray-400 truncate mt-1 cursor-help"
+                              title={atendimento.descricao}
+                            >
+                              {atendimento.descricao}
+                            </p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                atendimento.status === 'Concluído' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                                atendimento.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                atendimento.status === 'Cancelado' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200'
+                              }`}>
+                                {atendimento.status}
+                              </span>
+                              {atendimento.anexos && atendimento.anexos.length > 0 && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                  {atendimento.anexos.length} anexo(s)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removerAtendimento(index)}
+                            className="ml-3 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 flex-shrink-0"
+                            title="Remover atendimento"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Coluna da direita: Formulário */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Adicionar Novo Atendimento
+                </h4>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Tipo de Categoria <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={novoAtendimentoCategoria}
+                      onChange={(e) => {
+                        setNovoAtendimentoCategoria(e.target.value);
+                        setNovoAtendimentoErrors(prev => ({ ...prev, categoria: '' }));
+                      }}
+                      className={`mt-1 block w-full appearance-none pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${novoAtendimentoErrors.categoria ? 'border-red-500' : ''}`}
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                      disabled={isLoadingCategoriaTipos}
+                    >
+                      <option value="">Selecione o tipo</option>
+                      {categoriaTipos?.map((categoria) => (
+                        <option key={categoria.uid} value={categoria.uid}>
+                          {categoria.nome}
+                        </option>
+                      ))}
+                    </select>
+                    {isLoadingCategoriaTipos && (
+                      <p className="mt-1 text-sm text-gray-500">Carregando tipos...</p>
+                    )}
+                    {novoAtendimentoErrors.categoria && (
+                      <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.categoria}</p>
+                    )}
+                  </div>
+                  {novoAtendimentoCategoria && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                        Categoria Principal <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={novoAtendimentoCategoriaPrincipal}
+                        onChange={(e) => {
+                          setNovoAtendimentoCategoriaPrincipal(e.target.value);
+                          setNovoAtendimentoErrors(prev => ({ ...prev, categoriaPrincipal: '' }));
+                        }}
+                        className="mt-1 block w-full appearance-none pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                        style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                        disabled={isLoadingCategorias}
+                      >
+                        <option value="">Selecione a categoria</option>
+                        {categorias?.filter(cat => cat.tipo_uid === novoAtendimentoCategoria).map((categoria) => (
+                          <option key={categoria.uid} value={categoria.uid}>
+                            {categoria.nome}
+                          </option>
+                        ))}
+                      </select>
+                      {isLoadingCategorias && (
+                        <p className="mt-1 text-sm text-gray-500">Carregando categorias...</p>
+                      )}
+                      {novoAtendimentoErrors.categoriaPrincipal && (
+                        <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.categoriaPrincipal}</p>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Descrição do Atendimento <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Descreva o atendimento..."
+                      value={novoAtendimentoDescricao}
+                      onChange={(e) => {
+                        setNovoAtendimentoDescricao(e.target.value);
+                        setNovoAtendimentoErrors(prev => ({ ...prev, descricao: '' }));
+                      }}
+                      className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 p-2 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 ${
+                        novoAtendimentoErrors.descricao ? 'border-red-500' : ''
+                      }`}
+                    />
+                    {novoAtendimentoErrors.descricao && (
+                      <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.descricao}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Status do Atendimento <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={novoAtendimentoStatus}
+                      onChange={(e) => {
+                        setNovoAtendimentoStatus(e.target.value);
+                        setNovoAtendimentoErrors(prev => ({ ...prev, status: '' }));
+                      }}
+                      className={`mt-1 block w-full appearance-none pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${
+                        novoAtendimentoErrors.status ? 'border-red-500' : ''
+                      }`}
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Em Andamento">Em Andamento</option>
+                      <option value="Concluído">Concluído</option>
+                      <option value="Cancelado">Cancelado</option>
+                    </select>
+                    {novoAtendimentoErrors.status && (
+                      <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.status}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
+                      Anexos (PDF, Imagens)
+                    </label>
+                    <FileUpload
+                      value={novoAtendimentoAnexos}
+                      onChange={setNovoAtendimentoAnexos}
+                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                      multiple={true}
+                      maxFiles={5}
+                      maxSize={50 * 1024 * 1024} // 50MB
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6">
+              <button
+                type="button"
+                onClick={() => setShowModalAtendimentos(false)}
+                className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={adicionarAtendimentoNoModal}
+                className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4 mr-2 inline" />
+                Adicionar Atendimento
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Confirmação para Limpar Todos */}
+        <Dialog open={showConfirmarLimpar} onOpenChange={setShowConfirmarLimpar}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar Limpeza</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja remover todos os atendimentos adicionais? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowConfirmarLimpar(false)}
+                className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAtendimentosAdicionais([]);
+                  setShowConfirmarLimpar(false);
+                }}
+                className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              >
+                Sim, Limpar Todos
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Seleção de Campos do PDF */}
+        <Dialog open={showModalPDF} onOpenChange={setShowModalPDF}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Selecionar Campos do PDF</DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4 mt-4">
+              {/* Dados Pessoais */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Dados Pessoais</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.nomeCompleto}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, nomeCompleto: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Nome Completo</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.cpf}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, cpf: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">CPF</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.nascimento}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, nascimento: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Nascimento</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.nomeMae}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, nomeMae: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Nome da Mãe</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.whatsapp}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, whatsapp: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">WhatsApp</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.telefone}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, telefone: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Telefone</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.genero}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, genero: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Gênero</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.titulo}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, titulo: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Título</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.zona}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, zona: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Zona</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.secao}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, secao: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Seção</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.sus}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, sus: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">SUS</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Endereço</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.cep}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, cep: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">CEP</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.numero}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, numero: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Número</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.endereco}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, endereco: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Endereço</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.bairro}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, bairro: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Bairro</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.cidade}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, cidade: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Cidade</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.uf}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, uf: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">UF</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.complemento}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, complemento: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Complemento</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Informações Adicionais */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Informações Adicionais</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.categoria}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, categoria: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Categoria</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.indicadoPor}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, indicadoPor: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Indicado por</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Atendimento */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Atendimento</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.statusAtendimento}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, statusAtendimento: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Status do Atendimento</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Observações */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Outros</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={camposPDF.observacoes}
+                      onChange={(e) => setCamposPDF(prev => ({ ...prev, observacoes: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Observações</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6 flex flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setShowModalPDF(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModalPDF(false);
+                  gerarPDFEmBranco();
+                }}
+                className="flex-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <FileText className="h-4 w-4 mr-2 inline" />
+                Gerar PDF
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );

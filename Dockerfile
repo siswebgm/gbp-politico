@@ -1,5 +1,5 @@
 # Multi-stage build for better optimization and memory management
-FROM node:18-alpine as deps
+FROM node:20-alpine as deps
 
 # Install system dependencies needed for native modules and build tools
 RUN apk add --no-cache --update \
@@ -24,7 +24,7 @@ RUN npm cache clean --force \
     && rm -rf /root/.npm/_cacache
 
 # Build stage with memory optimization
-FROM node:18-alpine as build
+FROM node:20-alpine as build
 
 # Install only essential build dependencies
 RUN apk add --no-cache --update \
@@ -49,8 +49,8 @@ RUN npm cache clean --force \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm ci --no-audit --prefer-offline
 
-# Build with optimized memory settings and disable sourcemaps
-RUN NODE_OPTIONS="--max_old_space_size=12288" npm run build:optimized
+# Build with optimized memory settings
+RUN NODE_OPTIONS="--max_old_space_size=4096" npm run build
 
 # Production stage - minimal runtime
 FROM nginx:stable-alpine

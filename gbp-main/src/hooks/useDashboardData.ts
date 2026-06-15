@@ -218,9 +218,9 @@ export function useDashboardData() {
         }
         
         // Para todos os usuários (incluindo admin), filtrar por status e arquivado
-        // Não exibir card se status for 'protocolado' ou 'concluido'
-        if (demanda.status === 'protocolado' || demanda.status === 'concluido') {
-          console.log('Demanda com status protocolado/concluído, ignorando');
+        // Não exibir card se status for 'concluido' (protocolado deve ser exibido)
+        if (demanda.status === 'concluido') {
+          console.log('Demanda com status concluído, ignorando');
           return false;
         }
         

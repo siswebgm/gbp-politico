@@ -1,14 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '../lib/supabase';
 import { useCompanyStore } from '../store/useCompanyStore';
-import { CategoriaTipo, categoriaTipoService } from '../services/categories';
+import { CategoriaTipo, categoriaTipoService, Category } from '../services/categories';
 import { useEffect } from 'react';
+
+export interface CategoriaTipoComCategorias extends CategoriaTipo {
+  categorias: Category[];
+}
 
 export function useCategoriaTipos() {
   const company = useCompanyStore((state) => state.company);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error, refetch } = useQuery<CategoriaTipo[]>({
+  const { data, isLoading, error, refetch } = useQuery<CategoriaTipoComCategorias[]>({
     queryKey: ['categoria-tipos', company?.uid],
     queryFn: async () => {
       if (!company?.uid) {
@@ -17,7 +21,18 @@ export function useCategoriaTipos() {
 
       const { data, error } = await supabaseClient
         .from('gbp_categoria_tipos')
-        .select('*')
+        .select(`
+          *,
+          categorias:gbp_categorias(
+            uid,
+            id,
+            nome,
+            tipo_uid,
+            empresa_uid,
+            created_at,
+            cor
+          )
+        `)
         .eq('empresa_uid', company.uid)
         .order('nome');
 

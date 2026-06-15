@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import '../../styles/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users, Camera } from 'lucide-react';
+import 'leaflet.heat';
+import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users, Camera, MoreVertical, Download } from 'lucide-react';
 import debounce from 'lodash/debounce';
 import { supabaseClient } from '../../lib/supabase';
 import { useCompanyStore } from '../../store/useCompanyStore';
@@ -32,8 +37,44 @@ interface Voter {
   lng: number;
   bairro?: string;
   cidade?: string;
+  estado?: string;
   cep?: string;
   genero?: string;
+  indicado_uid?: string;
+  atendimento?: string;
+  data_atendimento?: string;
+  responsavel_atendimento?: string;
+  colegio_eleitoral?: string;
+  zona?: string | number;
+  secao?: string | number;
+  // Campos expandidos da tabela gbp_eleitores
+  cpf?: string;
+  nascimento?: string;
+  nome_mae?: string;
+  whatsapp?: string;
+  instagram?: string;
+  numero_do_sus?: string;
+  numero?: string;
+  complemento?: string;
+  uf?: string;
+  logradouro?: string;
+  status?: string;
+  confiabilidade_do_voto?: string;
+  responsavel?: string;
+  responsavel_pelo_eleitor?: string;
+  titulo?: string;
+  regiao_bairro?: string;
+  quantidade_adultos_residencia?: string;
+  created_at?: string;
+  // Atendimentos relacionados
+  atendimentos?: Array<{
+    uid: string;
+    descricao: string;
+    data_atendimento: string;
+    status: string;
+    responsavel: string;
+    tipo_de_atendimento: string;
+  }>;
 }
 
 interface VoterMarker {
@@ -48,8 +89,26 @@ interface VoterMarker {
   genero?: string;
 }
 
+interface DemandaMapItem {
+  uid: string;
+  tipo_de_demanda: string;
+  descricao_do_problema: string;
+  nivel_de_urgencia: string;
+  logradouro: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  cep: string;
+  lat: number;
+  lng: number;
+  status: string;
+  criado_em: string;
+}
+
 interface MapComponentProps {
   voters: Voter[];
+  demandas?: DemandaMapItem[];
 }
 
 // Função para normalizar texto para busca
@@ -62,6 +121,38 @@ const normalizeText = (text: string = '') =>
 // Função para verificar se um texto contém outro
 const textContains = (text: string = '', search: string = '') => 
   normalizeText(text).includes(normalizeText(search));
+
+// Algoritmo de Convex Hull (Andrew's Monotone Chain) para calcular limites de polígonos
+function getConvexHull(points: Array<[number, number]>): Array<[number, number]> {
+  if (points.length <= 1) return points;
+  
+  const sorted = [...points].sort((a, b) => a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]);
+  
+  const lower: Array<[number, number]> = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  
+  const upper: Array<[number, number]> = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
+}
+
+function crossProduct(o: [number, number], a: [number, number], b: [number, number]): number {
+  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
 
 interface MapStats {
   totalEleitores: number;
@@ -83,9 +174,89 @@ interface MapStats {
   };
 }
 
-export default function MapComponent({ voters }: MapComponentProps) {
+// Cache global para limites geográficos dos municípios para evitar múltiplas requisições ao Nominatim
+const cityGeoJsonCache = new Map<string, any>();
+
+const STATUS_LABELS: Record<string, string> = {
+  recebido: 'Recebido',
+  feito_oficio: 'Feito Ofício',
+  protocolado: 'Protocolado',
+  aguardando: 'Aguardando',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado'
+};
+
+// Helper centralizado para buscar limites municipais com cache e normalização
+async function fetchCityBoundary(cityName: string): Promise<any | null> {
+  const cacheKey = cityName.trim().toLowerCase();
+  if (cityGeoJsonCache.has(cacheKey)) {
+    return cityGeoJsonCache.get(cacheKey);
+  }
+
+  // Correções rápidas para grafias alternativas ou erros conhecidos
+  let queryName = cityName.trim();
+  if (queryName.toLowerCase() === 'paullsta') {
+    queryName = 'Paulista';
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryName + ', Pernambuco, Brasil')}&format=json&polygon_geojson=1`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'GBP-Politico-ElectoralMap-App-Cached'
+        }
+      }
+    );
+
+    if (response.status === 429) {
+      console.warn('Nominatim limitou a taxa de requisições. Usando fallback de tempo.');
+      return null;
+    }
+
+    const data = await response.json();
+    let matched = data.find((item: any) =>
+      item.geojson &&
+      (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon')
+    );
+
+    if (matched) {
+      cityGeoJsonCache.set(cacheKey, matched.geojson);
+      return matched.geojson;
+    }
+
+    // Fallback geral no Brasil
+    const responseGeneral = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryName + ', Brasil')}&format=json&polygon_geojson=1`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'GBP-Politico-ElectoralMap-App-Cached'
+        }
+      }
+    );
+    const dataGeneral = await responseGeneral.json();
+    matched = dataGeneral.find((item: any) =>
+      item.geojson &&
+      (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon')
+    );
+
+    if (matched) {
+      cityGeoJsonCache.set(cacheKey, matched.geojson);
+      return matched.geojson;
+    }
+  } catch (err) {
+    console.error('Erro na requisição ao Nominatim para ' + queryName + ':', err);
+  }
+
+  return null;
+}
+
+export default function MapComponent({ voters, demandas = [] }: MapComponentProps) {
   const company = useCompanyStore(state => state.company);
   const mapRef = useRef<L.Map | null>(null);
+  const categoryFilterRef = useRef<HTMLDivElement>(null);
   const markerClusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const [map, setMap] = useState<L.Map | null>(null);
   const [markerClusterGroup, setMarkerClusterGroup] = useState<L.MarkerClusterGroup | null>(null);
@@ -102,14 +273,40 @@ export default function MapComponent({ voters }: MapComponentProps) {
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Array<{uid: string, nome: string, cor: string, tipo_uid: string | null, tipo_nome?: string}>>([]);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [selectedBairros, setSelectedBairros] = useState<Set<string>>(new Set());
+  const [selectedCidades, setSelectedCidades] = useState<Set<string>>(new Set());
+  const [selectedCityView, setSelectedCityView] = useState<string>('');
+  const [mapVisualization, setMapVisualization] = useState<'markers' | 'heatmap' | 'circles'>('markers');
+  const [showFilterSummary, setShowFilterSummary] = useState(true);
   // Inicia aberto apenas em desktop (largura >= 640px)
   const [showCategoryFilter, setShowCategoryFilter] = useState(window.innerWidth >= 640);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [showRadius, setShowRadius] = useState(true);
   const [radiusSize, setRadiusSize] = useState(500); // Raio em metros
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const userLocationCircleRef = useRef<L.Circle | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
+  const heatmapLayerRef = useRef<any>(null);
+  const circlesLayerRef = useRef<L.LayerGroup | null>(null);
+  const cityPolygonRef = useRef<L.Polygon | null>(null);
+  const selectedAreasLayerRef = useRef<L.LayerGroup | null>(null);
   const [disableClustering, setDisableClustering] = useState(false);
+  
+  // Estados para as Novas Camadas
+  const [activeLayers, setActiveLayers] = useState<Set<string>>(
+    new Set(['eleitores'])
+  );
+  const [indicados, setIndicados] = useState<Array<{uid: string, nome: string}>>([]);
+  const [selectedIndicados, setSelectedIndicados] = useState<Set<string>>(new Set());
+  const [selectedAtendimentos, setSelectedAtendimentos] = useState<Set<string>>(new Set());
+  const [selectedGeneros, setSelectedGeneros] = useState<Set<string>>(new Set());
+  const [selectedConfiabilidade, setSelectedConfiabilidade] = useState<Set<string>>(new Set());
+  const [selectedTiposDemanda, setSelectedTiposDemanda] = useState<Set<string>>(new Set());
+  const [selectedCidadesDemanda, setSelectedCidadesDemanda] = useState<Set<string>>(new Set());
+  const [selectedBairrosDemanda, setSelectedBairrosDemanda] = useState<Set<string>>(new Set());
+  const [selectedStatusDemanda, setSelectedStatusDemanda] = useState<Set<string>>(new Set());
+  const [cityGeoJson, setCityGeoJson] = useState<{ cityName: string, geojson: any } | null>(null);
+  const [voterViewMode, setVoterViewMode] = useState<'pinos' | 'densidade'>('pinos');
   const [mapStats, setMapStats] = useState<MapStats>({
     totalEleitores: 0,
     bairros: { total: 0, maisPopuloso: { nome: '', quantidade: 0, percentual: 0 } },
@@ -183,6 +380,187 @@ export default function MapComponent({ voters }: MapComponentProps) {
 
     return bounds;
   }, []);
+
+  // Computar contagem de pessoas por cidade
+  const countByCidade = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const cidade = v.cidade?.trim();
+      if (cidade) {
+        const lower = cidade.toLowerCase();
+        counts[lower] = (counts[lower] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar contagem de pessoas por bairro
+  const countByBairro = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const bairro = v.bairro?.trim();
+      if (bairro) counts[bairro] = (counts[bairro] || 0) + 1;
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar contagem de pessoas por tipo de atendimento
+  const countByAtendimento = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const atend = v.atendimento?.trim();
+      if (atend) counts[atend] = (counts[atend] || 0) + 1;
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar contagem de pessoas por indicado
+  const countByIndicado = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const ind = v.indicado_uid;
+      if (ind) counts[ind] = (counts[ind] || 0) + 1;
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar valores únicos e contagens de gênero
+  const uniqueGeneros = useMemo(() => {
+    const set = new Set<string>();
+    voters.forEach(v => {
+      const g = v.genero?.trim();
+      if (g) set.add(g);
+    });
+    return Array.from(set).sort();
+  }, [voters]);
+
+  const countByGenero = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const g = v.genero?.trim();
+      if (g) counts[g] = (counts[g] || 0) + 1;
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar valores únicos e contagens de confiabilidade do voto
+  const uniqueConfiabilidade = useMemo(() => {
+    const set = new Set<string>();
+    voters.forEach(v => {
+      const c = v.confiabilidade_do_voto?.trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [voters]);
+
+  const countByConfiabilidade = useMemo(() => {
+    const counts: Record<string, number> = {};
+    voters.forEach(v => {
+      const c = v.confiabilidade_do_voto?.trim();
+      if (c) counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [voters]);
+
+  // Computar totais gerais para as camadas do painel flutuante
+  const layerStats = useMemo(() => {
+    let pessoas = voters.length;
+    let solicitacoes = demandas && demandas.length > 0 ? demandas.length : 0;
+    let acoes = 0;
+    let eventos = 0;
+    let indicadosCount = 0;
+    let votacao = 0;
+
+    voters.forEach(v => {
+      if (!(demandas && demandas.length > 0) && v.atendimento && v.atendimento.trim()) solicitacoes++;
+      if (v.categoria_uid) acoes++;
+      if (v.cidade || v.bairro) eventos++;
+      if (v.indicado_uid) indicadosCount++;
+      if (v.colegio_eleitoral || v.zona || v.secao) votacao++;
+    });
+
+    return { pessoas, solicitacoes, acoes, eventos, indicadosCount, votacao };
+  }, [voters, demandas]);
+
+  // Ordenar indicados por quantidade decrescente de indicações
+  const sortedIndicados = useMemo(() => {
+    return [...indicados].sort((a, b) => {
+      const countA = countByIndicado[a.uid] || 0;
+      const countB = countByIndicado[b.uid] || 0;
+      if (countA !== countB) return countB - countA;
+      return a.nome.localeCompare(b.nome);
+    });
+  }, [indicados, countByIndicado]);
+
+  // Extrair bairros e cidades únicos dos eleitores
+  const uniqueBairros = useMemo(() => {
+    const bairrosSet = new Set<string>();
+    voters.forEach(voter => {
+      if (voter.bairro) bairrosSet.add(voter.bairro);
+    });
+    return Array.from(bairrosSet).sort((a, b) => {
+      const countA = countByBairro[a] || 0;
+      const countB = countByBairro[b] || 0;
+      if (countA !== countB) return countB - countA;
+      return a.localeCompare(b);
+    });
+  }, [voters, countByBairro]);
+
+  const uniqueCidades = useMemo(() => {
+    const normMap = new Map<string, string>(); // lowercase -> original
+    voters.forEach(voter => {
+      if (voter.cidade && voter.cidade.trim()) {
+        const trimmed = voter.cidade.trim();
+        const lower = trimmed.toLowerCase();
+        if (!normMap.has(lower)) {
+          normMap.set(lower, trimmed);
+        }
+      }
+    });
+    return Array.from(normMap.values()).sort((a, b) => {
+      const countA = countByCidade[a.toLowerCase()] || 0;
+      const countB = countByCidade[b.toLowerCase()] || 0;
+      if (countA !== countB) return countB - countA;
+      return a.localeCompare(b);
+    });
+  }, [voters, countByCidade]);
+
+  // Mapear bairros por cidade
+  const bairrosPorCidade = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    voters.forEach(voter => {
+      if (voter.cidade && voter.bairro) {
+        if (!map.has(voter.cidade)) {
+          map.set(voter.cidade, new Set());
+        }
+        map.get(voter.cidade)!.add(voter.bairro);
+      }
+    });
+    return map;
+  }, [voters]);
+
+  // Filtrar bairros exibidos baseado na cidade selecionada e ordenar de forma decrescente
+  const bairrosExibidos = useMemo(() => {
+    if (selectedCidades.size === 0) {
+      return uniqueBairros;
+    }
+    
+    // Se cidades selecionadas, mostrar apenas bairros dessas cidades
+    const bairrosDasCidadesSelecionadas = new Set<string>();
+    selectedCidades.forEach(cidade => {
+      const bairros = bairrosPorCidade.get(cidade);
+      if (bairros) {
+        bairros.forEach(bairro => bairrosDasCidadesSelecionadas.add(bairro));
+      }
+    });
+    
+    return Array.from(bairrosDasCidadesSelecionadas).sort((a, b) => {
+      const countA = countByBairro[a] || 0;
+      const countB = countByBairro[b] || 0;
+      if (countA !== countB) return countB - countA;
+      return a.localeCompare(b);
+    });
+  }, [selectedCidades, bairrosPorCidade, uniqueBairros, countByBairro]);
 
   // Obter localização do usuário
   useEffect(() => {
@@ -331,15 +709,197 @@ export default function MapComponent({ voters }: MapComponentProps) {
     loadCategories();
   }, [company?.uid]);
 
+  // Carregar lista de indicados (promotores)
+  useEffect(() => {
+    const loadIndicados = async () => {
+      if (!company?.uid) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from('gbp_indicado')
+          .select('uid, nome')
+          .eq('empresa_uid', company.uid)
+          .order('nome');
+          
+        if (error) throw error;
+        setIndicados(data || []);
+      } catch (error) {
+        console.error('Erro ao carregar indicados:', error);
+      }
+    };
+    loadIndicados();
+  }, [company?.uid]);
+
+  // Extrair lista de atendimentos únicos a partir dos eleitores e ordenar de forma decrescente
+  const uniqueAtendimentos = useMemo(() => {
+    const set = new Set<string>();
+    voters.forEach(v => {
+      if (v.atendimento && v.atendimento.trim()) {
+        set.add(v.atendimento.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => {
+      const countA = countByAtendimento[a] || 0;
+      const countB = countByAtendimento[b] || 0;
+      if (countA !== countB) return countB - countA;
+      return a.localeCompare(b);
+    });
+  }, [voters, countByAtendimento]);
+
+  // --- FILTROS PARA DEMANDAS DE RUA ---
+
+  // Extrair tipos de demanda únicos
+  const uniqueTiposDemanda = useMemo(() => {
+    const set = new Set<string>();
+    demandas.forEach(d => {
+      if (d.tipo_de_demanda && d.tipo_de_demanda.trim()) {
+        set.add(d.tipo_de_demanda.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [demandas]);
+
+  // Extrair cidades únicas das demandas
+  const uniqueCidadesDemanda = useMemo(() => {
+    const normMap = new Map<string, string>(); // lowercase -> original
+    demandas.forEach(d => {
+      if (d.cidade && d.cidade.trim()) {
+        const trimmed = d.cidade.trim();
+        const lower = trimmed.toLowerCase();
+        if (!normMap.has(lower)) {
+          normMap.set(lower, trimmed);
+        }
+      }
+    });
+    return Array.from(normMap.values()).sort();
+  }, [demandas]);
+
+  // Mapear bairros por cidade para as demandas
+  const bairrosDemandaPorCidade = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    demandas.forEach(d => {
+      const cidade = d.cidade?.trim();
+      const bairro = d.bairro?.trim();
+      if (cidade && bairro) {
+        if (!map.has(cidade)) {
+          map.set(cidade, new Set());
+        }
+        map.get(cidade)!.add(bairro);
+      }
+    });
+    return map;
+  }, [demandas]);
+
+  // Filtrar bairros de demandas a serem exibidos de acordo com as cidades de demandas selecionadas
+  const bairrosDemandaExibidos = useMemo(() => {
+    const set = new Set<string>();
+    if (selectedCidadesDemanda.size > 0) {
+      selectedCidadesDemanda.forEach(cidade => {
+        const bairros = bairrosDemandaPorCidade.get(cidade);
+        if (bairros) {
+          bairros.forEach(b => set.add(b));
+        }
+      });
+    } else {
+      demandas.forEach(d => {
+        if (d.bairro && d.bairro.trim()) {
+          set.add(d.bairro.trim());
+        }
+      });
+    }
+    return Array.from(set).sort();
+  }, [demandas, selectedCidadesDemanda, bairrosDemandaPorCidade]);
+
+  // Contagens por Tipo, Cidade e Bairro de Demandas
+  const countByTipoDemanda = useMemo(() => {
+    const counts: Record<string, number> = {};
+    demandas.forEach(d => {
+      const tipo = d.tipo_de_demanda?.trim();
+      if (tipo) counts[tipo] = (counts[tipo] || 0) + 1;
+    });
+    return counts;
+  }, [demandas]);
+
+  const countByCidadeDemanda = useMemo(() => {
+    const counts: Record<string, number> = {};
+    demandas.forEach(d => {
+      const cidade = d.cidade?.trim();
+      if (cidade) {
+        const lower = cidade.toLowerCase();
+        counts[lower] = (counts[lower] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [demandas]);
+
+  const countByBairroDemanda = useMemo(() => {
+    const counts: Record<string, number> = {};
+    demandas.forEach(d => {
+      const bairro = d.bairro?.trim();
+      if (bairro) counts[bairro] = (counts[bairro] || 0) + 1;
+    });
+    return counts;
+  }, [demandas]);
+
+  // Extrair status de demanda únicos
+  const uniqueStatusDemanda = useMemo(() => {
+    const set = new Set<string>();
+    demandas.forEach(d => {
+      if (d.status && d.status.trim()) {
+        set.add(d.status.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [demandas]);
+
+  // Contagens por Status de Demandas
+  const countByStatusDemanda = useMemo(() => {
+    const counts: Record<string, number> = {};
+    demandas.forEach(d => {
+      const status = d.status?.trim();
+      if (status) counts[status] = (counts[status] || 0) + 1;
+    });
+    return counts;
+  }, [demandas]);
+
+  // Filtrar demandas com base nos filtros selecionados na barra lateral
+  const filteredDemandas = useMemo(() => {
+    return demandas.filter(d => {
+      const tipo = d.tipo_de_demanda?.trim();
+      const cidade = d.cidade?.trim();
+      const bairro = d.bairro?.trim();
+      const status = d.status?.trim();
+
+      // Filtro por tipo de demanda
+      if (selectedTiposDemanda.size > 0 && (!tipo || !selectedTiposDemanda.has(tipo))) {
+        return false;
+      }
+      // Filtro por cidade de demanda
+      if (selectedCidadesDemanda.size > 0 && (!cidade || !selectedCidadesDemanda.has(cidade))) {
+        return false;
+      }
+      // Filtro por bairro de demanda
+      if (selectedBairrosDemanda.size > 0 && (!bairro || !selectedBairrosDemanda.has(bairro))) {
+        return false;
+      }
+      // Filtro por status de demanda
+      if (selectedStatusDemanda.size > 0 && (!status || !selectedStatusDemanda.has(status))) {
+        return false;
+      }
+      return true;
+    });
+  }, [demandas, selectedTiposDemanda, selectedCidadesDemanda, selectedBairrosDemanda, selectedStatusDemanda]);
+
+  // --- FIM DOS FILTROS PARA DEMANDAS DE RUA ---
+
   // Inicialização do mapa
   useEffect(() => {
     if (!containerRef.current || map) return;
 
-    // Configuração das camadas do mapa
-    const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: ' OpenStreetMap contributors',
-      maxZoom: 22, // Limitando o zoom máximo para evitar tela branca
-      maxNativeZoom: 19 // Zoom máximo nativo do OpenStreetMap
+    // Configuração das camadas do mapa (OpenFreeMap Positron - Visual Limpo e Premium)
+    const streetLayer = L.tileLayer('https://tiles.openfreemap.org/styles/positron/{z}/{x}/{y}.png', {
+      attribution: 'OpenFreeMap &copy; OpenMapTiles Data from OpenStreetMap',
+      maxZoom: 22,
+      maxNativeZoom: 19
     });
 
     const satelliteLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
@@ -407,7 +967,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
         maxClusterRadius: shouldDisableClustering ? 0 : 50, // 0 = sem agrupamento
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
-        zoomToBoundsOnClick: true,
+        zoomToBoundsOnClick: voterViewMode !== 'densidade',
         disableClusteringAtZoom: shouldDisableClustering ? 1 : 16,
         chunkedLoading: true,
         chunkInterval: 100,
@@ -470,7 +1030,12 @@ export default function MapComponent({ voters }: MapComponentProps) {
         }
       });
 
+      const selectedAreasLayer = L.layerGroup();
+      selectedAreasLayer.addTo(newMap);
+      selectedAreasLayerRef.current = selectedAreasLayer;
+
       setMap(newMap);
+      markerClusterRef.current = markers;
       setMarkerClusterGroup(markers);
       newMap.addLayer(markers);
     }, 100);
@@ -478,6 +1043,10 @@ export default function MapComponent({ voters }: MapComponentProps) {
     return () => {
       clearTimeout(timer);
       if (map) {
+        if (selectedAreasLayerRef.current) {
+          map.removeLayer(selectedAreasLayerRef.current);
+          selectedAreasLayerRef.current = null;
+        }
         map.remove();
       }
     };
@@ -524,12 +1093,12 @@ export default function MapComponent({ voters }: MapComponentProps) {
       color = '#EC4899'; // Rosa (pink-500)
     }
     
-    // Cria um ícone SVG de ponto de localização
+    // Cria um ícone SVG de ponto de localização refinado e discreto
     const svgTemplate = `
-      <svg width="32" height="42" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 0C7.16344 0 0 7.16344 0 16C0 24.8366 7.16344 32 16 32C24.8366 32 32 24.8366 32 16C32 7.16344 24.8366 0 16 0Z" fill="${color}"/>
-        <path d="M16 42L3.05661 32H28.9434L16 42Z" fill="${color}"/>
-        <circle cx="16" cy="16" r="8" fill="white"/>
+      <svg width="20" height="26" viewBox="0 0 20 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 0C4.47715 0 0 4.47715 0 10C0 15.5228 4.47715 20 10 20C15.5228 20 20 15.5228 20 10C20 4.47715 15.5228 0 10 0Z" fill="${color}"/>
+        <path d="M10 26L2.5 20.5H17.5L10 26Z" fill="${color}"/>
+        <circle cx="10" cy="10" r="4.5" fill="white"/>
       </svg>
     `;
 
@@ -538,23 +1107,54 @@ export default function MapComponent({ voters }: MapComponentProps) {
 
     return L.icon({
       iconUrl: svgUrl,
-      iconSize: [32, 42],
-      iconAnchor: [16, 42],
-      popupAnchor: [0, -42]
+      iconSize: [20, 26],
+      iconAnchor: [10, 26],
+      popupAnchor: [0, -26]
     });
   };
 
+  // Função para criar o ícone personalizado de demandas de rua
+  const createDemandaIcon = (demanda: DemandaMapItem) => {
+    const color = '#F59E0B'; // Cor Amber (Laranja)
+    
+    const svgTemplate = `
+      <svg width="20" height="26" viewBox="0 0 20 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 0C4.47715 0 0 4.47715 0 10C0 15.5228 4.47715 20 10 20C15.5228 20 20 15.5228 20 10C20 4.47715 15.5228 0 10 0Z" fill="${color}"/>
+        <path d="M10 26L2.5 20.5H17.5L10 26Z" fill="${color}"/>
+        <circle cx="10" cy="10" r="4.5" fill="white"/>
+      </svg>
+    `;
+
+    const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgTemplate);
+
+    return L.icon({
+      iconUrl: svgUrl,
+      iconSize: [20, 26],
+      iconAnchor: [10, 26],
+      popupAnchor: [0, -26]
+    });
+  };
+
+  // Ícone invisível para modo densidade (os clusters ainda contam os marcadores)
+  const invisibleIcon = useMemo(() => L.divIcon({
+    html: '',
+    className: 'invisible-voter-marker',
+    iconSize: [0, 0]
+  }), []);
+
   // Função para adicionar marcadores ao mapa
   const addMarkersToMap = useCallback((votersToShow: Voter[]) => {
-    if (!map || !markerClusterGroup) return;
+    const activeCluster = markerClusterRef.current || markerClusterGroup;
+    if (!map || !activeCluster) return;
 
-    markerClusterGroup.clearLayers();
+    activeCluster.clearLayers();
 
     votersToShow.forEach((voter) => {
       if (!voter.lat || !voter.lng) return;
 
+      const isDensity = voterViewMode === 'densidade';
       const marker = L.marker([voter.lat, voter.lng], {
-        icon: createVoterIcon(voter),
+        icon: isDensity ? invisibleIcon : createVoterIcon(voter),
         voter: voter // Adiciona os dados do eleitor ao marcador para uso no cluster
       } as any);
 
@@ -570,6 +1170,19 @@ export default function MapComponent({ voters }: MapComponentProps) {
                   <p>${voter.bairro || ''}, ${voter.cidade || ''}</p>
                   <p>CEP: ${voter.cep || 'Não informado'}</p>
                 </div>
+                ${voter.atendimento ? `
+                  <div style="margin-top: 8px; border-top: 1px dashed #E5E7EB; padding-top: 8px;">
+                    <p class="font-semibold text-gray-700">Atendimento:</p>
+                    <p class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-medium inline-block mt-0.5">${voter.atendimento}</p>
+                    ${voter.data_atendimento ? `<span class="text-xs text-gray-400 block mt-0.5">Data: ${voter.data_atendimento}</span>` : ''}
+                  </div>
+                ` : ''}
+                ${voter.indicado_uid ? `
+                  <div style="margin-top: 8px; border-top: 1px dashed #E5E7EB; padding-top: 8px;">
+                    <p class="font-semibold text-gray-700">Indicado por:</p>
+                    <p class="text-gray-600 font-medium">${indicados.find(i => i.uid === voter.indicado_uid)?.nome || 'Promotor Cadastrado'}</p>
+                  </div>
+                ` : ''}
               </div>
               <div class="flex justify-around items-center pt-3 border-t border-gray-200">
                 ${voter.telefone ? `
@@ -615,29 +1228,198 @@ export default function MapComponent({ voters }: MapComponentProps) {
         minWidth: 250
       });
 
-      markerClusterGroup.addLayer(marker);
+      activeCluster.addLayer(marker);
     });
 
-    map.addLayer(markerClusterGroup);
-  }, [map, markerClusterGroup, categoryColors]);
+    // Adiciona as demandas de rua se a camada 'atendimentos' estiver ativa
+    if (activeLayers.has('atendimentos') && filteredDemandas && filteredDemandas.length > 0) {
+      filteredDemandas.forEach((dem) => {
+        if (!dem.lat || !dem.lng) return;
 
-  // Filtrar eleitores por categoria selecionada
+        const marker = L.marker([dem.lat, dem.lng], {
+          icon: createDemandaIcon(dem)
+        });
+
+        const popupContent = `
+          <div class="p-1 min-w-[280px]">
+            <div class="bg-white rounded-lg shadow-lg">
+              <div class="p-4">
+                <h3 class="text-xl font-bold text-gray-800 mb-1">${dem.tipo_de_demanda}</h3>
+                <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold mb-3 ${
+                  dem.nivel_de_urgencia === 'alta' ? 'bg-red-100 text-red-800' :
+                  dem.nivel_de_urgencia === 'média' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-green-100 text-green-800'
+                }">
+                  Urgência: ${dem.nivel_de_urgencia}
+                </span>
+                <div class="text-sm text-gray-600 space-y-2 mb-4">
+                  <div>
+                    <p class="font-semibold text-gray-700">Descrição:</p>
+                    <p class="italic text-gray-600">"${dem.descricao_do_problema}"</p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-700">Endereço:</p>
+                    <p>${dem.logradouro || 'Não informado'}${dem.numero ? `, nº ${dem.numero}` : ''}</p>
+                    <p>${dem.bairro || ''}, ${dem.cidade || ''} - ${dem.uf || ''}</p>
+                    ${dem.cep ? `<p>CEP: ${dem.cep}</p>` : ''}
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-700">Status:</p>
+                    <p class="capitalize font-medium text-amber-600">${dem.status || 'Recebido'}</p>
+                  </div>
+                </div>
+                <div class="flex justify-around items-center pt-3 border-t border-gray-200">
+                  <a href="/app/documentos/demandas" 
+                     class="flex flex-col items-center text-blue-600 hover:text-blue-700 transition-colors duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span class="text-xs mt-1">Ver Demandas</span>
+                  </a>
+                  <a href="https://www.google.com/maps/search/?api=1&query=${dem.lat},${dem.lng}"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     class="flex flex-col items-center text-blue-600 hover:text-blue-700 transition-colors duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="text-xs mt-1">GPS</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, {
+          className: 'rounded-lg shadow-lg',
+          maxWidth: 300,
+          minWidth: 250
+        });
+
+        activeCluster.addLayer(marker);
+      });
+    }
+
+    if (!map.hasLayer(activeCluster)) {
+      map.addLayer(activeCluster);
+    }
+  }, [map, markerClusterGroup, categoryColors, voterViewMode, invisibleIcon, activeLayers, filteredDemandas]);
+
+  // Filtrar eleitores por camadas e seleções ativas
   const filteredVoters = useMemo(() => {
-    // Se nenhuma categoria selecionada, não mostra nada
-    if (selectedCategories.size === 0) return [];
-    
     return voters.filter(voter => {
-      // Mostra apenas se a categoria estiver selecionada
-      return voter.categoria_uid && selectedCategories.has(voter.categoria_uid);
+      // 1. Filtragem por Camadas Ativas (activeLayers)
+      const temAtendimento = !!(voter.atendimento && voter.atendimento.trim());
+      const temCategoria = !!voter.categoria_uid;
+      const temIndicado = !!voter.indicado_uid;
+      const temCidadeBairro = !!(voter.cidade || voter.bairro);
+      const temVotacao = !!(voter.colegio_eleitoral || voter.zona || voter.secao);
+
+      let pertenceCamadaAtiva = false;
+
+      // Se a camada geral "eleitores" estiver ativa, o registro básico sempre é aceito
+      if (activeLayers.has('eleitores')) {
+        pertenceCamadaAtiva = true;
+      } else {
+        // Se a camada "eleitores" está desligada, o eleitor só aparece se se enquadrar em outra camada ativa
+        if (activeLayers.has('atendimentos') && temAtendimento) pertenceCamadaAtiva = true;
+        if (activeLayers.has('categorias') && temCategoria) pertenceCamadaAtiva = true;
+        if (activeLayers.has('indicado') && temIndicado) pertenceCamadaAtiva = true;
+        if (activeLayers.has('cidades_bairros') && temCidadeBairro) pertenceCamadaAtiva = true;
+        if (activeLayers.has('votacao') && temVotacao) pertenceCamadaAtiva = true;
+      }
+
+      if (!pertenceCamadaAtiva) return false;
+
+      // 2. Filtragem por Seleção Específica de cada dimensão
+
+      // Se a camada de categorias está ativa E filtramos por categorias específicas
+      if (activeLayers.has('categorias') && selectedCategories.size > 0) {
+        if (!voter.categoria_uid || !selectedCategories.has(voter.categoria_uid)) {
+          return false;
+        }
+      }
+
+      // Se a camada de indicados está ativa E filtramos por indicados específicos
+      if (activeLayers.has('indicado') && selectedIndicados.size > 0) {
+        if (!voter.indicado_uid || !selectedIndicados.has(voter.indicado_uid)) {
+          return false;
+        }
+      }
+
+      // Se a camada de atendimentos está ativa E filtramos por atendimentos específicos
+      if (activeLayers.has('atendimentos') && selectedAtendimentos.size > 0) {
+        if (!voter.atendimento || !selectedAtendimentos.has(voter.atendimento.trim())) {
+          return false;
+        }
+      }
+
+      // Se visualização de cidade por dropdown está ativa
+      if (selectedCityView) {
+        const voterCidade = voter.cidade?.trim().toLowerCase() || '';
+        const cityViewNormalized = selectedCityView.trim().toLowerCase();
+        if (voterCidade !== cityViewNormalized) return false;
+      }
+
+      // Filtros de Cidade e Bairro (sempre aplicados quando houver seleção, independente da camada ativa)
+      if (selectedCidades.size > 0 || selectedBairros.size > 0) {
+        const voterCidade = voter.cidade?.trim().toLowerCase() || '';
+        const voterBairro = voter.bairro?.trim().toLowerCase() || '';
+
+        let matchCidade = true;
+        let matchBairro = true;
+
+        if (selectedCidades.size > 0) {
+          const cidadesNormalized = Array.from(selectedCidades).map(c => c.trim().toLowerCase());
+          matchCidade = cidadesNormalized.includes(voterCidade);
+        }
+        if (selectedBairros.size > 0) {
+          const bairrosNormalized = Array.from(selectedBairros).map(b => b.trim().toLowerCase());
+          matchBairro = bairrosNormalized.includes(voterBairro);
+        }
+
+        if (!matchCidade || !matchBairro) return false;
+      }
+
+      // Filtro por Gênero
+      if (activeLayers.has('eleitores') && selectedGeneros.size > 0) {
+        const genero = voter.genero?.trim() || '';
+        if (!selectedGeneros.has(genero)) return false;
+      }
+
+      // Filtro por Confiabilidade do Voto
+      if (activeLayers.has('eleitores') && selectedConfiabilidade.size > 0) {
+        const conf = voter.confiabilidade_do_voto?.trim() || '';
+        if (!selectedConfiabilidade.has(conf)) return false;
+      }
+
+      return true;
     });
-  }, [voters, selectedCategories]);
+  }, [
+    voters,
+    activeLayers,
+    selectedCategories,
+    selectedIndicados,
+    selectedAtendimentos,
+    selectedCidades,
+    selectedBairros,
+    selectedCityView,
+    selectedGeneros,
+    selectedConfiabilidade
+  ]);
 
   // Efeito para recriar o mapa quando o agrupamento muda
   useEffect(() => {
     if (!map) return;
     
-    // Remove o cluster atual
-    if (markerClusterGroup) {
+    // Remove o cluster atual usando a Ref síncrona para evitar múltiplos grupos órfãos no mapa
+    if (markerClusterRef.current) {
+      map.removeLayer(markerClusterRef.current);
+      markerClusterRef.current.clearLayers();
+    } else if (markerClusterGroup) {
       map.removeLayer(markerClusterGroup);
     }
     
@@ -648,7 +1430,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
       maxClusterRadius: shouldDisableClustering ? 0 : 50,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
+      zoomToBoundsOnClick: voterViewMode !== 'densidade',
       disableClusteringAtZoom: shouldDisableClustering ? 1 : 16,
       chunkedLoading: true,
       chunkInterval: 100,
@@ -708,21 +1490,334 @@ export default function MapComponent({ voters }: MapComponentProps) {
     });
     
     map.addLayer(newMarkers);
+    markerClusterRef.current = newMarkers;
     setMarkerClusterGroup(newMarkers);
-  }, [disableClustering, selectedCategories.size, map, categoryColors]);
+  }, [disableClustering, selectedCategories.size, map, categoryColors, voterViewMode]);
+
+  // Exportar registros filtrados para Excel (XLSX) com múltiplos atendimentos e hiperlinks entre abas
+  const exportToExcel = useCallback(async () => {
+    if (filteredVoters.length === 0) return;
+    setIsLoading(true);
+
+    try {
+      // 1. Busca os múltiplos atendimentos da empresa de uma única vez (evitando URLs gigantescas com .in que causam erro 414/ERR_FAILED)
+      const { data: atendimentosData, error: atendimentosError } = await supabaseClient
+        .from('gbp_atendimentos')
+        .select(`
+          eleitor_uid,
+          descricao,
+          status,
+          data_atendimento,
+          responsavel,
+          gbp_usuarios:usuario_uid ( nome ),
+          gbp_categorias:categoria_uid ( nome )
+        `)
+        .eq('empresa_uid', company?.uid);
+
+      if (atendimentosError) {
+        console.error('Erro ao buscar múltiplos atendimentos para exportação:', atendimentosError);
+      }
+
+      // Filtra em memória usando Set para performance O(1)
+      const filteredVoterUids = new Set(filteredVoters.map(v => v.uid));
+      const atendimentosDoFiltro = (atendimentosData || []).filter((at: any) => 
+        at.eleitor_uid && filteredVoterUids.has(at.eleitor_uid)
+      );
+
+      // 2. Mapeia e sanitiza os atendimentos encontrados
+      const atendimentosMapeados = atendimentosDoFiltro.map((at: any) => {
+        const voter = filteredVoters.find(v => v.uid === at.eleitor_uid);
+        return {
+          voterUid: at.eleitor_uid || '',
+          voterName: voter?.name || 'Eleitor não identificado',
+          voterCpf: voter?.cpf || '',
+          data: at.data_atendimento ? new Date(at.data_atendimento).toLocaleDateString('pt-BR') : '',
+          descricao: at.descricao || '',
+          categoria: at.gbp_categorias?.nome || '',
+          responsavel: at.responsavel || at.gbp_usuarios?.nome || '',
+          status: at.status || ''
+        };
+      });
+
+      // Ordena atendimentos por Nome do Eleitor para agrupar o histórico de cada um
+      atendimentosMapeados.sort((a, b) => a.voterName.localeCompare(b.voterName));
+
+      // Mapeia onde começa cada eleitor na planilha "Atendimentos" (Linha 1 é o cabeçalho, então dados começam na Linha 2)
+      const voterRowMap = new Map<string, { startRow: number, count: number }>();
+      atendimentosMapeados.forEach((item, index) => {
+        const excelRowNumber = index + 2;
+        if (!voterRowMap.has(item.voterUid)) {
+          voterRowMap.set(item.voterUid, { startRow: excelRowNumber, count: 1 });
+        } else {
+          voterRowMap.get(item.voterUid)!.count += 1;
+        }
+      });
+
+      const headers = [
+        'Nome',
+        'Histórico de Atendimentos', // Nova coluna de Link interativo!
+        'CPF',
+        'Data de Nascimento',
+        'Mãe',
+        'Gênero',
+        'WhatsApp',
+        'Telefone',
+        'Instagram',
+        'Nº do SUS',
+        'Título de Eleitor',
+        'Zona',
+        'Seção',
+        'Colégio Eleitoral',
+        'CEP',
+        'Logradouro',
+        'Número',
+        'Complemento',
+        'Bairro',
+        'Região/Bairro',
+        'Cidade',
+        'Estado',
+        'Categoria',
+        'Confiabilidade do Voto',
+        'Indicado por',
+        'Responsável pelo Cadastro',
+        'Responsável pelo Eleitor',
+        'Status',
+        'Adultos na Residência'
+      ];
+
+      const formatDate = (dateStr: string) => {
+        if (!dateStr || dateStr.trim() === '') return '';
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (match) {
+          return `${match[3]}/${match[2]}/${match[1]}`;
+        }
+        try {
+          const date = new Date(dateStr);
+          if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('pt-BR');
+          }
+        } catch (e) {}
+        return dateStr;
+      };
+
+      const formatValue = (val: any) => {
+        if (val === null || val === undefined) return '';
+        return String(val).trim().replace(/[\r\n\t]+/g, ' ');
+      };
+
+      // Cria o Workbook do ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('Eleitores');
+
+      // Adiciona o cabeçalho principal
+      const headerRow = ws.addRow(headers);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF3F4F6' }
+      };
+
+      // Preenche os dados dos eleitores
+      filteredVoters.forEach(voter => {
+        const indicadoNome = indicados.find(i => i.uid === voter.indicado_uid)?.nome || '';
+        const categoriaNome = categories.find(c => c.uid === voter.categoria_uid)?.nome || '';
+        const atendimentoInfo = voterRowMap.get(voter.uid);
+
+        const addedRow = ws.addRow([
+          formatValue(voter.name),
+          "", // Coluna B: Histórico de Atendimentos (preenchido abaixo com hyperlink nativo)
+          formatValue(voter.cpf),
+          formatDate(formatValue(voter.nascimento)),
+          formatValue(voter.nome_mae),
+          formatValue(voter.genero),
+          formatValue(voter.whatsapp),
+          formatValue(voter.telefone),
+          formatValue(voter.instagram),
+          formatValue(voter.numero_do_sus),
+          formatValue(voter.titulo),
+          formatValue(voter.zona),
+          formatValue(voter.secao),
+          formatValue(voter.colegio_eleitoral),
+          formatValue(voter.cep),
+          formatValue(voter.logradouro),
+          formatValue(voter.numero),
+          formatValue(voter.complemento),
+          formatValue(voter.bairro),
+          formatValue(voter.regiao_bairro),
+          formatValue(voter.cidade),
+          formatValue(voter.uf || voter.estado),
+          formatValue(categoriaNome),
+          formatValue(voter.confiabilidade_do_voto),
+          formatValue(indicadoNome),
+          formatValue(voter.responsavel),
+          formatValue(voter.responsavel_pelo_eleitor),
+          formatValue(voter.status),
+          formatValue(voter.quantidade_adultos_residencia)
+        ]);
+
+        const cellLink = addedRow.getCell(2); // Coluna B
+        if (atendimentoInfo) {
+          cellLink.value = {
+            text: `🔗 CLIQUE AQUI (${atendimentoInfo.count})`,
+            hyperlink: `#'Atendimentos'!A${atendimentoInfo.startRow}`,
+            tooltip: 'Clique para visualizar o histórico de atendimentos'
+          };
+          cellLink.font = {
+            color: { argb: 'FF0000FF' }, // Azul clássico de hyperlink
+            underline: true,
+            bold: true
+          };
+        } else {
+          cellLink.value = 'Nenhum atendimento';
+          cellLink.font = {
+            color: { argb: 'FF6C757D' } // Cinza
+          };
+        }
+      });
+
+      // --- ABA 2: Atendimentos ---
+      const wsAtendimentos = workbook.addWorksheet('Atendimentos');
+      
+      const atendimentosHeaders = [
+        'Nome do Eleitor',
+        'CPF do Eleitor',
+        'Data do Atendimento',
+        'Descrição',
+        'Categoria',
+        'Responsável',
+        'Status'
+      ];
+
+      const atendimentosHeaderRow = wsAtendimentos.addRow(atendimentosHeaders);
+      atendimentosHeaderRow.font = { bold: true };
+      atendimentosHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF3F4F6' }
+      };
+
+      const atendimentosRows = atendimentosMapeados.map(item => [
+        formatValue(item.voterName),
+        formatValue(item.voterCpf),
+        formatValue(item.data),
+        formatValue(item.descricao),
+        formatValue(item.categoria),
+        formatValue(item.responsavel),
+        formatValue(item.status)
+      ]);
+
+      atendimentosRows.forEach(row => {
+        wsAtendimentos.addRow(row);
+      });
+
+      // Autoajuste de largura de colunas na aba de Eleitores
+      ws.columns.forEach(column => {
+        let maxLen = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+          const val = cell.value;
+          let len = 0;
+          if (val && typeof val === 'object' && (val as any).text) {
+            len = (val as any).text.length;
+          } else if (val) {
+            len = String(val).length;
+          }
+          if (len > maxLen) {
+            maxLen = len;
+          }
+        });
+        column.width = Math.max(maxLen + 3, 10);
+      });
+
+      // Autoajuste de largura de colunas na aba de Atendimentos
+      wsAtendimentos.columns.forEach(column => {
+        let maxLen = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+          const val = cell.value;
+          const len = val ? String(val).length : 0;
+          if (len > maxLen) {
+            maxLen = len;
+          }
+        });
+        wsAtendimentos.getColumn(column.number).width = Math.max(maxLen + 3, 10);
+      });
+
+      // Salva o arquivo XLSX completo usando exceljs
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fileName = `eleitores_com_atendimentos_${selectedCityView || 'todos'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      saveAs(blob, fileName);
+    } catch (err) {
+      console.error('Erro ao gerar Excel completo:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filteredVoters, indicados, categories, selectedCityView, company?.uid]);
+
+  // Popup ao clicar em cluster no modo densidade
+  useEffect(() => {
+    if (!markerClusterGroup || !map) return;
+
+    const handleClusterClick = (e: any) => {
+      if (voterViewMode !== 'densidade') return;
+
+      const cluster = e.layer;
+      const markers = cluster.getAllChildMarkers();
+
+      const bairroCounts: Record<string, number> = {};
+      markers.forEach((m: any) => {
+        const bairro = m.options.voter?.bairro || 'Bairro não informado';
+        bairroCounts[bairro] = (bairroCounts[bairro] || 0) + 1;
+      });
+
+      const sortedBairros = Object.entries(bairroCounts).sort((a, b) => b[1] - a[1]);
+      const total = markers.length;
+
+      const popupContent = `
+        <div style="padding:8px; min-width:220px; font-family:sans-serif;">
+          <h4 style="font-weight:bold; color:#1f2937; margin:0 0 8px 0; font-size:14px;">
+            ${total} pessoa${total > 1 ? 's' : ''} cadastrada${total > 1 ? 's' : ''}
+          </h4>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            ${sortedBairros.map(([bairro, count]) => `
+              <div style="display:flex; justify-content:space-between; font-size:13px;">
+                <span style="color:#4b5563;">${bairro}</span>
+                <span style="font-weight:600; color:#2563eb;">${count}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      L.popup({ maxWidth: 300, minWidth: 200, className: 'rounded-lg shadow-lg' })
+        .setLatLng(cluster.getLatLng())
+        .setContent(popupContent)
+        .openOn(map);
+    };
+
+    markerClusterGroup.on('clusterclick', handleClusterClick);
+
+    return () => {
+      markerClusterGroup.off('clusterclick', handleClusterClick);
+    };
+  }, [markerClusterGroup, voterViewMode, map]);
 
   // Atualização dos marcadores
   useEffect(() => {
-    if (!map || !markerClusterGroup) return;
+    const activeCluster = markerClusterRef.current || markerClusterGroup;
+    if (!map || !activeCluster) return;
 
     const updateMarkers = () => {
-      if (!map || !markerClusterGroup) return;
+      const currentCluster = markerClusterRef.current || markerClusterGroup;
+      if (!map || !currentCluster) return;
 
-      // Limpa todos os marcadores
-      markerClusterGroup.clearLayers();
+      // Limpa todos os marcadores do cluster atual
+      currentCluster.clearLayers();
 
-      // Se não há eleitores filtrados, não adiciona nada
-      if (filteredVoters.length === 0) {
+      // Se não há eleitores filtrados e não há demandas para exibir, limpa e retorna
+      const hasDemandas = activeLayers.has('atendimentos') && filteredDemandas && filteredDemandas.length > 0;
+      if (filteredVoters.length === 0 && !hasDemandas) {
         return;
       }
 
@@ -746,7 +1841,467 @@ export default function MapComponent({ voters }: MapComponentProps) {
         clearTimeout(updateTimeout.current);
       }
     };
-  }, [filteredVoters, map, markerClusterGroup, addMarkersToMap]);
+  }, [filteredVoters, map, markerClusterGroup, addMarkersToMap, activeLayers, filteredDemandas]);
+
+  // Prevenir que cliques, arrastos e rolagem no painel de filtros afetem o mapa base do Leaflet
+  useEffect(() => {
+    const el = categoryFilterRef.current;
+    if (!el) return;
+
+    L.DomEvent.disableScrollPropagation(el);
+    L.DomEvent.disableClickPropagation(el);
+
+    const handleWheel = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [showCategoryFilter]);
+
+  // Alternar entre visualizações (markers, heatmap, circles)
+  useEffect(() => {
+    if (!map) return;
+
+    const activeCluster = markerClusterRef.current || markerClusterGroup;
+
+    // Remove preventivamente todas as instâncias de MarkerClusterGroup que possam ter vazado no mapa base
+    map.eachLayer((layer: any) => {
+      if (layer instanceof L.MarkerClusterGroup) {
+        map.removeLayer(layer);
+      }
+    });
+
+    if (heatmapLayerRef.current) {
+      map.removeLayer(heatmapLayerRef.current);
+      heatmapLayerRef.current = null;
+    }
+    if (circlesLayerRef.current) {
+      map.removeLayer(circlesLayerRef.current);
+      circlesLayerRef.current = null;
+    }
+
+    if (filteredVoters.length === 0) return;
+
+    if (mapVisualization === 'heatmap') {
+      // Criar heatmap
+      const heatData = filteredVoters.map(v => [v.lat, v.lng, 1]);
+      const heatLayer = L.heatLayer(heatData, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 18,
+        max: 10,
+        gradient: {
+          0.0: 'blue',
+          0.3: 'cyan',
+          0.5: 'lime',
+          0.7: 'yellow',
+          1.0: 'red'
+        }
+      });
+      heatLayer.addTo(map);
+      heatmapLayerRef.current = heatLayer;
+    } else if (mapVisualization === 'circles') {
+      // Deixamos a camada de polígonos de realce e limites assumir o protagonismo completo
+    } else {
+      // Visualização padrão com marcadores
+      if (activeCluster) {
+        map.addLayer(activeCluster);
+      }
+    }
+  }, [mapVisualization, filteredVoters, map, markerClusterGroup]);
+
+  // Efeito para desenhar polígonos de realce para as áreas selecionadas
+  useEffect(() => {
+    if (!map) return;
+
+    // Inicializa ou limpa a camada de áreas selecionadas
+    if (!selectedAreasLayerRef.current) {
+      selectedAreasLayerRef.current = L.layerGroup().addTo(map);
+    } else {
+      selectedAreasLayerRef.current.clearLayers();
+    }
+
+    const selectedAreasLayer = selectedAreasLayerRef.current;
+
+    // Só desenha o contorno da cidade quando a camada 'cidades_bairros' (Localidade) ou 'atendimentos' (Demandas) está ativa
+    const cityOutlineActive = (activeLayers.has('cidades_bairros') || activeLayers.has('atendimentos')) && !!cityGeoJson;
+    if (cityOutlineActive) {
+      try {
+        let geometry = cityGeoJson.geojson;
+        if (cityGeoJson.geojson.type === 'FeatureCollection') {
+          geometry = cityGeoJson.geojson.features[0]?.geometry || cityGeoJson.geojson;
+        } else if (cityGeoJson.geojson.type === 'Feature') {
+          geometry = cityGeoJson.geojson.geometry || cityGeoJson.geojson;
+        }
+        
+        const rings: Array<Array<[number, number]>> = [];
+        if (geometry.type === 'Polygon') {
+          geometry.coordinates.forEach((ring: any) => {
+            const mappedRing = ring.map((coord: any) => [coord[1], coord[0]] as [number, number]);
+            rings.push(mappedRing);
+          });
+        } else if (geometry.type === 'MultiPolygon') {
+          geometry.coordinates.forEach((polygon: any) => {
+            polygon.forEach((ring: any) => {
+              const mappedRing = ring.map((coord: any) => [coord[1], coord[0]] as [number, number]);
+              rings.push(mappedRing);
+            });
+          });
+        }
+
+        if (rings.length > 0) {
+          // 1. Criar máscara escura ao redor (mundo inteiro com o município como furo/hole)
+          const worldCoords = [
+            [-90, -180],
+            [-90, 180],
+            [90, 180],
+            [90, -180]
+          ];
+          
+          const maskPolygon = L.polygon([worldCoords, ...rings], {
+            fillColor: '#0a0a0a',   // Escuro profundo premium
+            fillOpacity: 0.55,      // Escurece o entorno em 55% para focar na cidade
+            stroke: false,
+            interactive: false
+          });
+          selectedAreasLayer.addLayer(maskPolygon);
+
+          // 2. Glow Neon Externo do contorno da cidade
+          const cityGlowPolygon = L.polygon(rings, {
+            fillColor: 'transparent',
+            color: '#3b82f6',       // Azul royal brilhante
+            weight: 10,             // Glow largo de destaque
+            opacity: 0.45,
+            lineJoin: 'round',
+            interactive: false
+          });
+          selectedAreasLayer.addLayer(cityGlowPolygon);
+
+          // 3. Contorno Principal Interno da cidade selecionada com pintura sólida, clara e nítida
+          const cityMainPolygon = L.polygon(rings, {
+            fillColor: '#3b82f6',   // Azul royal translúcido de alta visibilidade
+            fillOpacity: 0.20,      // Preenchimento claro de 20% de opacidade
+            color: '#1d4ed8',       // Borda sólida azul escura nítida (sem tracejado)
+            weight: 4,              // Borda espessa
+            lineJoin: 'round',
+            interactive: false
+          });
+
+          cityMainPolygon.bindTooltip(`Município de ${selectedCityView}`, {
+            permanent: true,
+            direction: 'top',
+            className: 'city-highlight-label'
+          });
+
+          selectedAreasLayer.addLayer(cityMainPolygon);
+        }
+      } catch (err) {
+        console.error('Erro ao desenhar GeoJSON do IBGE/Nominatim:', err);
+      }
+    }
+
+    // Desenha polígonos de bairro (convex hull) apenas no modo 'Áreas' legado (não mais vinculado à camada Localidade)
+    // A camada Localidade agora mostra o contorno oficial do município (cityGeoJson) quando uma cidade está selecionada
+    const shouldDrawAreas = mapVisualization === 'circles';
+    if (!shouldDrawAreas || filteredVoters.length === 0) {
+      return;
+    }
+
+    // Agrupa eleitores por Bairro
+    const votersByBairro: Record<string, Voter[]> = {};
+    filteredVoters.forEach(v => {
+      const bairro = v.bairro?.trim();
+      if (bairro) {
+        if (!votersByBairro[bairro]) {
+          votersByBairro[bairro] = [];
+        }
+        votersByBairro[bairro].push(v);
+      }
+    });
+
+    // Se o usuário selecionou bairros específicos, desenhamos apenas esses.
+    // Caso contrário, se selecionou cidade, desenha os bairros dessa cidade.
+    // Se não selecionou nada específico, desenha todas as áreas que contêm pessoas visíveis.
+    const bairrosParaDesenhar = Object.keys(votersByBairro).filter(bairro => {
+      const bairroLower = bairro.toLowerCase();
+      // Se há bairros selecionados explicitamente
+      if (selectedBairros.size > 0) {
+        const bairrosNormalized = Array.from(selectedBairros).map(b => b.trim().toLowerCase());
+        return bairrosNormalized.includes(bairroLower);
+      }
+      // Se não há filtro de localização, mas a camada está ativa, mostramos o preenchimento de todas as áreas habitadas
+      return true;
+    });
+
+    bairrosParaDesenhar.forEach((bairro, index) => {
+      const votersInBairro = votersByBairro[bairro];
+      if (!votersInBairro || votersInBairro.length === 0) return;
+
+      // Filtra apenas pontos com geolocalizações distintas para evitar círculos e textos encavalados
+      const uniquePoints: Array<[number, number]> = [];
+      const seenCoords = new Set<string>();
+      votersInBairro.forEach(v => {
+        if (typeof v.lat === 'number' && typeof v.lng === 'number' && !isNaN(v.lat) && !isNaN(v.lng)) {
+          const key = `${v.lat.toFixed(5)},${v.lng.toFixed(5)}`;
+          if (!seenCoords.has(key)) {
+            seenCoords.add(key);
+            uniquePoints.push([v.lat, v.lng]);
+          }
+        }
+      });
+
+      if (uniquePoints.length >= 3) {
+        // Calcula a envoltória convexa (Convex Hull) para formar o polígono das áreas distintas
+        const hull = getConvexHull(uniquePoints);
+
+        // Cor única e sutil para todos os bairros — visual limpo e não polui o mapa
+        const polygon = L.polygon(hull, {
+          fillColor: '#10B981',
+          fillOpacity: 0.10,
+          color: '#059669',
+          weight: 1,
+          lineJoin: 'round'
+        });
+
+        // Popup no hover/clique com informações do bairro
+        polygon.bindPopup(`
+          <div class="p-1 text-center">
+            <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">${bairro}</h4>
+            <p class="text-xs text-gray-600 dark:text-gray-400 font-medium">${votersInBairro.length} pessoas cadastradas</p>
+          </div>
+        `, { className: 'rounded-lg shadow-md' });
+
+        // Tooltip no hover (não permanente) para não poluir o mapa
+        polygon.bindTooltip(bairro, {
+          permanent: false,
+          direction: 'center',
+          className: 'bairro-map-label'
+        });
+
+        selectedAreasLayer.addLayer(polygon);
+      } else if (uniquePoints.length > 0) {
+        // Se houver 1 ou 2 pontos únicos, desenhamos círculos semitransparentes ao redor para demarcar a presença
+        uniquePoints.forEach((pt) => {
+          const circle = L.circle(pt, {
+            radius: 120,
+            fillColor: '#10B981',
+            fillOpacity: 0.10,
+            color: '#059669',
+            weight: 1
+          });
+
+          circle.bindPopup(`
+            <div class="p-1 text-center">
+              <h4 class="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">${bairro}</h4>
+              <p class="text-xs text-gray-600 dark:text-gray-400 font-medium">${votersInBairro.length} pessoas cadastradas</p>
+            </div>
+          `, { className: 'rounded-lg shadow-md' });
+
+          // Tooltip no hover (não permanente)
+          circle.bindTooltip(bairro, {
+            permanent: false,
+            direction: 'center',
+            className: 'bairro-map-label'
+          });
+
+          selectedAreasLayer.addLayer(circle);
+        });
+      }
+    });
+  }, [map, filteredVoters, activeLayers, selectedBairros, selectedCidades, selectedCityView, mapVisualization, cityGeoJson]);
+
+  // Centralizar mapa na cidade selecionada usando prioritariamente as divisas geográficas reais do GeoJSON oficial
+  useEffect(() => {
+    if (!map) return;
+
+    // 1. Se a malha oficial da cidade selecionada (ou detectada por camada ativa) estiver carregada, enquadra usando as divisas geográficas reais do município
+    if (cityGeoJson && (selectedCityView || activeLayers.has('cidades_bairros') || activeLayers.has('atendimentos'))) {
+      try {
+        const tempLayer = L.geoJSON(cityGeoJson.geojson);
+        const bounds = tempLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+          return; // Enquadramento por divisas geográficas oficiais aplicado com sucesso!
+        }
+      } catch (err) {
+        console.error('Erro ao centralizar mapa pelas coordenadas oficiais do GeoJSON:', err);
+      }
+    }
+
+    // 2. Se selectedCityView está ativo e o GeoJSON ainda está carregando, centraliza provisoriamente pelas coordenadas dos eleitores
+    if (selectedCityView) {
+      const cityVoters = voters.filter(v => 
+        v.cidade?.trim().toLowerCase() === selectedCityView.trim().toLowerCase()
+      );
+
+      if (cityVoters.length > 0) {
+        const bounds = L.latLngBounds(
+          cityVoters.map(v => [v.lat, v.lng])
+        );
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        return;
+      }
+    }
+
+    // 3. Se a camada de demandas está ativa e temos demandas válidas com coordenadas (fallback caso GeoJSON falhe ou demore)
+    if (activeLayers.has('atendimentos') && filteredDemandas && filteredDemandas.length > 0) {
+      const validDemands = filteredDemandas.filter(d => d.lat && d.lng);
+      if (validDemands.length > 0) {
+        const bounds = L.latLngBounds(validDemands.map(d => [d.lat, d.lng]));
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        }
+      }
+    }
+  }, [selectedCityView, cityGeoJson, voters, map, activeLayers, filteredDemandas]);
+
+  // Direcionar o mapa automaticamente quando cidades são selecionadas via checkbox no filtro lateral
+  useEffect(() => {
+    if (!map) return;
+
+    if (selectedCidades.size === 1) {
+      // Uma cidade selecionada → carrega seu GeoJSON e centraliza (via selectedCityView)
+      const cidade = Array.from(selectedCidades)[0];
+      setSelectedCityView(cidade);
+    } else if (selectedCidades.size > 1) {
+      // Múltiplas cidades → centraliza nos eleitores das cidades selecionadas
+      const cidadesNormalized = Array.from(selectedCidades).map(c => c.trim().toLowerCase());
+      const cityVoters = voters.filter(v => {
+        const voterCidade = v.cidade?.trim().toLowerCase() || '';
+        return cidadesNormalized.includes(voterCidade);
+      });
+      if (cityVoters.length > 0) {
+        const bounds = L.latLngBounds(cityVoters.map(v => [v.lat, v.lng]));
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
+      setSelectedCityView('');
+    } else {
+      // Nenhuma cidade selecionada → limpa
+      setSelectedCityView('');
+    }
+  }, [selectedCidades, voters, map]);
+
+  // Direcionar o mapa automaticamente aos eleitores filtrados quando filtros (gênero, confiabilidade, etc.) são alterados
+  useEffect(() => {
+    if (!map || !filteredVoters || filteredVoters.length === 0) return;
+    // Se selectedCityView está ativo, o efeito acima já cuida da centralização; senão, centraliza nos eleitores filtrados
+    if (selectedCityView) return;
+
+    const bounds = L.latLngBounds(filteredVoters.map(v => [v.lat, v.lng]));
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+  }, [map, filteredVoters, selectedGeneros, selectedConfiabilidade, selectedCategories, selectedIndicados, selectedAtendimentos, selectedBairros, selectedCityView]);
+
+  // Carregar GeoJSON automaticamente quando filtros resultam em eleitores de uma cidade predominante
+  useEffect(() => {
+    if (!filteredVoters || filteredVoters.length === 0) return;
+    if (selectedCityView) return; // Já está tratado pelo useEffect abaixo
+
+    // Detecta a cidade mais frequente nos eleitores filtrados
+    const cityCounts: Record<string, number> = {};
+    filteredVoters.forEach(v => {
+      const cidade = v.cidade?.trim();
+      if (cidade) cityCounts[cidade.toLowerCase()] = (cityCounts[cidade.toLowerCase()] || 0) + 1;
+    });
+
+    const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]);
+    if (sortedCities.length === 0) return;
+
+    const predominantLower = sortedCities[0][0];
+    const predominantCityObj = filteredVoters.find(v => v.cidade?.trim().toLowerCase() === predominantLower);
+    const predominantCity = predominantCityObj?.cidade?.trim() || predominantLower;
+
+    // Só busca se ainda não temos o GeoJSON dessa cidade
+    if (cityGeoJson && cityGeoJson.cityName.toLowerCase() === predominantCity.toLowerCase()) return;
+
+    const timer = setTimeout(async () => {
+      const geojson = await fetchCityBoundary(predominantCity);
+      if (geojson) {
+        setCityGeoJson({ cityName: predominantCity, geojson });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [filteredVoters, selectedCityView, cityGeoJson]);
+
+  // Carregar GeoJSON do limite do município do OpenStreetMap (Nominatim) ao selecionar a cidade
+  useEffect(() => {
+    // Limpa síncronamente o estado anterior para evitar que limites de cidades antigas apareçam na tela com novos filtros
+    setCityGeoJson(null);
+
+    if (!selectedCityView) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const geojson = await fetchCityBoundary(selectedCityView);
+      if (geojson) {
+        setCityGeoJson({ cityName: selectedCityView, geojson });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [selectedCityView]);
+
+  // Quando a camada Localidade ou Demandas é ativada sem cidade selecionada no filtro,
+  // detecta automaticamente a cidade mais frequente e carrega seu GeoJSON
+  useEffect(() => {
+    if (!activeLayers.has('cidades_bairros') && !activeLayers.has('atendimentos')) return;
+    if (selectedCityView) return;
+    if (activeLayers.has('cidades_bairros') && !activeLayers.has('atendimentos') && selectedCidades.size === 0) return; // Não carrega contorno se nenhuma cidade estiver selecionada para Localidades
+    
+    const hasVoters = filteredVoters && filteredVoters.length > 0;
+    const hasDemands = activeLayers.has('atendimentos') && filteredDemandas && filteredDemandas.length > 0;
+    if (!hasVoters && !hasDemands) return;
+
+    // Detecta a cidade mais frequente nos eleitores filtrados ou demandas
+    const cityCounts: Record<string, number> = {};
+    
+    if (hasVoters) {
+      filteredVoters.forEach(v => {
+        const cidade = v.cidade?.trim();
+        if (cidade) {
+          cityCounts[cidade.toLowerCase()] = (cityCounts[cidade.toLowerCase()] || 0) + 1;
+        }
+      });
+    }
+
+    if (hasDemands) {
+      filteredDemandas.forEach(d => {
+        const cidade = d.cidade?.trim();
+        if (cidade) {
+          cityCounts[cidade.toLowerCase()] = (cityCounts[cidade.toLowerCase()] || 0) + 1;
+        }
+      });
+    }
+
+    const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]);
+    if (sortedCities.length === 0) return;
+
+    const predominantLower = sortedCities[0][0];
+    let predominantCity = predominantLower;
+    if (hasVoters) {
+      const found = filteredVoters.find(v => v.cidade?.trim().toLowerCase() === predominantLower);
+      if (found?.cidade) predominantCity = found.cidade.trim();
+    } else if (hasDemands) {
+      const found = filteredDemandas.find(d => d.cidade?.trim().toLowerCase() === predominantLower);
+      if (found?.cidade) predominantCity = found.cidade.trim();
+    }
+
+    // Só busca se ainda não temos o GeoJSON dessa cidade
+    if (cityGeoJson && cityGeoJson.cityName.toLowerCase() === predominantCity.toLowerCase()) return;
+
+    const timer = setTimeout(async () => {
+      const geojson = await fetchCityBoundary(predominantCity);
+      if (geojson) {
+        setCityGeoJson({ cityName: predominantCity, geojson });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [activeLayers, selectedCityView, filteredVoters, cityGeoJson, filteredDemandas]);
 
   // Eventos do mapa
   useEffect(() => {
@@ -1131,6 +2686,47 @@ export default function MapComponent({ voters }: MapComponentProps) {
     }
   }, [map, voters, calculateBounds]);
 
+  // Calcular totais e visíveis com base nas camadas ativas
+  const displayTotal = useMemo(() => {
+    let total = 0;
+    const temVotantesAtivos = activeLayers.has('eleitores') || 
+                              activeLayers.has('categorias') || 
+                              activeLayers.has('indicado') || 
+                              activeLayers.has('cidades_bairros') || 
+                              activeLayers.has('colegio');
+    const temDemandasAtivas = activeLayers.has('atendimentos');
+
+    if (temVotantesAtivos) {
+      total += voters.length;
+    }
+    if (temDemandasAtivas) {
+      total += demandas.length;
+    }
+    // Fallback se nada estiver selecionado
+    if (total === 0) {
+      total = voters.length;
+    }
+    return total;
+  }, [activeLayers, voters, demandas]);
+
+  const displayVisibles = useMemo(() => {
+    let visibles = 0;
+    const temVotantesAtivos = activeLayers.has('eleitores') || 
+                              activeLayers.has('categorias') || 
+                              activeLayers.has('indicado') || 
+                              activeLayers.has('cidades_bairros') || 
+                              activeLayers.has('colegio');
+    const temDemandasAtivas = activeLayers.has('atendimentos');
+
+    if (temVotantesAtivos) {
+      visibles += filteredVoters.length;
+    }
+    if (temDemandasAtivas) {
+      visibles += filteredDemandas.length;
+    }
+    return visibles;
+  }, [activeLayers, filteredVoters, filteredDemandas]);
+
   return (
     <div 
       ref={containerRef} 
@@ -1147,10 +2743,45 @@ export default function MapComponent({ voters }: MapComponentProps) {
         width: isFullscreen ? '100vw' : '100%'
       }}
     >
+      <style>{`
+        .bairro-map-label {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          font-weight: 800 !important;
+          font-size: 11px !important;
+          color: #111827 !important;
+          text-shadow: -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff !important;
+          transition: none !important;
+          white-space: nowrap !important;
+          pointer-events: none !important;
+        }
+        .dark .bairro-map-label {
+          color: #f9fafb !important;
+          text-shadow: -1.5px -1.5px 0 #1f2937, 1.5px -1.5px 0 #1f2937, -1.5px 1.5px 0 #1f2937, 1.5px 1.5px 0 #1f2937 !important;
+        }
+        .leaflet-tooltip-pane {
+          z-index: 650 !important;
+        }
+        .city-highlight-label {
+          background: #2563EB !important;
+          color: white !important;
+          border: none !important;
+          border-radius: 4px !important;
+          padding: 3px 8px !important;
+          font-weight: 800 !important;
+          font-size: 11px !important;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+          text-shadow: none !important;
+        }
+        .invisible-voter-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+      `}</style>
       {/* Barra superior com controles */}
-      <div className="absolute top-2 left-2 right-2 z-[1000] flex flex-col sm:flex-row gap-2">
+      <div className={`absolute top-2 left-2 z-[1000] flex flex-col sm:flex-row gap-2 transition-all duration-200 ${showCategoryFilter ? 'right-2 sm:right-[466px]' : 'right-2'}`}>
         {/* Searchbox e botão de estatísticas */}
-        <div className="flex-1 flex gap-2">
           <div className="relative flex-1">
             <input
               type="text"
@@ -1175,63 +2806,23 @@ export default function MapComponent({ voters }: MapComponentProps) {
               </button>
             )}
           </div>
-          
-          <button
-            onClick={() => setIsStatsVisible(!isStatsVisible)}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 px-3 py-2 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <BarChart2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
-              {isStatsVisible ? 'Ocultar Estatísticas' : 'Ver Estatísticas'}
-            </span>
-          </button>
 
+        {/* Controles do mapa */}
+        <div className="flex gap-2 justify-end">
           <button
             onClick={() => setShowCategoryFilter(!showCategoryFilter)}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 px-3 py-2 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
+            title="Filtrar Categorias"
           >
             <svg className="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
-              Filtrar Categorias
-            </span>
             {selectedCategories.size < categories.length && (
-              <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
+              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold">
                 {selectedCategories.size}
               </span>
             )}
           </button>
-        </div>
-
-        {/* Controles do mapa */}
-        <div className="flex gap-2 justify-end">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 p-1 flex gap-1">
-            <button
-              onClick={() => setMapType('street')}
-              className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-2 transition-colors ${
-                mapType === 'street'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <MapPin className="h-4 w-4" />
-              <span className="hidden sm:inline">Mapa</span>
-            </button>
-            <button
-              onClick={() => setMapType('satellite')}
-              className={`px-3 py-1.5 text-sm rounded-md flex items-center gap-2 transition-colors ${
-                mapType === 'satellite'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="hidden sm:inline">Satélite</span>
-            </button>
-          </div>
 
           {userLocation && (
             <button
@@ -1269,13 +2860,15 @@ export default function MapComponent({ voters }: MapComponentProps) {
               <Maximize2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
             )}
           </button>
+
         </div>
       </div>
 
       {/* Painel de Filtro de Categorias */}
       {showCategoryFilter && (
         <div 
-          className="fixed sm:absolute inset-0 sm:inset-auto sm:right-2 sm:top-16 sm:bottom-2 z-[1000] sm:w-[450px] transition-all duration-200 ease-in-out flex flex-col cursor-default"
+          ref={categoryFilterRef}
+          className="fixed inset-0 sm:fixed sm:inset-auto sm:right-2 sm:top-0 sm:bottom-0 z-[9999] sm:w-[450px] sm:h-screen transition-all duration-200 ease-in-out flex flex-col cursor-default"
           style={{ cursor: 'default' }}
           onWheel={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
@@ -1309,87 +2902,451 @@ export default function MapComponent({ voters }: MapComponentProps) {
                 </svg>
                 Filtrar por Categoria
               </h2>
-              <button onClick={() => setShowCategoryFilter(false)} className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCategoryFilter(false)} className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             
-            <div className="p-3 overflow-y-auto overflow-x-hidden flex-1">
-              {/* Botões Gerais de Seleção */}
-              <div className="flex gap-3 mb-4 pb-4 border-b-2 border-gray-200 dark:border-gray-600">
-                <button
-                  onClick={() => setSelectedCategories(new Set(categories.map(c => c.uid)))}
-                  className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Selecionar Todas
-                </button>
-                <button
-                  onClick={() => setSelectedCategories(new Set())}
-                  className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 dark:from-gray-600 dark:to-gray-700 dark:text-gray-200 dark:hover:from-gray-700 dark:hover:to-gray-800 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Limpar Tudo
-                </button>
-              </div>
+            <div className="p-3 overflow-y-auto overflow-x-hidden flex-1 flex flex-col">
+              {/* Opção de desagrupar pinos */}
+              <label className="flex items-center gap-2 p-2 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={disableClustering}
+                  onChange={(e) => setDisableClustering(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Desagrupar pinos no mapa
+                </span>
+              </label>
 
-              {/* Controle de Raio */}
-              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                <label className="flex items-center gap-2 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={showRadius}
-                    onChange={(e) => setShowRadius(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Exibir raio de alcance
-                  </span>
-                </label>
-                {showRadius && (
-                  <div className="mt-2">
-                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">
-                      Raio: {radiusSize}m
+              {/* Filtro por Cidade */}
+              {activeLayers.has('cidades_bairros') && uniqueCidades.length > 0 && (
+                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 flex-1 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                      <Building className="h-4 w-4 text-green-600" />
+                      Cidades ({uniqueCidades.length})
                     </label>
-                    <input
-                      type="range"
-                      min="100"
-                      max="2000"
-                      step="100"
-                      value={radiusSize}
-                      onChange={(e) => setRadiusSize(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600"
-                    />
+                    {selectedCidades.size > 0 && (
+                      <button
+                        onClick={() => {
+                          setSelectedCidades(new Set());
+                          setSelectedBairros(new Set());
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                        title="Limpar Localidade"
+                      >
+                        <X className="h-3 w-3" />
+                        Limpar
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+                    {uniqueCidades.map((cidade) => (
+                      <label key={cidade} className="flex items-center gap-2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedCidades.has(cidade)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedCidades);
+                            const newBairros = new Set(selectedBairros);
+                            if (e.target.checked) {
+                              newSelected.add(cidade);
+                              // Automaticamente selecionar todos os bairros desta cidade
+                              const bairrosDaCidade = bairrosPorCidade.get(cidade);
+                              if (bairrosDaCidade) {
+                                bairrosDaCidade.forEach(bairro => newBairros.add(bairro));
+                              }
+                            } else {
+                              newSelected.delete(cidade);
+                              // Remover bairros desta cidade da seleção
+                              const bairrosDaCidade = bairrosPorCidade.get(cidade);
+                              if (bairrosDaCidade) {
+                                bairrosDaCidade.forEach(bairro => newBairros.delete(bairro));
+                              }
+                            }
+                            setSelectedCidades(newSelected);
+                            setSelectedBairros(newBairros);
+                          }}
+                          className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{cidade} ({countByCidade[cidade.toLowerCase()] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              {/* Controle de Agrupamento */}
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={disableClustering}
-                    onChange={(e) => setDisableClustering(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
-                      Desagrupar todos os pinos
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Mostra todos os marcadores individualmente
-                    </span>
+              {/* Filtro por Bairro */}
+              {activeLayers.has('cidades_bairros') && bairrosExibidos.length > 0 && (
+                <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 flex-1 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-orange-600" />
+                      Bairros {selectedCidades.size > 0 && <span className="text-xs text-gray-500">(das cidades selecionadas)</span>}
+                      <span className="text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded-full">
+                        {bairrosExibidos.length}
+                      </span>
+                    </label>
+                    {selectedBairros.size > 0 && (
+                      <button
+                        onClick={() => setSelectedBairros(new Set())}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                        title="Limpar Bairros"
+                      >
+                        <X className="h-3 w-3" />
+                        Limpar
+                      </button>
+                    )}
                   </div>
-                </label>
-              </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+                    {bairrosExibidos.map((bairro) => (
+                      <label key={bairro} className="flex items-center gap-2 p-1 rounded hover:bg-orange-100 dark:hover:bg-orange-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedBairros.has(bairro)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedBairros);
+                            if (e.target.checked) {
+                              newSelected.add(bairro);
+                            } else {
+                              newSelected.delete(bairro);
+                            }
+                            setSelectedBairros(newSelected);
+                          }}
+                          className="w-4 h-4 text-orange-600 rounded focus:ring-2 focus:ring-orange-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{bairro} ({countByBairro[bairro] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtro por Gênero */}
+              {activeLayers.has('eleitores') && uniqueGeneros.length > 0 && (
+                <div className="mb-4 p-3 bg-pink-50 dark:bg-pink-900/20 rounded-lg border border-pink-200 dark:border-pink-800">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-pink-500" />
+                    Gênero ({uniqueGeneros.length})
+                  </label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {uniqueGeneros.map((genero) => (
+                      <label key={genero} className="flex items-center gap-2 p-1 rounded hover:bg-pink-100 dark:hover:bg-pink-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedGeneros.has(genero)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedGeneros);
+                            if (e.target.checked) {
+                              newSelected.add(genero);
+                            } else {
+                              newSelected.delete(genero);
+                            }
+                            setSelectedGeneros(newSelected);
+                          }}
+                          className="w-4 h-4 text-pink-600 rounded focus:ring-2 focus:ring-pink-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{genero} ({countByGenero[genero] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtro por Confiabilidade do Voto */}
+              {activeLayers.has('eleitores') && uniqueConfiabilidade.length > 0 && (
+                <div className="mb-4 p-3 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    Confiabilidade do Voto ({uniqueConfiabilidade.length})
+                  </label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {uniqueConfiabilidade.map((conf) => (
+                      <label key={conf} className="flex items-center gap-2 p-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedConfiabilidade.has(conf)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedConfiabilidade);
+                            if (e.target.checked) {
+                              newSelected.add(conf);
+                            } else {
+                              newSelected.delete(conf);
+                            }
+                            setSelectedConfiabilidade(newSelected);
+                          }}
+                          className="w-4 h-4 text-teal-600 rounded focus:ring-2 focus:ring-teal-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{conf} ({countByConfiabilidade[conf] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtros de Demandas de Rua */}
+              {activeLayers.has('atendimentos') && (
+                <>
+                  {/* Tipo de Demanda */}
+                  {uniqueTiposDemanda.length > 0 && (
+                    <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800/50 flex flex-col max-h-48 flex-shrink-0 min-h-[120px]">
+                      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm" />
+                          Tipos de Demanda ({uniqueTiposDemanda.length})
+                        </label>
+                        {selectedTiposDemanda.size > 0 && (
+                          <button
+                            onClick={() => setSelectedTiposDemanda(new Set())}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                            title="Limpar Tipos"
+                          >
+                            <X className="h-3 w-3" />
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+                        {uniqueTiposDemanda.map((tipo) => (
+                          <label key={tipo} className="flex items-center gap-2 p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/20 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedTiposDemanda.has(tipo)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedTiposDemanda);
+                                if (e.target.checked) {
+                                  newSelected.add(tipo);
+                                } else {
+                                  newSelected.delete(tipo);
+                                }
+                                setSelectedTiposDemanda(newSelected);
+                              }}
+                              className="w-4 h-4 text-amber-600 rounded focus:ring-2 focus:ring-amber-500"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{tipo} ({countByTipoDemanda[tipo] || 0})</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cidades - Demandas */}
+                  {uniqueCidadesDemanda.length > 0 && (
+                    <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200 dark:border-green-800/50 flex flex-col max-h-48 flex-shrink-0 min-h-[120px]">
+                      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                          <Building className="h-4 w-4 text-green-600" />
+                          Cidades - Demandas ({uniqueCidadesDemanda.length})
+                        </label>
+                        {selectedCidadesDemanda.size > 0 && (
+                          <button
+                            onClick={() => {
+                              setSelectedCidadesDemanda(new Set());
+                              setSelectedBairrosDemanda(new Set());
+                            }}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                            title="Limpar Cidades"
+                          >
+                            <X className="h-3 w-3" />
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+                        {uniqueCidadesDemanda.map((cidade) => (
+                          <label key={cidade} className="flex items-center gap-2 p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/20 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedCidadesDemanda.has(cidade)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedCidadesDemanda);
+                                const newBairros = new Set(selectedBairrosDemanda);
+                                if (e.target.checked) {
+                                  newSelected.add(cidade);
+                                  const bairrosDaCidade = bairrosDemandaPorCidade.get(cidade);
+                                  if (bairrosDaCidade) {
+                                    bairrosDaCidade.forEach(b => newBairros.add(b));
+                                  }
+                                } else {
+                                  newSelected.delete(cidade);
+                                  const bairrosDaCidade = bairrosDemandaPorCidade.get(cidade);
+                                  if (bairrosDaCidade) {
+                                    bairrosDaCidade.forEach(b => newBairros.delete(b));
+                                  }
+                                }
+                                setSelectedCidadesDemanda(newSelected);
+                                setSelectedBairrosDemanda(newBairros);
+                              }}
+                              className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{cidade} ({countByCidadeDemanda[cidade.toLowerCase()] || 0})</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bairros - Demandas (Atrelados à Cidade) */}
+                  {bairrosDemandaExibidos.length > 0 && (
+                    <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-200 dark:border-orange-800/50 flex flex-col max-h-48 flex-shrink-0 min-h-[120px]">
+                      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-orange-600" />
+                          Bairros - Demandas ({bairrosDemandaExibidos.length})
+                        </label>
+                        {selectedBairrosDemanda.size > 0 && (
+                          <button
+                            onClick={() => setSelectedBairrosDemanda(new Set())}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                            title="Limpar Bairros"
+                          >
+                            <X className="h-3 w-3" />
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+                        {bairrosDemandaExibidos.map((bairro) => (
+                          <label key={bairro} className="flex items-center gap-2 p-1 rounded hover:bg-orange-100 dark:hover:bg-orange-900/20 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedBairrosDemanda.has(bairro)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedBairrosDemanda);
+                                if (e.target.checked) {
+                                  newSelected.add(bairro);
+                                } else {
+                                  newSelected.delete(bairro);
+                                }
+                                setSelectedBairrosDemanda(newSelected);
+                              }}
+                              className="w-4 h-4 text-orange-600 rounded focus:ring-2 focus:ring-orange-500"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{bairro} ({countByBairroDemanda[bairro] || 0})</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status - Demandas */}
+                  {uniqueStatusDemanda.length > 0 && (
+                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800/50 flex flex-col max-h-48 flex-shrink-0 min-h-[120px]">
+                      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+                          Status - Demandas ({uniqueStatusDemanda.length})
+                        </label>
+                        {selectedStatusDemanda.size > 0 && (
+                          <button
+                            onClick={() => setSelectedStatusDemanda(new Set())}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                            title="Limpar Status"
+                          >
+                            <X className="h-3 w-3" />
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+                        {uniqueStatusDemanda.map((status) => (
+                          <label key={status} className="flex items-center gap-2 p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/20 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedStatusDemanda.has(status)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedStatusDemanda);
+                                if (e.target.checked) {
+                                  newSelected.add(status);
+                                } else {
+                                  newSelected.delete(status);
+                                }
+                                setSelectedStatusDemanda(newSelected);
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                              {STATUS_LABELS[status.toLowerCase()] || status} ({countByStatusDemanda[status] || 0})
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Filtro por Atendimento */}
+              {activeLayers.has('atendimentos') && uniqueAtendimentos.length > 0 && (
+                <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    Solicitações / Atendimentos ({uniqueAtendimentos.length})
+                  </label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {uniqueAtendimentos.map((atend) => (
+                      <label key={atend} className="flex items-center gap-2 p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedAtendimentos.has(atend)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedAtendimentos);
+                            if (e.target.checked) {
+                              newSelected.add(atend);
+                            } else {
+                              newSelected.delete(atend);
+                            }
+                            setSelectedAtendimentos(newSelected);
+                          }}
+                          className="w-4 h-4 text-amber-600 rounded focus:ring-2 focus:ring-amber-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{atend} ({countByAtendimento[atend] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtro por Quem Indicou */}
+              {activeLayers.has('indicado') && indicados.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                    Indicado por ({indicados.length})
+                  </label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {sortedIndicados.map((ind) => (
+                      <label key={ind.uid} className="flex items-center gap-2 p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedIndicados.has(ind.uid)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedIndicados);
+                            if (e.target.checked) {
+                              newSelected.add(ind.uid);
+                            } else {
+                              newSelected.delete(ind.uid);
+                            }
+                            setSelectedIndicados(newSelected);
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{ind.nome} ({countByIndicado[ind.uid] || 0})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Categorias agrupadas por tipo */}
-              <div className="space-y-3">
+              {activeLayers.has('categorias') && (
+                <>
+                  <div className="space-y-3">
                 {(() => {
                   // Filtra categorias que têm pelo menos 1 eleitor
                   const categoriesWithVoters = categories.filter(cat => 
@@ -1407,7 +3364,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
                   return Object.entries(grouped).map(([tipo, cats]) => (
                     <div key={tipo} className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
                       <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2 flex items-center justify-between">
-                        <span className="font-semibold text-sm text-gray-700 dark:text-gray-300">{tipo}</span>
+                        <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">{tipo}</span>
                         <div className="flex gap-1">
                           <button
                             onClick={() => {
@@ -1496,7 +3453,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
                               onClick={(e) => e.stopPropagation()}
                             />
                             <div className="flex-1">
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
                                 {category.nome}
                               </span>
                               {category.tipo_nome && (
@@ -1545,20 +3502,227 @@ export default function MapComponent({ voters }: MapComponentProps) {
                   Nenhuma categoria cadastrada
                 </div>
               )}
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Painel de Camadas Flutuante */}
+      <div className="absolute left-2 bottom-36 z-[999] w-60 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3.5 flex flex-col gap-2">
+        <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
+          <svg className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          Camadas
+        </h3>
+
+        {/* Toggle Visualização Pinos / Densidade */}
+        <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden mb-1">
+          <button
+            onClick={() => setVoterViewMode('pinos')}
+            className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              voterViewMode === 'pinos'
+                ? 'bg-emerald-500 text-white'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            Pinos
+          </button>
+          <button
+            onClick={() => setVoterViewMode('densidade')}
+            className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              voterViewMode === 'densidade'
+                ? 'bg-emerald-500 text-white'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            Densidade
+          </button>
+        </div>
+
+        <button
+          onClick={exportToExcel}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 rounded-md hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors border border-emerald-200 dark:border-emerald-700"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Baixar registros ({filteredVoters.length})
+        </button>
+
+        <div className="space-y-2">
+          {/* Camada Eleitores */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Eleitores ({layerStats.pessoas})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('eleitores')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('eleitores')) {
+                  newLayers.delete('eleitores');
+                } else {
+                  newLayers.add('eleitores');
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-emerald-600 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+
+          {/* Camada Atendimentos */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Demandas ({layerStats.solicitacoes})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('atendimentos')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('atendimentos')) {
+                  newLayers.delete('atendimentos');
+                } else {
+                  newLayers.add('atendimentos');
+                  // Seleciona automaticamente todos os atendimentos por padrão ao ativar a camada
+                  setSelectedAtendimentos(new Set(uniqueAtendimentos));
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-amber-500 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+
+          {/* Camada Categorias */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Categoria ({layerStats.acoes})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('categorias')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('categorias')) {
+                  newLayers.delete('categorias');
+                } else {
+                  newLayers.add('categorias');
+                  // Seleciona automaticamente todas as categorias por padrão ao ativar a camada
+                  setSelectedCategories(new Set(categories.map(c => c.uid)));
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-purple-600 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+
+          {/* Camada Cidade e Bairros */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Localidade ({layerStats.eventos})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('cidades_bairros')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('cidades_bairros')) {
+                  newLayers.delete('cidades_bairros');
+                } else {
+                  newLayers.add('cidades_bairros');
+                  // Seleciona automaticamente apenas a PRIMEIRA cidade e seus bairros ao ativar
+                  const firstCity = uniqueCidades[0];
+                  if (firstCity) {
+                    const newBairros = new Set<string>();
+                    const bairrosDaCidade = bairrosPorCidade.get(firstCity);
+                    if (bairrosDaCidade) {
+                      bairrosDaCidade.forEach(bairro => newBairros.add(bairro));
+                    }
+                    setSelectedCidades(new Set([firstCity]));
+                    setSelectedBairros(newBairros);
+                  }
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-orange-500 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+
+          {/* Camada Indicados (Quem Indicou) */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Indicados ({layerStats.indicadosCount})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('indicado')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('indicado')) {
+                  newLayers.delete('indicado');
+                } else {
+                  newLayers.add('indicado');
+                  // Seleciona automaticamente todos os indicados por padrão ao ativar a camada
+                  setSelectedIndicados(new Set(indicados.map(i => i.uid)));
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-blue-500 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+
+          {/* Camada Votação Eleitoral */}
+          <label className="flex items-center justify-between cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Votação Eleitoral ({layerStats.votacao})
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={activeLayers.has('votacao')}
+              onChange={() => {
+                const newLayers = new Set(activeLayers);
+                if (newLayers.has('votacao')) {
+                  newLayers.delete('votacao');
+                } else {
+                  newLayers.add('votacao');
+                }
+                setActiveLayers(newLayers);
+              }}
+              className="w-4 h-4 text-rose-500 rounded-full focus:ring-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+            />
+          </label>
+        </div>
+      </div>
+
       {/* Estatísticas Discretas */}
       <div className="absolute left-2 bottom-16 z-[999] flex gap-2">
         <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2 border border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
-          <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{voters.length}</p>
+          <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{displayTotal}</p>
         </div>
         <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2 border border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400">Visíveis</p>
-          <p className="text-lg font-bold text-green-600 dark:text-green-400">{filteredVoters.length}</p>
+          <p className="text-lg font-bold text-green-600 dark:text-green-400">{displayVisibles}</p>
         </div>
       </div>
 
@@ -1592,7 +3756,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
             <div className="p-3">
               <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 mb-4">
                 <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{mapStats.totalEleitores}</p>
-                <p className="text-sm text-blue-600/80 dark:text-blue-400/80">eleitores na área visível</p>
+                <p className="text-sm text-blue-600/80 dark:text-blue-400/80">pessoas na área visível</p>
               </div>
 
               <div className="space-y-4">
@@ -1610,7 +3774,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
                     <div className="mt-1">
                       <p className="font-medium text-gray-800 dark:text-gray-200">{mapStats.bairros.maisPopuloso.nome}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {mapStats.bairros.maisPopuloso.quantidade} eleitores
+                        {mapStats.bairros.maisPopuloso.quantidade} pessoas
                         <span className="text-gray-400 dark:text-gray-500 ml-1">
                           ({mapStats.bairros.maisPopuloso.percentual.toFixed(1)}%)
                         </span>
@@ -1633,7 +3797,7 @@ export default function MapComponent({ voters }: MapComponentProps) {
                     <div className="mt-1">
                       <p className="font-medium text-gray-800 dark:text-gray-200">{mapStats.cidades.maisPopulosa.nome}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {mapStats.cidades.maisPopulosa.quantidade} eleitores
+                        {mapStats.cidades.maisPopulosa.quantidade} pessoas
                         <span className="text-gray-400 dark:text-gray-500 ml-1">
                           ({mapStats.cidades.maisPopulosa.percentual.toFixed(1)}%)
                         </span>

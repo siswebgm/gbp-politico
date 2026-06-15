@@ -24,6 +24,25 @@ interface Voter {
   influencia: string;
   categoria: string;
   genero: string;
+  confiabilidade_do_voto?: string;
+  indicado_uid?: string;
+}
+
+interface DemandaMapItem {
+  uid: string;
+  tipo_de_demanda: string;
+  descricao_do_problema: string;
+  nivel_de_urgencia: string;
+  logradouro: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  cep: string;
+  lat: number;
+  lng: number;
+  status: string;
+  criado_em: string;
 }
 
 export function ElectoralMap() {
@@ -33,6 +52,7 @@ export function ElectoralMap() {
   const navigate = useNavigate();
 
   const [voters, setVoters] = useState<Voter[]>([]);
+  const [demandas, setDemandas] = useState<DemandaMapItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalEleitores, setTotalEleitores] = useState(0);
@@ -104,7 +124,29 @@ export function ElectoralMap() {
             influencia: voter.influencia || '',
             categoria: voter.categoria || '',
             categoria_uid: voter.categoria_uid || '',
-            genero
+            genero,
+            confiabilidade_do_voto: voter.confiabilidade_do_voto || '',
+            indicado_uid: voter.indicado_uid || '',
+            cpf: voter.cpf || '',
+            nascimento: voter.nascimento || '',
+            nome_mae: voter.nome_mae || '',
+            whatsapp: voter.whatsapp || '',
+            instagram: voter.instagram || '',
+            numero_do_sus: voter.numero_do_sus || '',
+            numero: voter.numero || '',
+            complemento: voter.complemento || '',
+            uf: voter.uf || '',
+            logradouro: voter.logradouro || '',
+            status: voter.status || '',
+            responsavel: voter.responsavel || '',
+            responsavel_pelo_eleitor: voter.responsavel_pelo_eleitor || '',
+            titulo: voter.titulo || '',
+            regiao_bairro: voter.regiao_bairro || '',
+            quantidade_adultos_residencia: voter.quantidade_adultos_residencia || '',
+            atendimento: voter.atendimento || '',
+            data_atendimento: voter.data_atendimento || '',
+            responsavel_atendimento: voter.responsavel_atendimento || '',
+            colegio_eleitoral: voter.colegio_eleitoral || ''
           };
         });
 
@@ -126,13 +168,154 @@ export function ElectoralMap() {
     }
   };
 
+  // Função para geocodificar endereço via Nominatim com Circuit Breaker de 429 (Rate Limit)
+  const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
+    // Se Nominatim estiver bloqueado nesta sessão por excesso de requisições, aborta imediatamente
+    if ((window as any).gbp_nominatim_blocked) {
+      return null;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Language': 'pt-BR',
+            'User-Agent': 'GBP-Politico-ElectoralMap-App'
+          },
+          signal: controller.signal
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (response.status === 429) {
+        console.warn('[Nominatim] Recebido status 429. Ativando circuit-breaker para poupar requisições nesta sessão.');
+        (window as any).gbp_nominatim_blocked = true;
+        return null;
+      }
+
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (data && data[0]) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+    } catch (err) {
+      console.error('Erro ao geocodificar:', err);
+      // Se der erro de CORS/Failed to fetch devido ao rate limiting, também ativa o circuit-breaker
+      if (err instanceof TypeError || String(err).includes('fetch') || String(err).includes('CORS')) {
+        console.warn('[Nominatim] Erro de rede ou CORS. Ativando circuit-breaker.');
+        (window as any).gbp_nominatim_blocked = true;
+      }
+    }
+    return null;
+  };
+
+  // Carregar demandas da empresa e geocodificar endereços com cache no localStorage e rate limit de 1.2s
+  const loadDemandas = async () => {
+    if (!company?.uid) return;
+    try {
+      const { data, error: supabaseError } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .select('uid, tipo_de_demanda, descricao_do_problema, nivel_de_urgencia, logradouro, numero, bairro, cidade, uf, cep, status, criado_em, latitude, longitude')
+        .eq('empresa_uid', company.uid)
+        .eq('excluido', false)
+        .order('criado_em', { ascending: false });
+
+      if (supabaseError) {
+        console.error('Erro ao buscar demandas:', supabaseError);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setDemandas([]);
+        return;
+      }
+
+      // Recupera ou inicializa o cache persistente no localStorage
+      let persistentCache: Record<string, { lat: number; lng: number } | null> = {};
+      try {
+        const stored = localStorage.getItem('gbp_demandas_geocode_cache');
+        if (stored) {
+          persistentCache = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.error('Erro ao ler cache do localStorage:', e);
+      }
+
+      const demandasGeocodificadas: DemandaMapItem[] = [];
+
+      for (const d of data) {
+        const addressParts = [d.logradouro, d.numero, d.bairro, d.cidade, d.uf].filter(Boolean);
+        const fullAddress = addressParts.join(', ');
+        const cacheKey = fullAddress.toLowerCase().trim();
+
+        let coords: { lat: number; lng: number } | null = null;
+        const latVal = parseFloat(d.latitude || '');
+        const lngVal = parseFloat(d.longitude || '');
+        const hasDbCoords = !isNaN(latVal) && !isNaN(lngVal) && latVal !== 0 && lngVal !== 0;
+        if (hasDbCoords) {
+          coords = { lat: latVal, lng: lngVal };
+        } else if (cacheKey in persistentCache) {
+          coords = persistentCache[cacheKey];
+        } else {
+          // Rate-limiting de 1200ms para evitar 429 da API Nominatim
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          coords = await geocodeAddress(fullAddress + ', Brasil');
+          persistentCache[cacheKey] = coords;
+          try {
+            localStorage.setItem('gbp_demandas_geocode_cache', JSON.stringify(persistentCache));
+          } catch (e) {
+            console.error('Erro ao salvar cache no localStorage:', e);
+          }
+        }
+
+        if (coords) {
+          demandasGeocodificadas.push({
+            uid: d.uid,
+            tipo_de_demanda: d.tipo_de_demanda || '',
+            descricao_do_problema: d.descricao_do_problema || '',
+            nivel_de_urgencia: d.nivel_de_urgencia || '',
+            logradouro: d.logradouro || '',
+            numero: d.numero || '',
+            bairro: d.bairro || '',
+            cidade: d.cidade || '',
+            uf: d.uf || '',
+            cep: d.cep || '',
+            lat: coords.lat,
+            lng: coords.lng,
+            status: d.status || '',
+            criado_em: d.criado_em || ''
+          });
+        }
+      }
+
+      setDemandas(demandasGeocodificadas);
+    } catch (err) {
+      console.error('Erro ao carregar demandas:', err);
+      setDemandas([]);
+    }
+  };
+
   useEffect(() => {
     if (!canAccess) {
       navigate('/app');
       return;
     }
     
-    loadVoters();
+    const loadAll = async () => {
+      setLoading(true);
+      await loadVoters();
+      setLoading(false);
+      // Carrega as demandas de forma assíncrona em segundo plano sem bloquear a inicialização do mapa
+      loadDemandas();
+    };
+    loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess, company?.uid]);
 
@@ -154,7 +337,7 @@ export function ElectoralMap() {
                 Mapa de Eleitores
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 break-words">
-                Veja a distribuição dos seus eleitores no mapa.
+                Distribuição geográfica dos eleitores.
               </p>
             </div>
           </div>
@@ -208,7 +391,8 @@ export function ElectoralMap() {
               }>
                 <div className="absolute inset-0">
                   <MapComponent 
-                    voters={voters} 
+                    voters={voters}
+                    demandas={demandas}
                   />
                 </div>
               </Suspense>

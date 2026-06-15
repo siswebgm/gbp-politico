@@ -273,9 +273,9 @@ export function Users() {
       toast.success('Usuário excluído com sucesso!');
       loadUsers();
       setIsDeleteModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao excluir usuário:', error);
-      toast.error('Erro ao excluir usuário');
+      toast.error(error?.message || 'Erro ao excluir usuário');
     } finally {
       setIsDeleting(false);
     }

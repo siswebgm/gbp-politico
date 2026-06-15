@@ -3,7 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, User, Phone, MapPin, Vote, Calendar, Mail, Edit, MessageCircle, 
   Pencil, Printer, Users, PlusSquare, Trash2, AlertTriangle, Tag, Save, X,
-  ChevronDown, FileText, UserCircle, Calendar as CalendarIcon, Users2, UserRound
+  ChevronDown, FileText, UserCircle, Calendar as CalendarIcon, Users2, UserRound,
+  Paperclip, Upload
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -96,6 +97,7 @@ interface Atendimento {
     responsavel: string;
     responsavel_nome?: string;
   }>;
+  anexos?: any[];
 }
 
 type StatusType = 'Pendente' | 'Em Andamento' | 'Concluído' | 'Cancelado';
@@ -190,6 +192,10 @@ export const EleitorDetalhes: FC = () => {
   });
   const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [expandedObservations, setExpandedObservations] = useState<{ [key: string]: boolean }>({});
+  const [expandedAnexos, setExpandedAnexos] = useState<{ [key: string]: boolean }>({});
+  const [uploadingAnexo, setUploadingAnexo] = useState<{ [key: string]: boolean }>({});
+  const [deleteAnexoModalOpen, setDeleteAnexoModalOpen] = useState(false);
+  const [anexoToDelete, setAnexoToDelete] = useState<{ atendimentoUid: string; anexo: any; index: number } | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [indicados, setIndicados] = useState<Indicado[]>([]);
   const [editandoCategoria, setEditandoCategoria] = useState(false);
@@ -330,7 +336,8 @@ export const EleitorDetalhes: FC = () => {
             gbp_categorias!categoria_uid (
               uid,
               nome
-            )
+            ),
+            anexos
           `)
           .eq('eleitor_uid', effectiveUid)
           .eq('empresa_uid', company.uid)
@@ -418,7 +425,28 @@ export const EleitorDetalhes: FC = () => {
   // Atualizar o estado local quando os dados chegarem
   useEffect(() => {
     if (atendimentosData) {
-      setAtendimentos(atendimentosData);
+      // Normalizar anexos: converter strings para objetos se necessário
+      const atendimentosNormalizados = atendimentosData.map(atendimento => {
+        if (atendimento.anexos) {
+          const anexosNormalizados = atendimento.anexos.map((anexo: any) => {
+            if (typeof anexo === 'string') {
+              const urlParts = anexo.split('/');
+              const fileName = urlParts[urlParts.length - 1];
+              return {
+                nome: fileName,
+                url: anexo,
+                tipo: 'application/octet-stream',
+                tamanho: 0,
+                data_upload: null
+              };
+            }
+            return anexo;
+          });
+          return { ...atendimento, anexos: anexosNormalizados };
+        }
+        return atendimento;
+      });
+      setAtendimentos(atendimentosNormalizados);
     }
   }, [atendimentosData]);
 
@@ -1170,6 +1198,150 @@ export const EleitorDetalhes: FC = () => {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, atendimentoUid: string) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingAnexo(prev => ({ ...prev, [atendimentoUid]: true }));
+
+    try {
+      const file = files[0];
+      
+      // Usar o bucket configurado na empresa ou padrão
+      const bucketName = (company as any)?.storage || 'gbp_oficios';
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${company?.uid || 'default'}/atendimentos/${atendimentoUid}/${fileName}`;
+
+      // Upload para o storage
+      const { error: uploadError } = await supabaseClient.storage
+        .from(bucketName)
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabaseClient.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      // Adicionar ao array de anexos
+      const novoAnexo = {
+        nome: file.name,
+        url: publicUrl,
+        tipo: file.type,
+        tamanho: file.size,
+        data_upload: new Date().toISOString()
+      };
+
+      // Atualizar no banco
+      const atendimento = atendimentos.find(a => a.uid === atendimentoUid);
+      const novosAnexos = [...(atendimento?.anexos || []), novoAnexo];
+
+      const { error: updateError } = await supabaseClient
+        .from('gbp_atendimentos')
+        .update({ anexos: novosAnexos })
+        .eq('uid', atendimentoUid);
+
+      if (updateError) throw updateError;
+
+      // Atualizar estado local
+      setAtendimentos(prev => prev.map(a => {
+        if (a.uid === atendimentoUid) {
+          return { ...a, anexos: novosAnexos };
+        }
+        return a;
+      }));
+
+      toast({
+        description: "Arquivo anexado com sucesso!",
+        variant: "success"
+      });
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      toast({
+        variant: "destructive",
+        description: "Erro ao anexar arquivo"
+      });
+    } finally {
+      setUploadingAnexo(prev => ({ ...prev, [atendimentoUid]: false }));
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteAnexo = async (atendimentoUid: string, index: number) => {
+    try {
+      const atendimento = atendimentos.find(a => a.uid === atendimentoUid);
+      if (!atendimento?.anexos) return;
+
+      const anexo = atendimento.anexos[index];
+      
+      // Remover do storage se possível
+      if (anexo.url) {
+        const urlParts = anexo.url.split('/');
+        const filePath = urlParts.slice(urlParts.indexOf(company?.uid || '')).join('/');
+        
+        const bucketName = (company as any)?.storage || 'gbp_oficios';
+        
+        await supabaseClient.storage
+          .from(bucketName)
+          .remove([filePath]);
+      }
+
+      // Remover do array
+      const novosAnexos = atendimento.anexos.filter((_, i) => i !== index);
+
+      // Atualizar no banco
+      const { error } = await supabaseClient
+        .from('gbp_atendimentos')
+        .update({ anexos: novosAnexos })
+        .eq('uid', atendimentoUid);
+
+      if (error) throw error;
+
+      // Atualizar estado local
+      setAtendimentos(prev => prev.map(a => {
+        if (a.uid === atendimentoUid) {
+          return { ...a, anexos: novosAnexos };
+        }
+        return a;
+      }));
+
+      toast({
+        description: "Anexo removido com sucesso!",
+        variant: "success"
+      });
+    } catch (error) {
+      console.error('Erro ao remover anexo:', error);
+      toast({
+        variant: "destructive",
+        description: "Erro ao remover anexo"
+      });
+    }
+  };
+
+  const openDeleteAnexoModal = (atendimentoUid: string, anexo: any, index: number) => {
+    setAnexoToDelete({ atendimentoUid, anexo, index });
+    setDeleteAnexoModalOpen(true);
+  };
+
+  const confirmDeleteAnexo = async () => {
+    if (anexoToDelete) {
+      await handleDeleteAnexo(anexoToDelete.atendimentoUid, anexoToDelete.index);
+      setDeleteAnexoModalOpen(false);
+      setAnexoToDelete(null);
+    }
+  };
+
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes || isNaN(bytes) || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
   const handleSaveAddress = useCallback(async () => {
     if (!eleitor?.uid || !company?.uid) {
       toast({
@@ -1803,8 +1975,8 @@ export const EleitorDetalhes: FC = () => {
 
                 {/* Histórico Completo de Atendimentos */}
                 <div className="space-y-8">
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-full">
-                    <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+                  <div className="w-full">
+                    <div className="px-6 py-5 border-t border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                       <div className="flex items-center space-x-3">
                         <div className="p-2 bg-indigo-50 dark:bg-indigo-900/50 rounded-lg">
                           <MessageCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -1829,30 +2001,30 @@ export const EleitorDetalhes: FC = () => {
                       </div>
                     ) : (
                       <div className="overflow-hidden">
-                        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                        <ul className="space-y-4">
                           {atendimentos.map((atendimento) => (
-                            <li key={atendimento.uid} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                              <div className="px-4 md:px-6 py-4">
-                                <div className="flex items-start space-x-3">
+                            <li key={atendimento.uid} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="px-4 md:px-6 py-5">
+                                <div className="flex items-start space-x-4">
                                   <div className="flex-shrink-0 hidden md:block">
-                                    <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                      <Tag className="h-6 w-6 text-gray-500 dark:text-gray-400" />
+                                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-100 to-blue-100 dark:from-indigo-900/50 dark:to-blue-900/50 flex items-center justify-center border-2 border-indigo-200 dark:border-indigo-800">
+                                      <Tag className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
                                     </div>
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2 md:space-y-0">
+                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0">
                                       <div className="flex-1">
                                         <div className="flex items-center justify-between">
-                                          <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-3">
-                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                          <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-4">
+                                            <span className="text-lg font-bold text-gray-900 dark:text-white">
                                               #{atendimento.numero}
                                             </span>
                                             <Menu as="div" className="relative inline-block text-left">
                                               <Menu.Button 
-                                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusConfigs[atendimento.status as StatusType]?.color} transition-colors duration-150 ease-in-out hover:opacity-80`}
+                                                className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${statusConfigs[atendimento.status as StatusType]?.color} transition-colors duration-150 ease-in-out hover:opacity-80`}
                                               >
                                                 {statusConfigs[atendimento.status as StatusType]?.icon}
-                                                <span className="ml-1.5">{atendimento.status}</span>
+                                                <span className="ml-2">{atendimento.status}</span>
                                               </Menu.Button>
                                               <Menu.Items className="absolute left-0 z-10 mt-2 w-40 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
                                                 <div className="py-1">
@@ -1878,91 +2050,103 @@ export const EleitorDetalhes: FC = () => {
                                               setAtendimentoToDelete(atendimento);
                                               toggleModal('deleteOpen');
                                             }}
-                                            className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                            className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                                             title="Excluir atendimento"
                                           >
-                                            <Trash2 className="w-4 h-4" />
+                                            <Trash2 className="w-5 h-5" />
                                           </button>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-x-4 md:gap-y-1 mt-2">
-                                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4" />
-                                            <span className="truncate">
-                                              {format(new Date(atendimento.data_atendimento), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <Tag className="flex-shrink-0 mr-1.5 h-4 w-4" />
-                                            <span className="truncate">Categoria: {atendimento.gbp_categorias?.nome}</span>
-                                          </div>
-                                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <Users className="flex-shrink-0 mr-1.5 h-4 w-4" />
-                                            <span className="truncate">Indicado: {atendimento.indicado || 'Nenhum'}</span>
-                                          </div>
-                                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <User className="flex-shrink-0 mr-1.5 h-4 w-4" />
-                                            <span className="truncate">Resp.: {atendimento.responsavel || 'Nenhum'}</span>
+                                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 mt-4">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-x-4 md:gap-y-3">
+                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded">
+                                                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                              </div>
+                                              <span className="font-medium truncate">
+                                                {format(new Date(atendimento.data_atendimento), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-purple-100 dark:bg-purple-900/50 rounded">
+                                                <Tag className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                              </div>
+                                              <span className="font-medium truncate">Categoria: {atendimento.gbp_categorias?.nome}</span>
+                                            </div>
+                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-green-100 dark:bg-green-900/50 rounded">
+                                                <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                              </div>
+                                              <span className="font-medium truncate">Indicado: {atendimento.indicado || 'Nenhum'}</span>
+                                            </div>
+                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-orange-100 dark:bg-orange-900/50 rounded">
+                                                <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                              </div>
+                                              <span className="font-medium truncate">Resp.: {atendimento.responsavel || 'Nenhum'}</span>
+                                            </div>
                                           </div>
                                         </div>
                                         {/* Descrição do Atendimento */}
-                                        <div className="mt-3">
-                                          <div className="flex items-start space-x-2">
-                                            <MessageCircle className="flex-shrink-0 w-4 h-4 mt-0.5 text-gray-400" />
+                                        <div className="mt-4">
+                                          <div className="flex items-start space-x-3">
+                                            <div className="flex-shrink-0 p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                                              <MessageCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                            </div>
                                             <div className="flex-1">
-                                              <span className="block text-sm font-medium text-gray-500 dark:text-gray-400">
+                                              <span className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                                 Descrição
                                               </span>
-                                              <div className="mt-1 group relative">
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pr-8">
+                                              <div className="bg-white dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 group relative">
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pr-10">
                                                   {atendimento.descricao || 'Sem descrição'}
                                                 </p>
                                                 <button
                                                   onClick={() => handleEditDescricao(atendimento)}
-                                                  className="absolute top-0 right-0 p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+                                                  className="absolute top-2 right-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200"
                                                   title="Editar descrição"
                                                 >
-                                                  <Pencil className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                                                  <Pencil className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                                 </button>
                                               </div>
                                             </div>
                                           </div>
                                         </div>
                                         {/* Observações do Atendimento */}
-                                        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
-                                          <div className="flex items-start space-x-2">
-                                            <FileText className="flex-shrink-0 w-4 h-4 mt-0.5 text-gray-400" />
+                                        <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                          <div className="flex items-start space-x-3">
+                                            <div className="flex-shrink-0 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                              <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                            </div>
                                             <div className="flex-1">
                                               <button
                                                 onClick={() => setExpandedObservations(prev => ({
                                                   ...prev,
                                                   [atendimento.uid]: !prev[atendimento.uid]
                                                 }))}
-                                                className="w-full flex items-center justify-between p-1 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg group"
+                                                className="w-full flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg group transition-colors"
                                               >
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                <span className="text-base font-semibold text-gray-700 dark:text-gray-300">
                                                   Observações ({atendimento.observacoes?.length || 0})
                                                 </span>
-                                                <div className="flex items-center space-x-2">
-                                                  <div className={`p-1 rounded-full bg-gray-100 dark:bg-gray-700 transform transition-transform ${
-                                                    expandedObservations[atendimento.uid] ? 'rotate-180' : ''
-                                                  }`}>
-                                                    <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                                                  </div>
+                                                <div className={`p-1 rounded-full bg-gray-100 dark:bg-gray-700 transform transition-transform ${
+                                                  expandedObservations[atendimento.uid] ? 'rotate-180' : ''
+                                                }`}>
+                                                  <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                                                 </div>
                                               </button>
                                               {expandedObservations[atendimento.uid] && atendimento.observacoes && atendimento.observacoes.length > 0 ? (
-                                                <div className="mt-2 space-y-3">
+                                                <div className="mt-3 space-y-3">
                                                   {atendimento.observacoes.map((obs) => (
-                                                    <div key={obs.uid} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                                                    <div key={obs.uid} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                                       <div className="flex items-start space-x-3">
                                                         <div className="flex-shrink-0">
-                                                          <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
-                                                            <UserCircle className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                                          <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                                                            <UserCircle className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                                                           </div>
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                          <div className="flex items-center justify-between mb-1">
-                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                          <div className="flex items-center justify-between mb-2">
+                                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
                                                               {obs.responsavel_nome}
                                                             </span>
                                                             <div className="flex items-center space-x-2">
@@ -1971,7 +2155,7 @@ export const EleitorDetalhes: FC = () => {
                                                               </span>
                                                               <button
                                                                 onClick={() => handleDeleteObservation(atendimento.uid, obs.uid)}
-                                                                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                                                 title="Excluir observação"
                                                               >
                                                                 <Trash2 className="w-4 h-4" />
@@ -1987,14 +2171,122 @@ export const EleitorDetalhes: FC = () => {
                                                   ))}
                                                 </div>
                                               ) : !expandedObservations[atendimento.uid] && atendimento.observacoes?.length > 0 ? (
-                                                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                                                   Clique para ver as observações
                                                 </p>
                                               ) : (
-                                                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                                                   Nenhuma observação registrada
                                                 </p>
                                               )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {/* Anexos do Atendimento */}
+                                        <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                          <div className="flex items-start space-x-3">
+                                            <div className={`flex-shrink-0 p-2 rounded-lg ${atendimento.anexos && atendimento.anexos.length > 0 ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                                              <Paperclip className={`w-5 h-5 ${atendimento.anexos && atendimento.anexos.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                                            </div>
+                                            <div className="flex-1">
+                                              <button
+                                                onClick={() => setExpandedAnexos(prev => ({
+                                                  ...prev,
+                                                  [atendimento.uid]: !prev[atendimento.uid]
+                                                }))}
+                                                className="w-full flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg group transition-colors"
+                                              >
+                                                <div className="flex items-center space-x-2">
+                                                  <span className={`text-base font-semibold ${atendimento.anexos && atendimento.anexos.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                    Anexos
+                                                  </span>
+                                                  {atendimento.anexos && atendimento.anexos.length > 0 && (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                      {atendimento.anexos.length}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div className={`p-1 rounded-full bg-gray-100 dark:bg-gray-700 transform transition-transform ${
+                                                  expandedAnexos[atendimento.uid] ? 'rotate-180' : ''
+                                                }`}>
+                                                  <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                                                </div>
+                                              </button>
+                                              {expandedAnexos[atendimento.uid] ? (
+                                                <div className="mt-3 space-y-2">
+                                                  {/* Upload de arquivo */}
+                                                  <div>
+                                                    <label className="relative flex items-center justify-center w-full h-12 px-4 transition bg-white border-2 border-blue-300 border-dashed rounded-lg appearance-none cursor-pointer hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 focus:outline-none">
+                                                      <span className="flex items-center space-x-2">
+                                                        <Upload className="w-5 h-5 text-blue-500" />
+                                                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                          {uploadingAnexo[atendimento.uid] ? 'Enviando...' : 'Adicionar anexo'}
+                                                        </span>
+                                                      </span>
+                                                      <input
+                                                        type="file"
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                        onChange={(e) => handleFileUpload(e, atendimento.uid)}
+                                                        disabled={uploadingAnexo[atendimento.uid]}
+                                                      />
+                                                    </label>
+                                                  </div>
+                                                  {/* Lista de anexos */}
+                                                  {atendimento.anexos && atendimento.anexos.length > 0 ? (
+                                                    <div className="space-y-2">
+                                                      {atendimento.anexos.map((anexo, index) => (
+                                                        <div
+                                                          key={index}
+                                                          className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                                                        >
+                                                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                                            <div className="flex-shrink-0 p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded">
+                                                              <Paperclip className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                                                {anexo.nome || 'Arquivo sem nome'}
+                                                              </p>
+                                                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                {anexo.tamanho ? formatFileSize(anexo.tamanho) : 'Tamanho desconhecido'}
+                                                              </p>
+                                                            </div>
+                                                          </div>
+                                                          <div className="flex items-center space-x-2 flex-shrink-0">
+                                                            <a
+                                                              href={anexo.url}
+                                                              target="_blank"
+                                                              rel="noopener noreferrer"
+                                                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                                                            >
+                                                              Abrir
+                                                            </a>
+                                                            <button
+                                                              onClick={() => openDeleteAnexoModal(atendimento.uid, anexo, index)}
+                                                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                              title="Remover anexo"
+                                                            >
+                                                              <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    <div className="text-center py-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                                                      <Paperclip className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                                                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        Nenhum anexo registrado
+                                                      </p>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ) : atendimento.anexos && atendimento.anexos.length > 0 ? (
+                                                <div className="mt-2 flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400">
+                                                  <Paperclip className="w-4 h-4" />
+                                                  <span>Clique para ver {atendimento.anexos.length} anexo{atendimento.anexos.length > 1 ? 's' : ''}</span>
+                                                </div>
+                                              ) : null}
                                             </div>
                                           </div>
                                         </div>
@@ -3164,6 +3456,80 @@ export const EleitorDetalhes: FC = () => {
                         type="button"
                         className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 transition-colors duration-200"
                         onClick={handleDeleteAtendimento}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Modal de confirmação de exclusão de anexo */}
+      <Transition appear show={deleteAnexoModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-[10000]" onClose={() => setDeleteAnexoModalOpen(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 text-left align-middle shadow-xl transition-all">
+                  <div className="relative">
+                    {/* Cabeçalho */}
+                    <div className="px-6 pt-6">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50">
+                        <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                      </div>
+                      
+                      <Dialog.Title className="mt-4 text-lg font-semibold text-gray-900 dark:text-white text-center">
+                        Excluir Anexo
+                      </Dialog.Title>
+                    </div>
+
+                    {/* Mensagem de Confirmação */}
+                    <div className="px-6 py-4 mt-2">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                        Tem certeza que deseja excluir o anexo <strong>"{anexoToDelete?.anexo?.nome || 'Arquivo sem nome'}"</strong>?
+                        <br />
+                        <span className="font-medium">Esta ação não pode ser desfeita.</span>
+                      </p>
+                    </div>
+
+                    {/* Botões */}
+                    <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/30 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-colors duration-200"
+                        onClick={() => setDeleteAnexoModalOpen(false)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 transition-colors duration-200"
+                        onClick={confirmDeleteAnexo}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Excluir

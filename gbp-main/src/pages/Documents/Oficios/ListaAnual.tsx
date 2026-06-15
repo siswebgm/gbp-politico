@@ -22,7 +22,10 @@ import {
   Trash2,
   Download,
   FileSpreadsheet,
-  FolderInput
+  FolderInput,
+  Plus,
+  MoreVertical,
+  Check
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -108,6 +111,15 @@ const ListaAnualOficios: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [tiposDemanda, setTiposDemanda] = useState<string[]>([]);
+  const [isNovoTipoDemandaModalOpen, setIsNovoTipoDemandaModalOpen] = useState(false);
+  const [novoTipoDemanda, setNovoTipoDemanda] = useState('');
+  const [novaSecretaria, setNovaSecretaria] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [editingTipo, setEditingTipo] = useState<string | null>(null);
+  const [editedTipoValue, setEditedTipoValue] = useState('');
+  const [menuOpenForTipo, setMenuOpenForTipo] = useState<string | null>(null);
+  const [showDeleteTipoModal, setShowDeleteTipoModal] = useState(false);
+  const [tipoToDelete, setTipoToDelete] = useState<string | null>(null);
   const [existingOficioData, setExistingOficioData] = useState<ExistingOficioData>({
     numero_oficio: '',
     tipo_de_demanda: '',
@@ -387,6 +399,159 @@ const ListaAnualOficios: React.FC = () => {
 
     fetchTiposDemanda();
   }, [company?.uid]);
+
+  const handleAddNovoTipoDemanda = async () => {
+    if (!novoTipoDemanda.trim()) {
+      toast.error('Preencha o tipo de demanda');
+      return;
+    }
+
+    try {
+      // Buscar registro existente da empresa
+      const { data: existingData, error: fetchError } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .select('nome_tipo')
+        .eq('empresa_uid', company.uid)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      let novosTipos: string[] = [];
+      
+      if (existingData && existingData.nome_tipo) {
+        // Adiciona novo tipo ao array existente
+        novosTipos = [...(existingData.nome_tipo as string[]), novoTipoDemanda.trim()];
+        
+        // Atualiza registro existente
+        const { error: updateError } = await supabaseClient
+          .from('gbp_demanda_tipo')
+          .update({ nome_tipo: novosTipos })
+          .eq('empresa_uid', company.uid);
+
+        if (updateError) throw updateError;
+      } else {
+        // Cria novo registro
+        novosTipos = [novoTipoDemanda.trim()];
+        
+        const { error: insertError } = await supabaseClient
+          .from('gbp_demanda_tipo')
+          .insert({
+            empresa_uid: company.uid,
+            nome_tipo: novosTipos
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // Atualiza estado local
+      setTiposDemanda([...tiposDemanda, novoTipoDemanda.trim()].sort());
+      
+      // Limpa campos
+      setNovoTipoDemanda('');
+      
+      toast.success('Tipo de demanda adicionado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar tipo de demanda:', error);
+      toast.error('Erro ao adicionar tipo de demanda');
+    }
+  };
+
+  const handleDeleteTipoDemanda = async (tipoToDelete: string) => {
+    try {
+      // Buscar registro existente da empresa
+      const { data: existingData, error: fetchError } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .select('nome_tipo')
+        .eq('empresa_uid', company.uid)
+        .single();
+
+      if (fetchError || !existingData || !existingData.nome_tipo) {
+        throw fetchError || new Error('Registro não encontrado');
+      }
+
+      // Remove o tipo do array
+      const tiposAtualizados = (existingData.nome_tipo as string[]).filter(t => t !== tipoToDelete);
+      
+      // Atualiza registro
+      const { error: updateError } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .update({ nome_tipo: tiposAtualizados })
+        .eq('empresa_uid', company.uid);
+
+      if (updateError) throw updateError;
+
+      // Atualiza estado local
+      setTiposDemanda(tiposAtualizados.sort());
+      setShowDeleteTipoModal(false);
+      setTipoToDelete(null);
+      
+      toast.success('Tipo de demanda excluído com sucesso!');
+    } catch (error) {
+      console.error('Erro ao excluir tipo de demanda:', error);
+      toast.error('Erro ao excluir tipo de demanda');
+    }
+  };
+
+  const confirmDeleteTipo = (tipo: string) => {
+    setTipoToDelete(tipo);
+    setShowDeleteTipoModal(true);
+    setMenuOpenForTipo(null);
+  };
+
+  const handleEditTipoDemanda = async (originalTipo: string, newTipo: string) => {
+    if (!newTipo.trim()) {
+      toast.error('O tipo de demanda não pode estar vazio');
+      return;
+    }
+
+    try {
+      // Buscar registro existente da empresa
+      const { data: existingData, error: fetchError } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .select('nome_tipo')
+        .eq('empresa_uid', company.uid)
+        .single();
+
+      if (fetchError || !existingData || !existingData.nome_tipo) {
+        throw fetchError || new Error('Registro não encontrado');
+      }
+
+      // Substitui o tipo antigo pelo novo
+      const tiposAtualizados = (existingData.nome_tipo as string[]).map(t => 
+        t === originalTipo ? newTipo.trim() : t
+      );
+      
+      // Atualiza registro
+      const { error: updateError } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .update({ nome_tipo: tiposAtualizados })
+        .eq('empresa_uid', company.uid);
+
+      if (updateError) throw updateError;
+
+      // Atualiza estado local
+      setTiposDemanda(tiposAtualizados.sort());
+      setEditingTipo(null);
+      setEditedTipoValue('');
+      
+      toast.success('Tipo de demanda atualizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao editar tipo de demanda:', error);
+      toast.error('Erro ao editar tipo de demanda');
+    }
+  };
+
+  const startEditingTipo = (tipo: string) => {
+    setEditingTipo(tipo);
+    setEditedTipoValue(tipo);
+  };
+
+  const cancelEditingTipo = () => {
+    setEditingTipo(null);
+    setEditedTipoValue('');
+  };
 
   // Função para buscar nome personalizado da pasta
   const getFolderName = (year: string) => {
@@ -783,32 +948,66 @@ const ListaAnualOficios: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Botões de Download */}
-            <div className="hidden md:flex items-center gap-2">
-              <button
-                onClick={() => exportarTodosPDF()}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-md hover:bg-red-100 border border-red-200 transition-colors"
-                title="Exportar todos em PDF"
-              >
-                <Download className="h-4 w-4" />
-                <span className="hidden lg:inline">PDF</span>
-              </button>
-              <button
-                onClick={() => exportarTodosExcel()}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-sm font-medium rounded-md hover:bg-green-100 border border-green-200 transition-colors"
-                title="Exportar todos em Excel"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                <span className="hidden lg:inline">Excel</span>
-              </button>
-            </div>
-            
+            {/* Botão Novo Ofício */}
             <button
               onClick={() => setShowExistingOficioModal(true)}
               className="hidden md:inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Cadastrar Ofício Existente
+              Novo Ofício
             </button>
+
+            {/* Menu com 3 pontinhos */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Mais opções"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
+
+              {showMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  {/* Novo Tipo de Demanda */}
+                  <button
+                    onClick={() => {
+                      setIsNovoTipoDemandaModalOpen(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <Plus className="h-4 w-4 text-green-600" />
+                    <span>Novo Tipo de Demanda</span>
+                  </button>
+
+                  <div className="border-t border-gray-200 my-1"></div>
+
+                  {/* Exportar PDF */}
+                  <button
+                    onClick={() => {
+                      exportarTodosPDF();
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <Download className="h-4 w-4 text-red-600" />
+                    <span>Exportar PDF</span>
+                  </button>
+
+                  {/* Exportar Excel */}
+                  <button
+                    onClick={() => {
+                      exportarTodosExcel();
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                    <span>Exportar Excel</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1725,6 +1924,203 @@ const ListaAnualOficios: React.FC = () => {
                   className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Mover Ofício
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Novo Tipo de Demanda */}
+        {isNovoTipoDemandaModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Gerenciar Tipos de Demanda
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsNovoTipoDemandaModalOpen(false);
+                    setNovoTipoDemanda('');
+                  }}
+                  className="text-gray-400 hover:text-gray-500 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Formulário para adicionar novo tipo */}
+              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  Adicionar Novo Tipo de Demanda
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={novoTipoDemanda}
+                    onChange={(e) => setNovoTipoDemanda(e.target.value)}
+                    placeholder="Ex: Buraco na rua, Iluminação pública..."
+                    className="flex-1 rounded-md border border-gray-300 p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddNovoTipoDemanda();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAddNovoTipoDemanda}
+                    className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista de tipos cadastrados */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  Tipos Cadastrados ({tiposDemanda.length})
+                </h4>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {tiposDemanda.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                      Nenhum tipo de demanda cadastrado
+                    </p>
+                  ) : (
+                    tiposDemanda.map((tipo) => (
+                      <div
+                        key={tipo}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        {editingTipo === tipo ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <input
+                              type="text"
+                              value={editedTipoValue}
+                              onChange={(e) => setEditedTipoValue(e.target.value)}
+                              className="flex-1 rounded-md border border-gray-300 p-2 text-sm dark:bg-gray-600 dark:border-gray-500 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleEditTipoDemanda(tipo, editedTipoValue);
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleEditTipoDemanda(tipo, editedTipoValue)}
+                              className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Salvar"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={cancelEditingTipo}
+                              className="p-2 text-gray-600 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                              title="Cancelar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                              {tipo}
+                            </span>
+                            <div className="relative">
+                              <button
+                                onClick={() => setMenuOpenForTipo(menuOpenForTipo === tipo ? null : tipo)}
+                                className="p-2 text-gray-600 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                                title="Mais opções"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+
+                              {menuOpenForTipo === tipo && (
+                                <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                                  <button
+                                    onClick={() => {
+                                      startEditingTipo(tipo);
+                                      setMenuOpenForTipo(null);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                  >
+                                    <Pencil className="h-4 w-4 text-blue-600" />
+                                    <span>Editar</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      confirmDeleteTipo(tipo);
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    <span>Excluir</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    setIsNovoTipoDemandaModalOpen(false);
+                    setNovoTipoDemanda('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Confirmação de Exclusão de Tipo de Demanda */}
+        {showDeleteTipoModal && tipoToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100">
+                  <Trash2 className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Confirmar Exclusão
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Tem certeza que deseja excluir este tipo de demanda?
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-4">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {tipoToDelete}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteTipoModal(false);
+                    setTipoToDelete(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteTipoDemanda(tipoToDelete)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Excluir
                 </button>
               </div>
             </div>

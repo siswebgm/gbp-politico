@@ -1160,22 +1160,6 @@ export function DisparoMidia() {
             {/* Botões de ação */}
             <div className="mt-6 flex flex-row items-center justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
               <Button
-                variant="outline"
-                onClick={handleSendTest}
-                disabled={!message || sendingTest || statusWpp === 'close'}
-                title={statusWpp === 'close' ? 'WhatsApp está desconectado' : ''}
-                className="flex-1 sm:flex-initial"
-              >
-                {sendingTest ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enviando teste...
-                  </>
-                ) : (
-                  'Enviar teste'
-                )}
-              </Button>
-              <Button
                 onClick={handleSendClick}
                 disabled={loading || !message || statusWpp === 'close'}
                 className="flex-1 sm:flex-initial bg-blue-500 hover:bg-blue-600 text-white"
