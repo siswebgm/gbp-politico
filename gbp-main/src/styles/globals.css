@@ -72,8 +72,16 @@
   * {
     @apply border-border;
   }
+  html {
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground;
+    touch-action: manipulation;
+  }
+  input, textarea, select {
+    font-size: 16px;
   }
 }
 
