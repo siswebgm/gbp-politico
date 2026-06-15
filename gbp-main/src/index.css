@@ -10,9 +10,8 @@
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
 }
 
-/* Remove scrollbar from html/body */
+/* Base html/body sizing */
 html, body {
-  overflow: hidden !important;
   height: 100%;
   width: 100%;
 }
