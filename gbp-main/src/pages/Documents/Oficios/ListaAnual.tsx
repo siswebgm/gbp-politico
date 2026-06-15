@@ -1954,13 +1954,13 @@ const ListaAnualOficios: React.FC = () => {
                 <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                   Adicionar Novo Tipo de Demanda
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={novoTipoDemanda}
                     onChange={(e) => setNovoTipoDemanda(e.target.value)}
                     placeholder="Ex: Buraco na rua, Iluminação pública..."
-                    className="flex-1 rounded-md border border-gray-300 p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 min-w-0 rounded-md border border-gray-300 p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
                         handleAddNovoTipoDemanda();
@@ -1969,7 +1969,7 @@ const ListaAnualOficios: React.FC = () => {
                   />
                   <button
                     onClick={handleAddNovoTipoDemanda}
-                    className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
                   >
                     Adicionar
                   </button>

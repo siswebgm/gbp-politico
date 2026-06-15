@@ -347,8 +347,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'lg:w-20' : 'w-64'}`}
         style={{
-          top: 'calc(4rem + var(--safe-area-inset-top))',
-          height: 'calc(100vh - (4rem + var(--safe-area-inset-top)))',
+          top: 'calc(4rem + env(safe-area-inset-top, 0px))',
+          height: 'calc(100vh - 4rem - env(safe-area-inset-top, 0px))',
         }}
       >
         <nav className="flex flex-col h-full">
