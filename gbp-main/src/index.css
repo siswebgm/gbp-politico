@@ -15,8 +15,6 @@ html, body {
   overflow: hidden !important;
   height: 100%;
   width: 100%;
-  position: fixed;
-  inset: 0;
 }
 
 /* EXCEÇÃO: Permite scroll em páginas públicas */

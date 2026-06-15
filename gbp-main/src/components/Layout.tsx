@@ -388,12 +388,12 @@ export function Layout() {
       </header>
 
       {/* Main layout */}
-      <div className="flex flex-1" style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top, 0px))', height: 'calc(100vh - 4rem - env(safe-area-inset-top, 0px))' }}>
+      <div className="flex flex-1">
         {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingTop: 'calc(4rem + env(safe-area-inset-top, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="w-full min-h-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
