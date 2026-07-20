@@ -10,10 +10,13 @@
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
 }
 
-/* Base html/body sizing */
+/* Remove scrollbar from html/body */
 html, body {
+  overflow: hidden !important;
   height: 100%;
   width: 100%;
+  position: fixed;
+  inset: 0;
 }
 
 /* EXCEÇÃO: Permite scroll em páginas públicas */
@@ -193,6 +196,10 @@ body.public-page-scroll #root {
   .animate-rotate {
     animation: rotate 0.2s ease-out;
   }
+  .animate-float {
+    animation: float 1.5s ease-in-out infinite;
+    will-change: transform;
+  }
 }
 
 @keyframes slideDown {
@@ -223,6 +230,15 @@ body.public-page-scroll #root {
   }
   to {
     transform: rotate(180deg);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
   }
 }
 

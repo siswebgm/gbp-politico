@@ -1,7 +1,7 @@
 import { useAuth } from '../providers/AuthProvider';
 
 const routePermissions: Record<string, string[]> = {
-  '/app/eleitores': ['view_voters'],
+  '/app/pessoas': ['view_voters'],
   '/app/atendimentos': ['view_appointments'],
   '/app/documentos': ['view_documents'],
   '/app/mapa': ['view_map'],

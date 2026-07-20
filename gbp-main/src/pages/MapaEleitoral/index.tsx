@@ -26,6 +26,7 @@ interface Voter {
   genero: string;
   confiabilidade_do_voto?: string;
   indicado_uid?: string;
+  foto_url?: string | null;
 }
 
 interface DemandaMapItem {
@@ -127,6 +128,7 @@ export function ElectoralMap() {
             genero,
             confiabilidade_do_voto: voter.confiabilidade_do_voto || '',
             indicado_uid: voter.indicado_uid || '',
+            foto_url: voter.foto_url || null,
             cpf: voter.cpf || '',
             nascimento: voter.nascimento || '',
             nome_mae: voter.nome_mae || '',

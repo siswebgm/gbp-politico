@@ -57,10 +57,21 @@ export function useAtendimentos() {
       }
 
       // Buscar dados relacionados em queries separadas
-      // Coletar UIDs de eleitores e indicados
-      const usuarioUids = atendimentosData
-        ?.map(a => a.usuario_uid)
-        .filter((uid): uid is string => uid !== null) || [];
+      const eleitorUids = [...new Set(
+        (atendimentosData || [])
+          .map(a => a.eleitor_uid)
+          .filter((uid): uid is string => Boolean(uid))
+      )];
+      const usuarioUids = (atendimentosData || [])
+        .map(a => a.usuario_uid)
+        .filter((uid): uid is string => Boolean(uid));
+
+      const eleitoresResponse = eleitorUids.length > 0
+        ? await supabaseClient
+            .from('gbp_eleitores')
+            .select('uid, nome, foto_url')
+            .in('uid', eleitorUids)
+        : { data: [], error: null };
 
       // Buscar usuários
       const usuariosResponse = await supabaseClient
@@ -73,12 +84,15 @@ export function useAtendimentos() {
       console.log('Erro dos atendimentos:', atendimentosError);
       console.log('Dados dos usuários:', usuariosResponse.data);
       console.log('Erro dos usuários:', usuariosResponse.error);
+      console.log('Dados dos eleitores:', eleitoresResponse.data);
+      console.log('Erro dos eleitores:', eleitoresResponse.error);
 
       const atendimentosCompletos = atendimentosData?.map(atendimento => {
         console.log('Processando atendimento:', atendimento);
         return {
           ...atendimento,
           eleitor: atendimento.eleitor || null,
+          gbp_eleitores: eleitoresResponse.data?.find(e => e.uid === atendimento.eleitor_uid) || null,
           gbp_usuarios: usuariosResponse.data?.find(u => u.uid === atendimento.usuario_uid) || null,
           gbp_categorias: atendimento.gbp_categorias || null
         };

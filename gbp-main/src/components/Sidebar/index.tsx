@@ -46,7 +46,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     {
       title: 'Eleitores',
       icon: Users,
-      href: '/app/eleitores',
+      href: '/app/pessoas',
       adminOnly: false
     },
     {

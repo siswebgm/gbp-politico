@@ -2,6 +2,7 @@ import { supabaseClient } from '../lib/supabase';
 import { Eleitor, EleitorFormData, EleitorFilters } from '../types/eleitor';
 import * as XLSX from 'xlsx';
 import { RESTRICTED_ACCESS_LEVELS } from '../constants/accessLevels';
+import { toAccentInsensitiveRegex, toCpfRegex } from '../components/AppAssistant/utils';
 
 interface ListResponse {
   data: Eleitor[];
@@ -273,15 +274,19 @@ class EleitorService {
 
       let query = supabaseClient
         .from('gbp_eleitores')
-        .select('*', { count: 'exact' })
+        .select(`
+          *,
+          gbp_categorias!categoria_uid ( uid, nome ),
+          gbp_usuarios!usuario_uid ( uid, nome ),
+          gbp_indicado!indicado_uid ( uid, nome )
+        `, { count: 'exact' })
         .eq('empresa_uid', empresa_uid);
 
-      // Aplica os filtros
-      if (filters.nome) {
+      // Aplica os filtros (idêntico ao list())
+      if (filters.inicial) {
+        query = query.ilike('nome', `${filters.inicial}%`);
+      } else if (filters.nome) {
         query = query.or(`nome.ilike.%${filters.nome}%,cpf.ilike.%${filters.nome}%,whatsapp.ilike.%${filters.nome}%`);
-      }
-      if (filters.genero) {
-        query = query.eq('genero', filters.genero);
       }
       if (filters.zona) {
         query = query.eq('zona', filters.zona);
@@ -290,7 +295,7 @@ class EleitorService {
         query = query.eq('secao', filters.secao);
       }
       if (filters.bairro) {
-        query = query.eq('bairro', filters.bairro);
+        query = query.ilike('bairro', `%${filters.bairro}%`);
       }
       if (filters.categoria_uid) {
         query = query.eq('categoria_uid', typeof filters.categoria_uid === 'object' ? filters.categoria_uid.uid : filters.categoria_uid);
@@ -305,22 +310,44 @@ class EleitorService {
         query = query.eq('cep', filters.cep);
       }
       if (filters.responsavel) {
-        console.log('[DEBUG] Aplicando filtro de responsável:', filters.responsavel);
         query = query.eq('usuario_uid', filters.responsavel);
       }
       if (filters.cidade) {
-        query = query.eq('cidade', filters.cidade);
+        query = query.ilike('cidade', `%${filters.cidade}%`);
       }
-      if (filters.categoria_uid) {
-        query = query.eq('categoria_uid', typeof filters.categoria_uid === 'object' ? filters.categoria_uid.uid : filters.categoria_uid);
+      if (filters.genero) {
+        query = query.eq('genero', filters.genero);
+      }
+      if (filters.mes_nascimento) {
+        const month = filters.mes_nascimento;
+        if (month.length === 1) {
+          query = query.or(`mes_nascimento.eq.${month},mes_nascimento.eq.0${month}`);
+        } else {
+          query = query.eq('mes_nascimento', month);
+        }
+      }
+      if (filters.periodo && filters.periodo !== 'all') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (filters.periodo === 'today') {
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          query = query
+            .gte('created_at', today.toISOString())
+            .lt('created_at', tomorrow.toISOString());
+        } else {
+          const days = { '7days': 7, '30days': 30, '60days': 60, '90days': 90 }[filters.periodo];
+          if (days) {
+            const pastDate = new Date(today);
+            pastDate.setDate(pastDate.getDate() - days);
+            query = query.gte('created_at', pastDate.toISOString());
+          }
+        }
       }
 
-      // Adiciona ordenação por nome A-Z
-      query = query.order('nome', { ascending: true });
-
-      // Ordena por data de criação e aplica paginação
+      // Aplica ordenação e paginação
       query = query
-        .order('created_at', { ascending: false })
+        .order('nome', { ascending: true })
         .range(from, to);
 
       const { data, error, count } = await query;
@@ -341,6 +368,205 @@ class EleitorService {
       return result;
     } catch (error) {
       console.error('[DEBUG] EleitorService.listAll - Erro:', error);
+      throw error;
+    }
+  }
+
+  private applyFilters(query: any, filters: EleitorFilters): any {
+    if (filters.inicial) {
+      query = query.ilike('nome', `${filters.inicial}%`);
+    } else if (filters.nome) {
+      query = query.or(`nome.imatch.${toAccentInsensitiveRegex(filters.nome)},cpf.ilike.%${filters.nome}%,whatsapp.ilike.%${filters.nome}%`);
+    }
+    if (filters.genero) {
+      query = query.ilike('genero', `%${filters.genero}%`);
+    }
+    if (filters.zona) {
+      query = query.eq('zona', filters.zona);
+    }
+    if (filters.secao) {
+      query = query.eq('secao', filters.secao);
+    }
+    if (filters.bairro) {
+      query = query.filter('bairro', 'imatch', toAccentInsensitiveRegex(filters.bairro));
+    }
+    if (filters.categoria_uid) {
+      query = query.eq('categoria_uid', typeof filters.categoria_uid === 'object' ? (filters.categoria_uid as any).uid : filters.categoria_uid);
+    }
+    if (filters.logradouro) {
+      query = query.filter('logradouro', 'imatch', toAccentInsensitiveRegex(filters.logradouro));
+    }
+    if (filters.indicado) {
+      query = query.eq('indicado_uid', filters.indicado);
+    }
+    if (filters.cep) {
+      query = query.eq('cep', filters.cep);
+    }
+    if (filters.responsavel) {
+      query = query.eq('usuario_uid', filters.responsavel);
+    }
+    if (filters.cidade) {
+      query = query.filter('cidade', 'imatch', toAccentInsensitiveRegex(filters.cidade));
+    }
+    if (filters.whatsapp) {
+      query = query.ilike('whatsapp', `%${filters.whatsapp}%`);
+    }
+    if (filters.cpf) {
+      const cpfPattern = toCpfRegex(filters.cpf);
+      if (cpfPattern) {
+        query = query.filter('cpf', 'imatch', cpfPattern);
+      } else {
+        query = query.ilike('cpf', `%${filters.cpf}%`);
+      }
+    }
+    if (filters.mes_nascimento) {
+      const month = filters.mes_nascimento;
+      if (month.length === 1) {
+        query = query.or(`mes_nascimento.eq.${month},mes_nascimento.eq.0${month}`);
+      } else {
+        query = query.eq('mes_nascimento', month);
+      }
+    }
+    return query;
+  }
+
+  private applyDateFilters(query: any, filters: EleitorFilters): any {
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      // Usa lt para excluir o instante final e evitar duplicatas
+      query = query.lt('created_at', filters.dateTo);
+    }
+
+    if (filters.periodo && filters.periodo !== 'all') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (filters.periodo === 'today') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        query = query.gte('created_at', today.toISOString()).lt('created_at', tomorrow.toISOString());
+      } else {
+        const days = { '7days': 7, '30days': 30, '60days': 60, '90days': 90 }[filters.periodo];
+        if (days) {
+          const pastDate = new Date(today);
+          pastDate.setDate(pastDate.getDate() - days);
+          query = query.gte('created_at', pastDate.toISOString());
+        }
+      }
+    }
+
+    return query;
+  }
+
+  async count(
+    empresa_uid: string,
+    filters: EleitorFilters = {}
+  ): Promise<{ count: number; error?: string }> {
+    try {
+      let query = supabaseClient
+        .from('gbp_eleitores')
+        .select('*', { count: 'exact', head: true })
+        .eq('empresa_uid', empresa_uid);
+
+      query = this.applyFilters(query, filters);
+      query = this.applyDateFilters(query, filters);
+
+      const { count, error } = await query;
+
+      if (error) {
+        console.error('[DEBUG] EleitorService.count - Erro:', error);
+        throw new Error(error.message);
+      }
+
+      return { count: count || 0 };
+    } catch (error) {
+      console.error('[DEBUG] EleitorService.count - Erro:', error);
+      return { count: 0, error: error instanceof Error ? error.message : 'Erro ao contar cadastros' };
+    }
+  }
+
+  async listAllForExport(
+    empresa_uid: string,
+    filters: EleitorFilters = {}
+  ): Promise<Eleitor[]> {
+    try {
+      let query = supabaseClient
+        .from('gbp_eleitores')
+        .select(`
+          *,
+          gbp_categorias!categoria_uid ( uid, nome ),
+          gbp_usuarios!usuario_uid ( uid, nome ),
+          gbp_indicado!indicado_uid ( uid, nome )
+        `)
+        .eq('empresa_uid', empresa_uid);
+
+      query = this.applyFilters(query, filters);
+      query = this.applyDateFilters(query, filters);
+
+      const { data, error } = await query
+        .order('nome', { ascending: true })
+        .limit(10000);
+
+      if (error) {
+        console.error('[DEBUG] EleitorService.listAllForExport - Erro:', error);
+        throw new Error(error.message);
+      }
+
+      return (data as Eleitor[]) || [];
+    } catch (error) {
+      console.error('[DEBUG] EleitorService.listAllForExport - Erro:', error);
+      throw error;
+    }
+  }
+
+  async getBirthdays(
+    empresa_uid: string,
+    dateFrom: Date,
+    dateToExclusive?: Date
+  ): Promise<Eleitor[]> {
+    try {
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select(`
+          *,
+          gbp_categorias!categoria_uid ( uid, nome ),
+          gbp_usuarios!usuario_uid ( uid, nome ),
+          gbp_indicado!indicado_uid ( uid, nome )
+        `)
+        .eq('empresa_uid', empresa_uid)
+        .not('nascimento', 'is', null)
+        .order('nome', { ascending: true })
+        .limit(10000);
+
+      if (error) {
+        console.error('[DEBUG] EleitorService.getBirthdays - Erro:', error);
+        throw new Error(error.message);
+      }
+
+      const end = dateToExclusive ? new Date(dateToExclusive) : new Date(dateFrom);
+      if (!dateToExclusive) {
+        end.setDate(end.getDate() + 1);
+      }
+
+      const targetDates = new Set<string>();
+      const current = new Date(dateFrom);
+      while (current < end) {
+        targetDates.add(`${current.getMonth() + 1}-${current.getDate()}`);
+        current.setDate(current.getDate() + 1);
+      }
+
+      return ((data as Eleitor[]) || []).filter((row) => {
+        if (!row.nascimento) return false;
+        const datePart = row.nascimento.split('T')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        if (!year || !month || !day) return false;
+        const birthDate = new Date(year, month - 1, day);
+        return targetDates.has(`${birthDate.getMonth() + 1}-${birthDate.getDate()}`);
+      });
+    } catch (error) {
+      console.error('[DEBUG] EleitorService.getBirthdays - Erro:', error);
       throw error;
     }
   }
@@ -664,6 +890,33 @@ class EleitorService {
       return data || [];
     } catch (error) {
       console.error('Erro ao buscar indicadores:', error);
+      return [];
+    }
+  }
+
+  async getBairrosOptions(empresa_uid: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('bairro')
+        .eq('empresa_uid', empresa_uid)
+        .not('bairro', 'is', null)
+        .limit(50000);
+
+      if (error) {
+        console.error('[DEBUG] Erro ao buscar bairros:', error);
+        throw error;
+      }
+
+      const set = new Set<string>();
+      (data || []).forEach((row: { bairro: string | null }) => {
+        const value = (row.bairro || '').trim();
+        if (value) set.add(value);
+      });
+
+      return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    } catch (error) {
+      console.error('Erro ao buscar bairros:', error);
       return [];
     }
   }

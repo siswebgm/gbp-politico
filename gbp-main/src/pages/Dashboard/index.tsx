@@ -52,6 +52,7 @@ import { TypeDistribution } from './components/TypeDistribution';
 import { TrialBanner } from '../../components/TrialBanner';
 import { BirthdaySection } from './components/BirthdaySection';
 import { NewAttendancesNotification } from '../../components/NewAttendancesNotification';
+import { ResumoDiario } from './components/ResumoDiario';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
@@ -100,7 +101,7 @@ const monthlyData = {
       backgroundColor: 'rgba(53, 162, 235, 0.5)',
     },
     {
-      label: 'Eleitores',
+      label: 'Pessoas',
       data: [0, 0, 0, 0, 0, 0],
       borderColor: 'rgb(75, 192, 192)',
       backgroundColor: 'rgba(75, 192, 192, 0.5)',
@@ -109,7 +110,7 @@ const monthlyData = {
 };
 
 const distributionData = {
-  labels: ['Eleitores'],
+  labels: ['Pessoas'],
   datasets: [
     {
       data: [0],
@@ -536,8 +537,8 @@ export function Dashboard() {
                         <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h2 className="text-lg sm:text-2xl font-bold text-white mb-1 leading-tight">
-                          Você tem {Number(dashboardData?.totalDemandas || 0)} demanda(s) atribuída(s)
+                        <h2 className="text-lg sm:text-3xl md:text-2xl font-bold text-white mb-1 leading-tight">
+                          Você tem {Number(dashboardData?.totalDemandas || 0)} demanda(s)
                         </h2>
                         <p className="text-blue-100 dark:text-blue-200 text-xs sm:text-sm leading-relaxed">
                           Clique para gerenciar suas demandas
@@ -576,7 +577,7 @@ export function Dashboard() {
                 detailsUrl="/app/atendimentos/relatorios"
               />
               <StatCard
-                title="Total de Eleitores"
+                title="Total de Pessoas"
                 value={Number(dashboardData?.totalEleitores || 0)}
                 total={Number(dashboardData?.totalEleitores || 0)}
                 icon={Users}
@@ -584,7 +585,7 @@ export function Dashboard() {
                 stats={dashboardData.eleitoresStats}
                 footer={
                   <Link
-                    to="/app/eleitores/relatorio"
+                    to="/app/pessoas/relatorio"
                     className={cn(
                       "text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300",
                       "flex items-center gap-1"
@@ -643,7 +644,7 @@ export function Dashboard() {
                         backgroundColor: 'rgba(53, 162, 235, 0.5)',
                       },
                       {
-                        label: 'Eleitores',
+                        label: 'Pessoas',
                         data: Array(6).fill(dashboardData?.totalEleitores || 0),
                         borderColor: 'rgb(75, 192, 192)',
                         backgroundColor: 'rgba(75, 192, 192, 0.5)',
@@ -669,12 +670,10 @@ export function Dashboard() {
             </div>
 
             {/* Growth Rate Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-              <div className="flex items-center gap-3 mb-1">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Taxa de Crescimento</h4>
-                <div className="bg-orange-100 dark:bg-orange-900/30 p-1.5 rounded-full">
-                  <TrendingUp className="w-4 h-4 text-orange-700 dark:text-orange-400" />
-                </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border-l-4 border-l-orange-400">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-orange-500" />
+                <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Taxa de Crescimento</h4>
               </div>
               <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">
                 {dashboardData.eleitoresStats.crescimento.toFixed(1)}%
@@ -684,8 +683,11 @@ export function Dashboard() {
               </p>
             </div>
 
+            {/* Resumo de Atividades */}
+            <ResumoDiario />
+
             {/* Seção de Aniversariantes */}
-            <div className="mt-8">
+            <div className="mt-2">
               <BirthdaySection
                 aniversariantes={aniversariantes}
                 isLoading={loadingAniversariantes}

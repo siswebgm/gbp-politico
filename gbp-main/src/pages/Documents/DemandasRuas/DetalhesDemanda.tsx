@@ -101,6 +101,11 @@ export function DetalhesDemanda() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showProtocoloModal, setShowProtocoloModal] = useState(false);
   const [protocoloFile, setProtocoloFile] = useState<File | null>(null);
+  const [showConcluirModal, setShowConcluirModal] = useState(false);
+  const [showArquivarModal, setShowArquivarModal] = useState(false);
+  const [pastaArquivo, setPastaArquivo] = useState('');
+  const [arquivando, setArquivando] = useState(false);
+  const [pastasExistentes, setPastasExistentes] = useState<string[]>([]);
   const [showWhatsAppField, setShowWhatsAppField] = useState(true);
   const [mensagemWhatsApp, setMensagemWhatsApp] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
@@ -429,8 +434,89 @@ export function DetalhesDemanda() {
       return;
     }
 
+    // Se o status for 'concluido', abre o modal de confirmação e interrompe a execução
+    if (status === 'concluido') {
+      setShowConcluirModal(true);
+      return;
+    }
+
     // Lógica para outros status
     await updateStatus(status);
+  };
+
+  // Carrega as pastas de arquivamento já existentes na empresa
+  const carregarPastasExistentes = async () => {
+    if (!demanda?.empresa_uid) return;
+    try {
+      const { data, error } = await supabaseClient
+        .from('gbp_demandas_ruas')
+        .select('pasta_arquivo')
+        .eq('empresa_uid', demanda.empresa_uid)
+        .eq('arquivado', true)
+        .not('pasta_arquivo', 'is', null);
+
+      if (error) throw error;
+
+      const pastas = Array.from(
+        new Set((data || []).map((d: { pasta_arquivo: string | null }) => d.pasta_arquivo).filter(Boolean) as string[])
+      ).sort();
+      setPastasExistentes(pastas);
+    } catch (err) {
+      console.error('Erro ao carregar pastas existentes:', err);
+    }
+  };
+
+  // Confirma a conclusão da demanda
+  const handleConfirmarConclusao = async () => {
+    setShowConcluirModal(false);
+    await updateStatus('concluido');
+    // Carrega as pastas existentes para que o usuário possa reutilizar
+    await carregarPastasExistentes();
+    // Sugere arquivar a demanda resolvida em uma pasta específica (ex: "Resolvidos Junho 2026")
+    const mesAno = format(new Date(), 'MMMM yyyy', { locale: ptBR });
+    const mesAnoCapitalizado = mesAno.charAt(0).toUpperCase() + mesAno.slice(1);
+    setPastaArquivo(`Resolvidos ${mesAnoCapitalizado}`);
+    setShowArquivarModal(true);
+  };
+
+  // Cancela a conclusão e restaura o status atual da demanda
+  const handleCancelarConclusao = () => {
+    setShowConcluirModal(false);
+    if (demanda) setNovoStatus(getValidStatus(demanda.status));
+  };
+
+  // Arquiva a demanda resolvida na pasta informada
+  const handleArquivarResolvida = async () => {
+    if (!demanda) return;
+    const nomePasta = pastaArquivo.trim();
+    if (!nomePasta) {
+      toast({
+        title: 'Informe a pasta',
+        description: 'Digite o nome da pasta para arquivar a demanda.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setArquivando(true);
+    try {
+      await demandasRuasService.setArquivado(demanda.uid, true, nomePasta);
+      setDemanda(prev => prev ? { ...prev, arquivado: true, pasta_arquivo: nomePasta } : prev);
+      setShowArquivarModal(false);
+      toast({
+        title: 'Demanda arquivada',
+        description: `A demanda foi arquivada na pasta "${nomePasta}".`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Erro ao arquivar demanda:', err);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível arquivar a demanda.',
+        variant: 'destructive',
+      });
+    } finally {
+      setArquivando(false);
+    }
   };
 
   // Função refatorada para apenas atualizar o status
@@ -2537,6 +2623,111 @@ export function DetalhesDemanda() {
         onChange={handleDocumentoAnexo}
         accept=".pdf,.jpg,.jpeg,.png"
       />
+
+      {/* Modal de Confirmação de Conclusão da Demanda */}
+      <AlertDialog open={showConcluirModal} onOpenChange={(open) => { if (!open) handleCancelarConclusao(); }}>
+        <AlertDialogContent className="w-[95%] sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-green-100 dark:bg-green-900/40 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <AlertDialogTitle>Concluir Demanda</AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogDescription className="text-base">
+            Deseja atualizar essa demanda para resolvida?
+          </AlertDialogDescription>
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-3 sm:gap-3">
+            <AlertDialogCancel onClick={handleCancelarConclusao} className="mt-0 h-10 px-6">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmarConclusao}
+              className="mt-0 h-10 px-6 bg-green-600 hover:bg-green-700"
+              disabled={updating}
+            >
+              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sim, concluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Arquivamento da Demanda Resolvida */}
+      <AlertDialog open={showArquivarModal} onOpenChange={setShowArquivarModal}>
+        <AlertDialogContent className="w-[95%] sm:max-w-[450px]">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+              </div>
+              <AlertDialogTitle>Arquivar Demanda Resolvida</AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogDescription className="text-base">
+            Demanda concluída! Deseja arquivá-la em uma pasta específica para manter sua listagem organizada?
+          </AlertDialogDescription>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="pasta-arquivo" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Pasta de arquivamento
+            </Label>
+            <Input
+              id="pasta-arquivo"
+              list="pastas-existentes"
+              value={pastaArquivo}
+              onChange={(e) => setPastaArquivo(e.target.value)}
+              placeholder="Ex: Resolvidos Junho 2026"
+              autoFocus
+            />
+            <datalist id="pastas-existentes">
+              {pastasExistentes.map((pasta) => (
+                <option key={pasta} value={pasta} />
+              ))}
+            </datalist>
+            {pastasExistentes.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Pastas existentes:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {pastasExistentes.map((pasta) => (
+                    <button
+                      key={pasta}
+                      type="button"
+                      onClick={() => setPastaArquivo(pasta)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                        pastaArquivo === pasta
+                          ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
+                      )}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                      {pasta}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-3">
+            <AlertDialogCancel onClick={() => setShowArquivarModal(false)} className="mt-0 h-10 px-6" disabled={arquivando}>
+              Agora não
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleArquivarResolvida(); }}
+              className="mt-0 h-10 px-6 bg-blue-600 hover:bg-blue-700"
+              disabled={arquivando}
+            >
+              {arquivando ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Arquivar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de Confirmação de Exclusão de Documento */}
       <AlertDialog open={showDeleteDocumentoModal} onOpenChange={setShowDeleteDocumentoModal}>

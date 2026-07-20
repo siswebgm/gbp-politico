@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
-import { Users, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { Users, Calendar, Clock, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -72,18 +72,20 @@ export function StatCard({
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {value.toLocaleString('pt-BR')}
                 </p>
-                <p className="ml-1 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  /{total}
-                </p>
               </div>
             </div>
           </div>
           <div className="text-right">
-            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              stats?.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
-            }`}>
+            <div
+              className={`inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                stats?.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+              }`}
+              title="Comparado ao mês anterior"
+            >
+              {stats?.crescimento >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {stats?.crescimento >= 0 ? '+' : ''}{(stats?.crescimento || 0).toFixed(1)}%
             </div>
+            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">vs mês anterior</p>
           </div>
         </div>
       </div>
@@ -147,7 +149,7 @@ export function StatCard({
             {title === 'Total de Eleitores' && (
               <div className="flex justify-end">
                 <Link
-                  to="/app/eleitores/relatorio"
+                  to="/app/pessoas/relatorio"
                   className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
                 >
                   Ver detalhes

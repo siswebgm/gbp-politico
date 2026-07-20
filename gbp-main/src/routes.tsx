@@ -4,10 +4,10 @@ import { supabaseClient } from './lib/supabase';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { Dashboard } from './pages/Dashboard';
-import { Eleitores } from './pages/Eleitores';
-import { NovoEleitor } from './pages/Eleitores/NovoEleitor';
-import { EleitorDetalhes } from './pages/Eleitores/EleitorDetalhes';
-import { ImportarEleitores } from './pages/ImportarEleitores';
+import { Pessoas } from './pages/Pessoas';
+import { NovaPessoa } from './pages/Pessoas/NovaPessoa';
+import { PessoaDetalhes } from './pages/Pessoas/PessoaDetalhes';
+import { ImportarPessoas } from './pages/ImportarPessoas';
 import { Login } from './pages/Login';
 import { useAuth } from './providers/AuthProvider';
 import { useCompanyStore } from './store/useCompanyStore';
@@ -59,7 +59,7 @@ import { PlanosPage } from './pages/app/Planos';
 import { Strategy } from './pages/Strategy';
 import WhatsAppPage from './pages/WhatsApp/index';
 import { Suspense, lazy } from 'react';
-import { EleitoresReport } from './pages/EleitoresReport';
+import { PessoasReport } from './pages/PessoasReport';
 import { ConsultarDemandas } from './pages/public/ConsultarDemandas';
 import { DemandaPublica } from './pages/public/DemandaPublica/index';
 const CheckoutPage = lazy(() => import('./pages/app/checkout'));
@@ -72,6 +72,8 @@ import ResponderPesquisa from './pages/PesquisaEleitoral/ResponderPesquisa';
 import ObrigadoPesquisa from './pages/PesquisaEleitoral/ObrigadoPesquisa';
 import { SelectCompany } from './pages/SelectCompany';
 import { GerenciamentoAmbientes } from './pages/GerenciamentoAmbientes';
+import { AssistenteTreinamento } from './pages/AssistenteTreinamento';
+import { OwnerRoute } from './components/OwnerRoute';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -297,13 +299,13 @@ export function AppRoutes() {
             <PlanosPage />
           </Suspense>
         } />
-        <Route path="eleitores">
-          <Route index element={<Eleitores />} />
-          <Route path=":id" element={<EleitorDetalhes />} />
-          <Route path="novo" element={<NovoEleitor />} />
-          <Route path=":id/editar" element={<NovoEleitor />} />
-          <Route path="importar" element={<ImportarEleitores />} />
-          <Route path="relatorio" element={<EleitoresReport />} />
+        <Route path="pessoas">
+          <Route index element={<Pessoas />} />
+          <Route path=":id" element={<PessoaDetalhes />} />
+          <Route path="novo" element={<NovaPessoa />} />
+          <Route path=":id/editar" element={<NovaPessoa />} />
+          <Route path="importar" element={<ImportarPessoas />} />
+          <Route path="relatorio" element={<PessoasReport />} />
         </Route>
         <Route path="atendimentos">
           <Route index element={<AttendanceList />} />
@@ -371,6 +373,7 @@ export function AppRoutes() {
             <WhatsAppPage />
           </Suspense>
         } />
+        <Route path="assistente/treinamento" element={<OwnerRoute><AssistenteTreinamento /></OwnerRoute>} />
         <Route path="strategy" element={<AdminRoute><Strategy /></AdminRoute>} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
         <Route path="reconhecimento-facial" element={<ReconhecimentoFacial />} />

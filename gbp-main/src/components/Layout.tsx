@@ -11,6 +11,7 @@ import { supabaseClient } from '../lib/supabase';
 import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { useToast } from "./ui/use-toast";
 import { UserProfileModal } from './UserProfileModal';
+import { AppAssistant } from './AppAssistant';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useThemeStore } from '../store/useThemeStore';
 
@@ -212,7 +213,7 @@ export function Layout() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-blue-600 dark:bg-blue-800 shadow-lg" style={{ paddingTop: 'var(--safe-area-inset-top)' }}>
         <div className="flex h-16 items-center justify-between px-4">
           {/* Left side */}
           <div className="flex items-center gap-4">
@@ -388,13 +389,13 @@ export function Layout() {
       </header>
 
       {/* Main layout */}
-      <div className="flex flex-1">
+      <div className="flex flex-1 h-full" style={{ paddingTop: 'calc(4rem + var(--safe-area-inset-top))' }}>
         {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingTop: 'calc(4rem + env(safe-area-inset-top, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          <div className="w-full min-h-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
+        <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--safe-area-inset-bottom)' }}>
+          <div className="w-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
             </ErrorBoundary>
@@ -407,6 +408,7 @@ export function Layout() {
         onClose={() => setIsProfileModalOpen(false)} 
       />
 
+      {['admin', 'coordenador'].includes((user?.nivel_acesso || '').toLowerCase()) && <AppAssistant />}
     </div>
   );
 }

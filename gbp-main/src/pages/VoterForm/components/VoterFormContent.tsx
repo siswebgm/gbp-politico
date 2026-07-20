@@ -25,7 +25,7 @@ export function VoterFormContent({ uid }: VoterFormContentProps) {
     console.log('Tentando submeter formulário com dados:', data);
     const result = await handleSubmit(data);
     if (result) {
-      navigate('/app/eleitores');
+      navigate('/app/pessoas');
     }
   };
 
@@ -63,7 +63,7 @@ export function VoterFormContent({ uid }: VoterFormContentProps) {
       <div className="flex justify-end space-x-4">
         <button
           type="button"
-          onClick={() => navigate('/app/eleitores')}
+          onClick={() => navigate('/app/pessoas')}
           className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Cancelar

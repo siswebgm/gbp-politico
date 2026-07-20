@@ -123,7 +123,7 @@ export function DocumentList({ documents, onEdit, onDelete, onShare }: DocumentL
                 <td className="whitespace-nowrap px-6 py-4">
                   <div 
                     className="text-sm text-gray-900 cursor-pointer hover:text-primary-600"
-                    onClick={() => navigate(`/app/eleitores/${doc.voterId}`)}
+                    onClick={() => navigate(`/app/pessoas/${doc.voterId}`)}
                   >
                     {doc.voterName}
                   </div>

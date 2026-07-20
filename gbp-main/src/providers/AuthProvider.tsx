@@ -282,6 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      // Busca o usuário pelo e-mail primeiro para verificar status e tentativas
       const { data: user, error } = await supabaseClient
         .from('gbp_usuarios')
         .select(`
@@ -289,6 +290,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid,
           nome,
           email,
+          senha,
           cargo,
           nivel_acesso,
           permissoes,
@@ -296,6 +298,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cota_criar_empresas,
           contato,
           status,
+          tentativas_login,
           ultimo_acesso,
           created_at,
           foto,
@@ -305,25 +308,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           adm_empresa
         `)
         .eq('email', email)
-        .eq('senha', password)
         .single();
 
-      if (error) {
+      if (error || !user) {
         throw new Error('Email ou senha incorretos');
       }
 
-      if (!user) {
-        throw new Error('Email ou senha incorretos');
+      // Conta bloqueada por tentativas excessivas
+      if (user.status === 'blocked' || user.status === 'bloqueado') {
+        throw new Error('conta_bloqueada');
       }
 
+      // Conta inativa por outro motivo
       if (user.status !== 'active') {
-        throw new Error('Sua conta está inativa. Entre em contato com o administrador.');
+        throw new Error('conta_inativa');
       }
 
-      // Atualiza último acesso
+      // Verifica a senha
+      if (user.senha !== password) {
+        const currentAttempts = (user.tentativas_login || 0) + 1;
+        const updates: { tentativas_login: number; status?: string } = {
+          tentativas_login: currentAttempts,
+        };
+
+        if (currentAttempts >= 3) {
+          updates.status = 'blocked';
+        }
+
+        await supabaseClient
+          .from('gbp_usuarios')
+          .update(updates)
+          .eq('uid', user.uid);
+
+        if (currentAttempts >= 3) {
+          throw new Error('conta_bloqueada');
+        }
+
+        const remaining = 3 - currentAttempts;
+        throw new Error(
+          `Senha incorreta. ${remaining} tentativa${remaining === 1 ? '' : 's'} restante${remaining === 1 ? '' : 's'} antes do bloqueio.`
+        );
+      }
+
+      // Login correto — zera tentativas e atualiza último acesso
       await supabaseClient
         .from('gbp_usuarios')
-        .update({ ultimo_acesso: new Date().toISOString() })
+        .update({ tentativas_login: 0, ultimo_acesso: new Date().toISOString() })
         .eq('uid', user.uid);
 
       // Atualiza estado global

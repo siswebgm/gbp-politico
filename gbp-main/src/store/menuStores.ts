@@ -62,20 +62,20 @@ export const eleitoresMenuData: MenuSection[] = [
     items: [
       {
         id: 'lista',
-        label: 'Lista de Eleitores',
-        path: '/app/eleitores',
+        label: 'Lista de Pessoas',
+        path: '/app/pessoas',
         icon: 'Users',
       },
       {
         id: 'cadastro',
-        label: 'Novo Eleitor',
-        path: '/app/eleitores/new',
+        label: 'Nova Pessoa',
+        path: '/app/pessoas/new',
         icon: 'UserPlus',
       },
       {
         id: 'importacao',
-        label: 'Importar Eleitores',
-        path: '/app/eleitores/import',
+        label: 'Importar Pessoas',
+        path: '/app/pessoas/import',
         icon: 'Upload',
       },
     ],
@@ -87,13 +87,13 @@ export const eleitoresMenuData: MenuSection[] = [
       {
         id: 'dashboard',
         label: 'Dashboard',
-        path: '/app/eleitores/dashboard',
+        path: '/app/pessoas/dashboard',
         icon: 'BarChart2',
       },
       {
         id: 'relatorios',
         label: 'Relatórios',
-        path: '/app/eleitores/reports',
+        path: '/app/pessoas/reports',
         icon: 'FileText',
       },
     ],

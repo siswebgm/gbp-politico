@@ -276,7 +276,7 @@ export function Strategy() {
                 Explore os dados completos no relatório de eleitores.
               </p>
               <button
-                onClick={() => navigate('/app/eleitores/relatorio')}
+                onClick={() => navigate('/app/pessoas/relatorio')}
                 className="flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 dark:bg-indigo-500 dark:hover:bg-indigo-600 focus:outline-none dark:focus:ring-indigo-800"
               >
                 <Search className="w-4 h-4 mr-2" />

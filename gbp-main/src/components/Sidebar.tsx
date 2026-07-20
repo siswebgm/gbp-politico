@@ -48,7 +48,7 @@ const RESTRICTED_PATHS = [
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
-  { name: 'Eleitores', href: '/app/eleitores', icon: Users },
+  { name: 'Pessoas', href: '/app/pessoas', icon: Users },
   { name: 'Atendimentos', href: '/app/atendimentos', icon: CalendarCheck },
   { name: 'Agenda', href: '/app/agenda', icon: Calendar },
   // { 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Bell, Calendar, Clock, AlertCircle, MessageCircle, Trash2, MessageSquare, CheckCircle, XCircle, Edit2, Paperclip, Upload } from 'lucide-react';
+import { X, Send, Bell, Calendar, Clock, AlertCircle, MessageCircle, Trash2, MessageSquare, CheckCircle, XCircle, Edit2, Paperclip, Upload, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabaseClient } from '../../../lib/supabase';
@@ -54,7 +54,8 @@ interface Atendimento {
   anexos?: any[];
   gbp_eleitores?: {
     nome: string;
-    zona: string;
+    zona?: string;
+    foto_url?: string | null;
   };
   categoria?: {
     nome: string;
@@ -168,6 +169,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
     return [];
   });
   const [isUploading, setIsUploading] = useState(false);
+  const [showFotoModal, setShowFotoModal] = useState(false);
 
   // Detect if iOS
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -497,7 +499,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
       if (atendimento.eleitor_uid) {
         const { data: eleitor, error: eleitorError } = await supabaseClient
           .from('gbp_eleitores')
-          .select('nome, zona')
+          .select('nome, zona, foto_url')
           .eq('uid', atendimento.eleitor_uid)
           .single();
 
@@ -506,7 +508,8 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
         if (eleitor) {
           updates.gbp_eleitores = {
             nome: eleitor.nome,
-            zona: eleitor.zona
+            zona: eleitor.zona,
+            foto_url: eleitor.foto_url
           };
         }
       }
@@ -841,12 +844,27 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                   {/* Informações do atendimento */}
                   <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="px-6 py-5">
-                      {/* Nome do eleitor em destaque */}
+                      {/* Nome da pessoa em destaque */}
                       <div className="mb-6">
-                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Eleitor</span>
-                        <h4 className="text-xl font-bold text-gray-900 dark:text-white">
-                          {atendimento.gbp_eleitores?.nome || '-'}
-                        </h4>
+                        <span className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Pessoa</span>
+                        <div className="flex items-center gap-3">
+                          {atendimento.gbp_eleitores?.foto_url ? (
+                            <img
+                              src={atendimento.gbp_eleitores.foto_url}
+                              alt={`Foto de ${atendimento.gbp_eleitores.nome || 'pessoa'}`}
+                              className="h-12 w-12 flex-shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 cursor-pointer transition-transform hover:scale-105"
+                              onClick={() => setShowFotoModal(true)}
+                              title="Visualizar foto"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-700 dark:to-gray-800 ring-1 ring-gray-200 dark:ring-gray-600 flex items-center justify-center">
+                              <User className="h-6 w-6 text-blue-300 dark:text-gray-500" />
+                            </div>
+                          )}
+                          <h4 className="min-w-0 text-xl font-bold text-gray-900 dark:text-white break-words">
+                            {atendimento.gbp_eleitores?.nome || '-'}
+                          </h4>
+                        </div>
                       </div>
 
                       {/* Categoria */}
@@ -1466,6 +1484,36 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
+      )}
+
+      {/* Visualização ampliada da foto da pessoa */}
+      {showFotoModal && atendimento.gbp_eleitores?.foto_url && (
+        <div
+          className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Foto ampliada da pessoa"
+          onClick={() => setShowFotoModal(false)}
+        >
+          <div
+            className="relative flex max-h-[90vh] max-w-[90vw] items-center justify-center"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img
+              src={atendimento.gbp_eleitores.foto_url}
+              alt={`Foto ampliada de ${atendimento.gbp_eleitores.nome || 'pessoa'}`}
+              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setShowFotoModal(false)}
+              className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-600 shadow-lg transition-colors hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              aria-label="Fechar foto ampliada"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

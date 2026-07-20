@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { CategorySettings } from './components/CategorySettings';
 import { IndicadoSettings } from './components/IndicadoSettings';
 import { BirthdaySettings } from './components/BirthdaySettings';
-import { Cog, Users, Gift, Upload, FormInput, CreditCard, MessageSquare, ChevronLeft } from 'lucide-react';
+import { ExtensaoSettings } from './components/ExtensaoSettings';
+import { Cog, Users, Gift, Upload, FormInput, CreditCard, MessageSquare, ChevronLeft, Bot, Chrome } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useNavigate } from 'react-router-dom';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
 
-type SettingsTab = 'categories' | 'indicados' | 'birthday' | 'whatsapp' | 'upload' | 'form' | 'planos';
+type SettingsTab = 'categories' | 'indicados' | 'birthday' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'assistente' | 'extensao';
 
 // Helper para adicionar scroll horizontal com touch
 const setupHorizontalScroll = (el: HTMLDivElement | null) => {
@@ -68,7 +69,7 @@ export function Settings() {
 
   useEffect(() => {
     if (activeTab === 'upload') {
-      navigate('/app/eleitores/importar');
+      navigate('/app/pessoas/importar');
     } else if (activeTab === 'form') {
       navigate('/app/configuracoes/gerenciar-formulario');
     }
@@ -86,6 +87,10 @@ export function Settings() {
     }
     if (tab === 'planos') {
       navigate('/app/planos');
+      return;
+    }
+    if (tab === 'assistente') {
+      navigate('/app/assistente/treinamento');
       return;
     }
     setActiveTab(tab);
@@ -117,8 +122,10 @@ export function Settings() {
     { id: 'birthday', label: 'Aniversário', icon: Gift },
     { id: 'form', label: 'Formulário de Cadastro', icon: FormInput },
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+    { id: 'extensao', label: 'Extensão', icon: Chrome },
     { id: 'upload', label: 'Upload', icon: Upload },
-    { id: 'planos', label: 'Planos', icon: CreditCard }
+    { id: 'planos', label: 'Planos', icon: CreditCard },
+    { id: 'assistente', label: 'GBia', icon: Bot, ownerOnly: true }
   ];
 
   return (
@@ -141,7 +148,7 @@ export function Settings() {
                     Área de Configurações
                   </h1>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Gerencie e personalize o sistema de acordo com suas necessidades
+                    Personalize o sistema conforme sua necessidade
                   </p>
                 </div>
               </div>
@@ -158,7 +165,7 @@ export function Settings() {
                 <div className="space-y-6">
                   <div ref={tabsContainerRef} className="overflow-x-auto pb-4">
                     <nav className="flex gap-6 min-w-max">
-                      {tabs.map((tab) => {
+                      {tabs.filter((tab) => !(tab as any).ownerOnly || user?.adm_empresa === true).map((tab) => {
                         const Icon = tab.icon;
                         return (
                           <button
@@ -183,6 +190,7 @@ export function Settings() {
                     {activeTab === 'categories' && <CategorySettings />}
                     {activeTab === 'indicados' && <IndicadoSettings />}
                     {activeTab === 'birthday' && <BirthdaySettings />}
+                    {activeTab === 'extensao' && <ExtensaoSettings />}
                   </div>
                 </div>
               </div>

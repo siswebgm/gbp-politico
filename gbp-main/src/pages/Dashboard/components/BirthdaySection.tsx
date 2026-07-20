@@ -258,98 +258,80 @@ export function BirthdaySection({
 
   return (
     <div className="space-y-4 pb-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-3 sm:gap-2">
-          <div className="flex flex-col gap-1">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md border-l-4 border-l-pink-400">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 gap-2">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Gift className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-medium dark:text-white">
+              <Gift className="w-4 h-4 text-pink-500 flex-shrink-0" />
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
                 Aniversariantes
-                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
                   ({aniversariantes.length})
                 </span>
               </h2>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 sm:block hidden">
-              Status do envio de mensagens
-            </p>
           </div>
-          
-          <div className="flex flex-wrap gap-2 items-center">
+
+          <div className="flex items-center gap-2 flex-shrink-0">
             {isAdmin && (
-              <button
-                onClick={handleExportExcel}
-                disabled={!aniversariantes.length}
-                className="flex items-center justify-center px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Exportar"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-            
-            {isAdmin && (
-              <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-xs flex-shrink-0">
                 <button
                   onClick={() => onPeriodoChange('dia')}
-                  className={`px-3 py-1.5 rounded-md whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 font-medium whitespace-nowrap transition-colors ${
                     periodoSelecionado === 'dia'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   Hoje
                 </button>
                 <button
                   onClick={() => onPeriodoChange('ultimos7dias')}
-                  className={`px-3 py-1.5 rounded-md whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 font-medium whitespace-nowrap border-l border-gray-200 dark:border-gray-700 transition-colors ${
                     periodoSelecionado === 'ultimos7dias'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   7 dias
                 </button>
                 <button
                   onClick={() => onPeriodoChange('mes')}
-                  className={`px-3 py-1.5 rounded-md whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 font-medium whitespace-nowrap border-l border-gray-200 dark:border-gray-700 transition-colors ${
                     periodoSelecionado === 'mes'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   Mês
                 </button>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="2000"
-                    max="2030"
-                    value={yearInput}
-                    onChange={(e) => handleYearChange(e.target.value)}
-                    className={`px-3 py-1.5 rounded-md whitespace-nowrap w-20 text-sm ${
-                      periodoSelecionado.startsWith('ano_')
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                    placeholder="Ano"
-                  />
-                  <select
-                    value={yearInput}
-                    onChange={(e) => handleYearChange(e.target.value)}
-                    className={`absolute inset-0 px-3 py-1.5 rounded-md whitespace-nowrap w-20 text-sm appearance-none bg-transparent ${
-                      periodoSelecionado.startsWith('ano_')
-                        ? 'text-white'
-                        : 'text-gray-700 dark:text-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  >
-                    {yearOptions.map(year => (
-                      <option key={year} value={year} className="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={periodoSelecionado.startsWith('ano_') ? yearInput : ''}
+                  onChange={(e) => handleYearChange(e.target.value)}
+                  className={`px-2 py-1.5 font-medium border-l border-gray-200 dark:border-gray-700 outline-none cursor-pointer transition-colors text-xs ${
+                    periodoSelecionado.startsWith('ano_')
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <option value="" disabled>{periodoSelecionado.startsWith('ano_') ? yearInput : 'Ano'}</option>
+                  {yearOptions.map(year => (
+                    <option key={year} value={year} className="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                      {year}
+                    </option>
+                  ))}
+                </select>
               </div>
+            )}
+            {isAdmin && (
+              <button
+                onClick={handleExportExcel}
+                disabled={!aniversariantes.length}
+                className="flex items-center justify-center h-7 w-7 bg-green-600 hover:bg-green-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                title="Exportar Excel"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
         </div>
@@ -481,7 +463,7 @@ export function BirthdaySection({
                     >
                       <td className="px-4 py-3 text-sm font-medium dark:text-gray-200">
                         <Link
-                          to={`/app/eleitores/${pessoa.eleitor_uid}`}
+                          to={`/app/pessoas/${pessoa.eleitor_uid}`}
                           className={`truncate max-w-[150px] sm:max-w-none hover:underline ${
                             pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                               ? 'hover:text-green-700'
@@ -612,7 +594,7 @@ export function BirthdaySection({
                       ) : (
                         <button
                           key={page}
-                          onClick={() => setCurrentPage(page)}
+                          onClick={() => setCurrentPage(page as number)}
                           className={`w-7 h-7 flex items-center justify-center text-xs font-medium border transition-colors ${
                             currentPage === page
                               ? 'bg-blue-500 dark:bg-blue-600 border-blue-500 dark:border-blue-600 text-white'

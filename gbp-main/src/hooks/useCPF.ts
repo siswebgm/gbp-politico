@@ -80,7 +80,7 @@ export function useCPF() {
           duration: 3000,
         });
         
-        navigate(`/app/eleitores/${existingInCompany.uid}`);
+        navigate(`/app/pessoas/${existingInCompany.uid}`);
         return { existingVoter: existingInCompany, existsInOtherCompany: false };
       }
 

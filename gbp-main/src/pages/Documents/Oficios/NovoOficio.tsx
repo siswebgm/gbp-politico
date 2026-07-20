@@ -1112,7 +1112,7 @@ export default function NovoOficio() {
                           <span className="font-medium mr-2">Nome:</span>
                           <button
                             type="button"
-                            onClick={() => navigate(`/app/eleitores/${eleitor.uid}`)}
+                            onClick={() => navigate(`/app/pessoas/${eleitor.uid}`)}
                             className="text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 hover:underline focus:outline-none"
                           >
                             {eleitor.nome}
@@ -1295,7 +1295,7 @@ export default function NovoOficio() {
                 type="button"
                 onClick={() => {
                   setShowCadastroModal(false);
-                  navigate('/app/eleitores/novo', { state: { cpf: cpfNaoEncontrado } });
+                  navigate('/app/pessoas/novo', { state: { cpf: cpfNaoEncontrado } });
                 }}
                 className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
               >

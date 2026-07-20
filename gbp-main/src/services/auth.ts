@@ -102,6 +102,71 @@ export const authService = {
     }
   },
 
+  async validateRecoveryContact(email: string, digits: string): Promise<void> {
+    try {
+      const { data: user, error } = await supabaseClient
+        .from('gbp_usuarios')
+        .select('uid, contato, status, tentativas_login')
+        .eq('email', email)
+        .single();
+
+      if (error || !user) {
+        throw new AuthError('Email não encontrado.');
+      }
+
+      if (user.status === 'blocked' || user.status === 'bloqueado') {
+        throw new AuthError('conta_bloqueada');
+      }
+
+      if (user.status !== 'active') {
+        throw new AuthError('conta_inativa');
+      }
+
+      const cleanDigits = digits.replace(/\D/g, '').slice(-4);
+      const userContact = String(user.contato || '').replace(/\D/g, '');
+      const last4 = userContact.slice(-4);
+
+      if (last4.length !== 4) {
+        throw new AuthError('Não foi possível validar o contato. Entre em contato com o administrador.');
+      }
+
+      if (last4 !== cleanDigits) {
+        const currentAttempts = (user.tentativas_login || 0) + 1;
+        const updates: { tentativas_login: number; status?: string } = {
+          tentativas_login: currentAttempts,
+        };
+
+        if (currentAttempts >= 3) {
+          updates.status = 'blocked';
+        }
+
+        await supabaseClient
+          .from('gbp_usuarios')
+          .update(updates)
+          .eq('uid', user.uid);
+
+        if (currentAttempts >= 3) {
+          throw new AuthError('conta_bloqueada');
+        }
+
+        const remaining = 3 - currentAttempts;
+        throw new AuthError(
+          `Código incorreto. ${remaining} tentativa${remaining === 1 ? '' : 's'} restante${remaining === 1 ? '' : 's'} antes do bloqueio.`
+        );
+      }
+
+      // Contato correto — zera tentativas
+      await supabaseClient
+        .from('gbp_usuarios')
+        .update({ tentativas_login: 0 })
+        .eq('uid', user.uid);
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      console.error('Erro na validação de recuperação:', error);
+      throw new AuthError('Erro ao validar contato. Tente novamente.');
+    }
+  },
+
   async updateLastAccess(userId: string): Promise<void> {
     try {
       const { error } = await supabaseClient

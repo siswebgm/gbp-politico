@@ -18,6 +18,7 @@ export interface Eleitor {
   empresa_uid: string;
   created_at: string | null;
   indicado: string | null;
+  indicado_uid?: string | null;
   uf: string | null;
   categoria: string | null;
   gbp_atendimentos: string | null;
@@ -88,4 +89,7 @@ export interface EleitorFilters {
   cpf?: string;
   mes_nascimento?: string;
   periodo?: 'today' | '7days' | '30days' | '60days' | '90days' | 'all' | '';
+  dateFrom?: string;
+  dateTo?: string;
+  groupBy?: 'categoria_uid' | 'bairro' | 'cidade' | 'genero' | 'indicado_uid' | 'usuario_uid';
 }

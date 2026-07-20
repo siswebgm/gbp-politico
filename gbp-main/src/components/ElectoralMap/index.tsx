@@ -9,7 +9,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import 'leaflet.heat';
-import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users, Camera, MoreVertical, Download } from 'lucide-react';
+import { Search, Maximize2, Minimize2, X, MapPin, Phone, User, Building2, Building, LandPlot, BarChart2, Users, Camera, MoreVertical, Download, Layers } from 'lucide-react';
 import debounce from 'lodash/debounce';
 import { supabaseClient } from '../../lib/supabase';
 import { useCompanyStore } from '../../store/useCompanyStore';
@@ -66,6 +66,7 @@ interface Voter {
   regiao_bairro?: string;
   quantidade_adultos_residencia?: string;
   created_at?: string;
+  foto_url?: string | null;
   // Atendimentos relacionados
   atendimentos?: Array<{
     uid: string;
@@ -307,11 +308,14 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
   const [selectedStatusDemanda, setSelectedStatusDemanda] = useState<Set<string>>(new Set());
   const [cityGeoJson, setCityGeoJson] = useState<{ cityName: string, geojson: any } | null>(null);
   const [voterViewMode, setVoterViewMode] = useState<'pinos' | 'densidade'>('pinos');
+  const [showLayersPanel, setShowLayersPanel] = useState(true);
   const [mapStats, setMapStats] = useState<MapStats>({
     totalEleitores: 0,
     bairros: { total: 0, maisPopuloso: { nome: '', quantidade: 0, percentual: 0 } },
     cidades: { total: 0, maisPopulosa: { nome: '', quantidade: 0, percentual: 0 } }
   });
+  const [mapFotoModalOpen, setMapFotoModalOpen] = useState(false);
+  const [mapFotoModalData, setMapFotoModalData] = useState<{url: string; name: string} | null>(null);
 
   // Referência para os layers
   const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1162,7 +1166,10 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
         <div class="p-1 min-w-[280px]">
           <div class="bg-white rounded-lg shadow-lg">
             <div class="p-4">
-              <h3 class="text-xl font-bold text-gray-800 mb-3">${voter.name}</h3>
+              <div class="flex items-center gap-3 mb-3">
+                ${voter.foto_url ? `<img src="${voter.foto_url}" alt="Foto de ${voter.name}" class="w-10 h-10 rounded-lg object-cover shadow-sm border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" data-photo-url="${voter.foto_url}" data-photo-name="${voter.name}" />` : `<div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100"><span class="text-blue-500 text-xl">${voter.name.charAt(0).toUpperCase()}</span></div>`}
+                <h3 class="text-xl font-bold text-gray-800">${voter.name}</h3>
+              </div>
               <div class="text-sm text-gray-600 space-y-2 mb-4">
                 <div>
                   <p class="font-semibold text-gray-700">Endereço:</p>
@@ -1196,7 +1203,7 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
                     <span class="text-xs mt-1">WhatsApp</span>
                   </a>
                 ` : ''}
-                <a href="/app/eleitores/${voter.uid}" 
+                <a href="/app/pessoas/${voter.uid}" 
                    title="Ver Eleitor"
                    class="flex flex-col items-center text-blue-600 hover:text-blue-700 transition-colors duration-200">
                   <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1226,6 +1233,20 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
         className: 'rounded-lg shadow-lg',
         maxWidth: 300,
         minWidth: 250
+      });
+
+      marker.on('popupopen', () => {
+        const img = marker.getPopup()?.getElement()?.querySelector('img[data-photo-url]');
+        if (img) {
+          img.addEventListener('click', () => {
+            const url = img.getAttribute('data-photo-url');
+            const name = img.getAttribute('data-photo-name');
+            if (url) {
+              setMapFotoModalData({ url, name: name || '' });
+              setMapFotoModalOpen(true);
+            }
+          });
+        }
       });
 
       activeCluster.addLayer(marker);
@@ -3509,14 +3530,35 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
         </div>
       )}
 
+      {/* Botão flutuante para abrir painel de camadas (quando fechado) */}
+      {!showLayersPanel && (
+        <button
+          onClick={() => setShowLayersPanel(true)}
+          className="absolute left-2 bottom-36 z-[999] bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          title="Abrir painel de camadas"
+        >
+          <Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        </button>
+      )}
+
       {/* Painel de Camadas Flutuante */}
+      {showLayersPanel && (
       <div className="absolute left-2 bottom-36 z-[999] w-60 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3.5 flex flex-col gap-2">
-        <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
-          <svg className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-          Camadas
-        </h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <svg className="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Camadas
+          </h3>
+          <button
+            onClick={() => setShowLayersPanel(false)}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Fechar painel de camadas"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
         {/* Toggle Visualização Pinos / Densidade */}
         <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden mb-1">
@@ -3713,6 +3755,7 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
           </label>
         </div>
       </div>
+      )}
 
       {/* Estatísticas Discretas */}
       <div className="absolute left-2 bottom-16 z-[999] flex gap-2">
@@ -3807,6 +3850,43 @@ export default function MapComponent({ voters, demandas = [] }: MapComponentProp
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de foto em tela cheia */}
+      {mapFotoModalOpen && mapFotoModalData && (
+        <div 
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => {
+            setMapFotoModalOpen(false);
+            setMapFotoModalData(null);
+          }}
+        >
+          <button
+            onClick={() => {
+              setMapFotoModalOpen(false);
+              setMapFotoModalData(null);
+            }}
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 p-2 rounded-full transition-colors"
+            aria-label="Fechar"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div 
+            className="relative max-w-full max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={mapFotoModalData.url}
+              alt={mapFotoModalData.name ? `Foto de ${mapFotoModalData.name}` : 'Foto'}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            />
+            {mapFotoModalData.name && (
+              <p className="text-center text-white/90 mt-3 text-sm font-medium">
+                {mapFotoModalData.name}
+              </p>
+            )}
           </div>
         </div>
       )}

@@ -12,7 +12,7 @@ export function AttendanceForm() {
 
   const handleBack = () => {
     if (eleitorId) {
-      navigate(`/app/eleitores/${eleitorId}`);
+      navigate(`/app/pessoas/${eleitorId}`);
     } else {
       navigate('/app/atendimentos');
     }

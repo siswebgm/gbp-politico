@@ -21,7 +21,9 @@ import {
   Folder,
   Copy,
   Check,
-  Download
+  Download,
+  Pencil,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +32,7 @@ import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton';
 import QRCode from 'qrcode.react';
 import { demandasRuasService, type DemandaRua } from '@/services/demandasRuasService';
+import { supabaseClient } from '@/lib/supabase';
 import { indicadoService, type Indicado } from '@/services/indicadoService';
 import { userService } from '@/services/users';
 import { useCompanyStore } from '@/store/useCompanyStore';
@@ -39,6 +42,33 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings } from 'lucide-react';
+
+// ─── Helpers de normalização de localização ─────────────────────────────────
+const ROMANOS_MAP: [RegExp, string][] = [
+  [/\bXIV\b/gi, '14'], [/\bXIII\b/gi, '13'], [/\bXII\b/gi, '12'],
+  [/\bXI\b/gi, '11'],  [/\bX\b/gi, '10'],    [/\bIX\b/gi, '9'],
+  [/\bVIII\b/gi, '8'], [/\bVII\b/gi, '7'],   [/\bVI\b/gi, '6'],
+  [/\bIV\b/gi, '4'],   [/\bIII\b/gi, '3'],   [/\bII\b/gi, '2'],
+];
+
+function normalizarLocal(str: string): string {
+  if (!str) return '';
+  let s = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  // Normaliza ausência de espaço entre letra e número: "curado2" → "curado 2"
+  s = s.replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2');
+  // Converte algarismos romanos para arábicos
+  for (const [pattern, replacement] of ROMANOS_MAP) {
+    s = s.replace(pattern, replacement);
+  }
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function canonico(raws: string[]): string {
+  const freq: Record<string, number> = {};
+  for (const v of raws) freq[v] = (freq[v] || 0) + 1;
+  return Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function DemandasRuas() {
   const navigate = useNavigate();
@@ -80,6 +110,9 @@ export function DemandasRuas() {
     return user?.nivel_acesso?.toLowerCase() === 'admin' ? 'todos' : 'minhas_atribuicoes';
   });
   const [activeTab, setActiveTab] = useState<'link' | 'qrcode'>('link');
+  const [showRenomearModal, setShowRenomearModal] = useState(false);
+  const [pastasEditaveis, setPastasEditaveis] = useState<Record<string, string>>({});
+  const [renomeando, setRenomeando] = useState(false);
 
   // Função para lidar com mudança no filtro de atribuição
   const handleAtribuicaoFilterChange = (value: string) => {
@@ -171,16 +204,22 @@ export function DemandasRuas() {
   // Extrair opções únicas para os filtros
   const { tiposDeDemanda, cidades } = React.useMemo(() => {
     const tipos = new Set<string>();
-    const cidadesSet = new Set<string>();
+    const cidadesMap = new Map<string, string[]>();
 
     demandas.forEach(d => {
       if (d.tipo_de_demanda) tipos.add(d.tipo_de_demanda);
-      if (d.cidade) cidadesSet.add(d.cidade);
+      if (d.cidade) {
+        const key = normalizarLocal(d.cidade);
+        if (!cidadesMap.has(key)) cidadesMap.set(key, []);
+        cidadesMap.get(key)!.push(d.cidade);
+      }
     });
 
     return {
       tiposDeDemanda: Array.from(tipos).sort(),
-      cidades: Array.from(cidadesSet).sort(),
+      cidades: Array.from(cidadesMap.entries())
+        .map(([key, raws]) => ({ key, label: canonico(raws) }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
     };
   }, [demandas]);
 
@@ -222,16 +261,22 @@ export function DemandasRuas() {
   }, [demandas, usuarios, usuarioSearchTerm]);
 
   const bairros = React.useMemo(() => {
-    const bairrosSet = new Set<string>();
-    const demandasDaCidade = cidadeFilter === 'todos' 
-      ? demandas 
-      : demandas.filter(d => d.cidade === cidadeFilter);
+    const bairrosMap = new Map<string, string[]>();
+    const demandasDaCidade = cidadeFilter === 'todos'
+      ? demandas
+      : demandas.filter(d => normalizarLocal(d.cidade || '') === cidadeFilter);
 
     demandasDaCidade.forEach(d => {
-      if (d.bairro) bairrosSet.add(d.bairro);
+      if (d.bairro) {
+        const key = normalizarLocal(d.bairro);
+        if (!bairrosMap.has(key)) bairrosMap.set(key, []);
+        bairrosMap.get(key)!.push(d.bairro);
+      }
     });
 
-    return Array.from(bairrosSet).sort();
+    return Array.from(bairrosMap.entries())
+      .map(([key, raws]) => ({ key, label: canonico(raws) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
   }, [demandas, cidadeFilter]);
 
   // Resetar filtro de bairro ao mudar a cidade
@@ -316,8 +361,8 @@ export function DemandasRuas() {
       (nivelFavoritoFilter === '0' && (!demanda.nivel_favorito || demanda.nivel_favorito === 0)) ||
       (demanda.nivel_favorito && demanda.nivel_favorito.toString() === nivelFavoritoFilter);
     const matchesTipoDemanda = tipoDemandaFilter === 'todos' || demanda.tipo_de_demanda === tipoDemandaFilter;
-    const matchesCidade = cidadeFilter === 'todos' || demanda.cidade === cidadeFilter;
-    const matchesBairro = bairroFilter === 'todos' || demanda.bairro === bairroFilter;
+    const matchesCidade = cidadeFilter === 'todos' || normalizarLocal(demanda.cidade || '') === cidadeFilter;
+    const matchesBairro = bairroFilter === 'todos' || normalizarLocal(demanda.bairro || '') === bairroFilter;
     const matchesResposta = respostaFilter === 'todos' || 
       (respostaFilter === 'respondidas' && demanda.tem_resposta_whatsapp) ||
       (respostaFilter === 'nao_respondidas' && !demanda.tem_resposta_whatsapp);
@@ -394,6 +439,62 @@ export function DemandasRuas() {
       ));
     } catch (error) {
       console.error('Erro ao atualizar nível de favorito:', error);
+    }
+  };
+
+  // Abrir modal de renomeação de pastas
+  const handleAbrirRenomear = () => {
+    const mapa: Record<string, string> = {};
+    pastasArquivo.forEach(p => { if (p) mapa[p] = p; });
+    setPastasEditaveis(mapa);
+    setShowRenomearModal(true);
+  };
+
+  // Salvar renomeações das pastas (múltiplas em paralelo)
+  const handleSalvarRenomear = async () => {
+    if (!company?.uid) return;
+    setRenomeando(true);
+    try {
+      // Filtra apenas as entradas que realmente mudaram e têm nome válido
+      const alteracoes = Object.entries(pastasEditaveis)
+        .map(([nomeAntigo, nomeNovo]) => ({ nomeAntigo, nomeNovo: nomeNovo.trim() }))
+        .filter(({ nomeAntigo, nomeNovo }) => nomeNovo && nomeNovo !== nomeAntigo);
+
+      if (alteracoes.length === 0) {
+        setShowRenomearModal(false);
+        return;
+      }
+
+      // Executa todos os updates em paralelo
+      await Promise.all(
+        alteracoes.map(({ nomeAntigo, nomeNovo }) =>
+          supabaseClient
+            .from('gbp_demandas_ruas')
+            .update({ pasta_arquivo: nomeNovo })
+            .eq('empresa_uid', company.uid)
+            .eq('pasta_arquivo', nomeAntigo)
+        )
+      );
+
+      // Atualiza o estado local imediatamente sem recarregar tudo
+      setDemandas(prev =>
+        prev.map(d => {
+          const alteracao = alteracoes.find(a => a.nomeAntigo === d.pasta_arquivo);
+          return alteracao ? { ...d, pasta_arquivo: alteracao.nomeNovo } : d;
+        })
+      );
+
+      // Corrige o filtro ativo se a pasta atual foi renomeada
+      const filtroAtualAlterado = alteracoes.find(a => a.nomeAntigo === pastaFilter);
+      if (filtroAtualAlterado) {
+        setPastaFilter(filtroAtualAlterado.nomeNovo);
+      }
+
+      setShowRenomearModal(false);
+    } catch (error) {
+      console.error('Erro ao renomear pastas:', error);
+    } finally {
+      setRenomeando(false);
     }
   };
 
@@ -729,8 +830,8 @@ export function DemandasRuas() {
                   onClick={exportarDemandas}
                   className="h-9 flex items-center bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
                 >
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
+                  <Download className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Exportar</span>
                 </Button>
                 
                 {/* Botão de Configurações - apenas para admins */}
@@ -1080,6 +1181,16 @@ export function DemandasRuas() {
                                     </div>
                                   </SelectItem>
                                 ))}
+                                <div className="px-1 pt-1 pb-0.5 border-t border-gray-100 mt-1">
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => { e.preventDefault(); handleAbrirRenomear(); }}
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                    Renomear pastas
+                                  </button>
+                                </div>
                               </>
                             )}
                           </SelectContent>
@@ -1193,12 +1304,12 @@ export function DemandasRuas() {
                     <div className="flex-1 min-w-[120px]">
                       <Select value={cidadeFilter} onValueChange={setCidadeFilter}>
                         <SelectTrigger className="w-full text-xs sm:text-sm h-9">
-                          <span className="truncate">{cidadeFilter === 'todos' ? 'Cidade' : cidadeFilter}</span>
+                          <span className="truncate">{cidadeFilter === 'todos' ? 'Cidade' : (cidades.find(c => c.key === cidadeFilter)?.label ?? cidadeFilter)}</span>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="todos">Todas as cidades</SelectItem>
-                          {cidades.map(cidade => (
-                            <SelectItem key={cidade} value={cidade}>{cidade}</SelectItem>
+                          {cidades.map(({ key, label }) => (
+                            <SelectItem key={key} value={key}>{label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1208,12 +1319,12 @@ export function DemandasRuas() {
                     <div className="flex-1 min-w-[120px]">
                       <Select value={bairroFilter} onValueChange={setBairroFilter} disabled={cidadeFilter === 'todos' && bairros.length === 0}>
                         <SelectTrigger className="w-full text-xs sm:text-sm h-9">
-                          <span className="truncate">{bairroFilter === 'todos' ? 'Bairro' : bairroFilter}</span>
+                          <span className="truncate">{bairroFilter === 'todos' ? 'Bairro' : (bairros.find(b => b.key === bairroFilter)?.label ?? bairroFilter)}</span>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="todos">Todos os bairros</SelectItem>
-                          {bairros.map(bairro => (
-                            <SelectItem key={bairro} value={bairro}>{bairro}</SelectItem>
+                          {bairros.map(({ key, label }) => (
+                            <SelectItem key={key} value={key}>{label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -2099,6 +2210,56 @@ export function DemandasRuas() {
                 onClick={handleConfirmArchive}
               >
                 {demandaToArchive?.arquivado ? 'Desarquivar' : 'Arquivar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Renomeação de Pastas */}
+      <Dialog open={showRenomearModal} onOpenChange={setShowRenomearModal}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[480px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                <Pencil className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Renomear Pastas</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Edite o nome de cada pasta e salve as alterações.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {Object.entries(pastasEditaveis).map(([nomeOriginal, nomeAtual]) => (
+                <div key={nomeOriginal} className="flex items-center gap-2">
+                  <Folder className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                  <Input
+                    value={nomeAtual}
+                    onChange={(e) => setPastasEditaveis(prev => ({ ...prev, [nomeOriginal]: e.target.value }))}
+                    className="flex-1 h-9 text-sm"
+                    placeholder={nomeOriginal}
+                  />
+                  {nomeAtual !== nomeOriginal && (
+                    <span className="text-[10px] text-blue-500 whitespace-nowrap">renomeado</span>
+                  )}
+                </div>
+              ))}
+              {Object.keys(pastasEditaveis).length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">Nenhuma pasta criada ainda.</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" className="h-9 px-5" onClick={() => setShowRenomearModal(false)} disabled={renomeando}>
+                Cancelar
+              </Button>
+              <Button
+                className="h-9 px-5 bg-blue-600 hover:bg-blue-700"
+                onClick={handleSalvarRenomear}
+                disabled={renomeando}
+              >
+                {renomeando ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
               </Button>
             </div>
           </div>

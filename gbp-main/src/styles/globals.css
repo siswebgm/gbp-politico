@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+
+/* Ocultar mensagem de erro do reCAPTCHA */
+.rc-anchor-error-msg {
+  display: none !important;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -72,15 +78,8 @@
   * {
     @apply border-border;
   }
-  html {
-    -webkit-text-size-adjust: 100%;
-  }
   body {
     @apply bg-background text-foreground;
-  }
-  input, textarea, select {
-    font-size: 16px;
-    touch-action: manipulation;
   }
 }
 

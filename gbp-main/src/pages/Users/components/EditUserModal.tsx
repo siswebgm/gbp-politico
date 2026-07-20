@@ -4,6 +4,16 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '../../../components/ui/alert-dialog';
 import { userService } from '../../../services/users';
 import { toast } from 'react-hot-toast';
 import { 
@@ -16,9 +26,24 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
-  Clock
+  Clock,
+  ShieldOff,
+  KeyRound,
+  Copy,
+  Check
 } from 'lucide-react';
+import { supabaseClient } from '../../../lib/supabase';
 import { cn } from '../../../lib/utils';
+
+// Gera uma senha aleatória segura (8 caracteres: letras maiúsculas, minúsculas e números)
+function generateRandomPassword(length = 8): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 interface EditUserModalProps {
   isOpen: boolean;
@@ -31,11 +56,16 @@ interface EditUserModalProps {
     contato: string | null;
     nivel_acesso: string | null;
     status: string | null;
-  };
+    tentativas_login?: number;
+  } | null;
 }
 
 export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModalProps) {
   const [loading, setLoading] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -72,7 +102,9 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!user) return;
+
     // Validação dos campos obrigatórios
     if (!formData.nome.trim()) {
       toast.error('O campo Nome é obrigatório');
@@ -110,8 +142,8 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
         nome: cleanedData.nome.trim(),
         email: cleanedData.email.trim().toLowerCase(),
         contato: cleanedData.contato,
-        nivel_acesso: cleanedData.nivel_acesso,
-        status: cleanedData.status,
+        nivel_acesso: cleanedData.nivel_acesso as any,
+        status: cleanedData.status as any,
       });
 
       toast.success('Usuário atualizado com sucesso!');
@@ -123,6 +155,45 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmUnlock = async () => {
+    if (!user) return;
+    setUnlocking(true);
+    try {
+      const newPassword = generateRandomPassword();
+
+      await supabaseClient
+        .from('gbp_usuarios')
+        .update({ status: 'active', tentativas_login: 0, senha: newPassword })
+        .eq('uid', user.uid);
+
+      setGeneratedPassword(newPassword);
+      setShowUnlockConfirm(false);
+      toast.success('Conta desbloqueada! Nova senha gerada com sucesso.');
+    } catch (err) {
+      toast.error('Erro ao desbloquear. Tente novamente.');
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handleCopyPassword = async () => {
+    if (!generatedPassword) return;
+    try {
+      await navigator.clipboard.writeText(generatedPassword);
+      setCopied(true);
+      toast.success('Senha copiada!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar. Copie manualmente.');
+    }
+  };
+
+  const handleClosePasswordReveal = () => {
+    setGeneratedPassword(null);
+    onSuccess();
+    onClose();
   };
 
   const getStatusColor = (status: string) => {
@@ -178,6 +249,10 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
 
   const statusInfo = getStatusInfo(formData.status);
   const StatusIcon = statusInfo.icon;
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -376,6 +451,45 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
             </div>
           </div>
 
+          {/* Aviso de tentativas — aparece quando o usuário já errou a senha mas ainda não foi bloqueado */}
+          {formData.status === 'active' && (user.tentativas_login || 0) > 0 && (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+              <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-xs font-semibold">
+                  {user.tentativas_login} de 3 tentativas de senha incorreta registradas
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Área de desbloqueio — só aparece quando a conta está bloqueada */}
+          {(formData.status === 'bloqueado' || formData.status === 'blocked') && (
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                <ShieldOff className="h-4 w-4" />
+                <span className="text-sm font-semibold">
+                  Conta bloqueada{(user.tentativas_login || 0) >= 3 ? ' após 3 tentativas de senha incorreta' : ' por um administrador'}
+                </span>
+              </div>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                Clique em <strong>Desbloquear & Redefinir Senha</strong> para enviar uma nova senha ao usuário e liberar o acesso.
+              </p>
+              <button
+                type="button"
+                disabled={unlocking}
+                onClick={() => setShowUnlockConfirm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+              >
+                {unlocking ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Desbloqueando...</>
+                ) : (
+                  <><KeyRound className="h-4 w-4" /> Desbloquear &amp; Redefinir Senha</>
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
             <div className="flex justify-end gap-3">
               <Button
@@ -405,6 +519,69 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
           </div>
         </form>
       </DialogContent>
+
+      {/* Confirmação antes de gerar nova senha */}
+      <AlertDialog open={showUnlockConfirm} onOpenChange={setShowUnlockConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <ShieldOff className="h-5 w-5" />
+              Confirmar desbloqueio e nova senha
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso vai gerar uma <strong>nova senha aleatória</strong> para{' '}
+              <strong>{user?.nome || user?.email}</strong>, substituindo a senha atual, e desbloquear a conta imediatamente.
+              <br /><br />
+              A senha atual deixará de funcionar. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlocking}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={unlocking}
+              onClick={handleConfirmUnlock}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {unlocking ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin inline" /> Gerando...</>
+              ) : (
+                'Sim, gerar nova senha'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Exibição da senha gerada para o admin copiar e passar ao usuário */}
+      <Dialog open={!!generatedPassword} onOpenChange={(open) => !open && handleClosePasswordReveal()}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="h-6 w-6" />
+              <DialogTitle>Nova senha gerada</DialogTitle>
+            </div>
+            <DialogDescription>
+              Copie a senha abaixo e envie ao usuário por um canal seguro. Ela não será exibida novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+            <code className="flex-1 text-lg font-mono font-bold tracking-wider text-gray-900 dark:text-white text-center select-all">
+              {generatedPassword}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopyPassword}
+              className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+              title="Copiar senha"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+          <Button onClick={handleClosePasswordReveal} className="w-full h-11 mt-2">
+            Concluído
+          </Button>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

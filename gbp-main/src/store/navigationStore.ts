@@ -44,19 +44,19 @@ export const useNavigationStore = create<NavigationState>()((set, get) => ({
     },
     {
       id: 'eleitores',
-      name: 'Eleitores',
-      path: '/app/eleitores',
+      name: 'Pessoas',
+      path: '/app/pessoas',
       icon: 'Users',
       subItems: [
         {
           id: 'eleitores-lista',
-          name: 'Lista de Eleitores',
-          path: '/app/eleitores',
+          name: 'Lista de Pessoas',
+          path: '/app/pessoas',
         },
         {
           id: 'eleitores-novo',
-          name: 'Novo Eleitor',
-          path: '/app/eleitores/novo',
+          name: 'Nova Pessoa',
+          path: '/app/pessoas/novo',
         }
       ]
     },

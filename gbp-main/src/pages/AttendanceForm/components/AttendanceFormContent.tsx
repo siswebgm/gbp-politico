@@ -3,13 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Clock, Hourglass, CheckCircle, XCircle, FileText, Tag, Check, User, Users, Calendar as CalendarIcon, HelpCircle } from 'lucide-react';
-import { Calendar } from '../../../components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
-import { Button } from '../../../components/ui/button';
-import { cn } from '../../../lib/utils';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Clock, Hourglass, CheckCircle, FileText, Tag, Check, User, Users } from 'lucide-react';
 import { supabaseClient } from '../../../lib/supabase';
 import { AlertCircle } from 'lucide-react';
 import { useCompanyStore } from '../../../store/useCompanyStore';
@@ -19,6 +13,7 @@ import { useIndicados } from '../../../hooks/useIndicados';
 import { useToast } from "../../../components/ui/use-toast";
 import { useCategories } from '../../../hooks/useCategories';
 import { useCategoryTypes } from '../../../hooks/useCategoryTypes';
+import { FileUpload } from '../../../components/ui/file-upload';
 
 interface AttendanceFormData {
   categoria_tipo_uid: string;
@@ -26,7 +21,6 @@ interface AttendanceFormData {
   descricao: string;
   status: string;
   indicado: string | undefined;
-  data_expiracao?: Date;
 }
 
 const attendanceSchema = z.object({
@@ -35,7 +29,6 @@ const attendanceSchema = z.object({
   descricao: z.string().min(1, 'Descrição é obrigatória'),
   status: z.string().min(1, 'Status é obrigatório'),
   indicado: z.string().optional(),
-  data_expiracao: z.date().optional(),
 });
 
 // Status options com cores e ícones
@@ -57,12 +50,6 @@ const statusOptions = [
     label: 'Concluído', 
     color: 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-900/30 dark:text-green-500',
     icon: <CheckCircle className="w-4 h-4" />
-  },
-  { 
-    value: 'Cancelado', 
-    label: 'Cancelado', 
-    color: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-900/30 dark:text-red-500',
-    icon: <XCircle className="w-4 h-4" />
   }
 ];
 
@@ -80,6 +67,7 @@ export function AttendanceFormContent() {
   const [filteredCategories, setFilteredCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [anexos, setAnexos] = useState<File[]>([]);
   const { toast } = useToast();
 
   const {
@@ -130,6 +118,46 @@ export function AttendanceFormContent() {
       console.log('Empresa atual:', company.uid);
       console.log('Último número encontrado para esta empresa:', lastNumber);
       console.log('Próximo número será:', nextNumber);
+
+      // Upload dos anexos (máximo 5) se houver
+      const anexosUrls: string[] = [];
+      if (anexos && anexos.length > 0) {
+        const { data: empresaData, error: storageError } = await supabaseClient
+          .from('gbp_empresas')
+          .select('storage')
+          .eq('uid', company.uid)
+          .single();
+
+        if (storageError) {
+          console.error('Erro ao buscar storage:', storageError);
+          throw storageError;
+        }
+
+        const storageBucket = empresaData?.storage || 'atendimentos';
+
+        for (const anexo of anexos) {
+          const fileExt = anexo.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `atendimentos/${company.uid}/${fileName}`;
+
+          const { error: uploadError } = await supabaseClient
+            .storage
+            .from(storageBucket)
+            .upload(filePath, anexo);
+
+          if (uploadError) {
+            console.error('Erro no upload:', uploadError);
+            throw uploadError;
+          }
+
+          const { data: { publicUrl } } = supabaseClient
+            .storage
+            .from(storageBucket)
+            .getPublicUrl(filePath);
+
+          anexosUrls.push(publicUrl);
+        }
+      }
       
       // Prepara dados do atendimento
       const newAttendance = {
@@ -156,8 +184,8 @@ export function AttendanceFormContent() {
         eleitor: selectedVoter?.nome || null,
         cpf: selectedVoter?.cpf || null,
         numero_do_sus: selectedVoter?.numero_do_sus || null,
-        // Data de expiração
-        "data_expiração": data.data_expiracao ? data.data_expiracao : null
+        // Anexos
+        anexos: anexosUrls.length > 0 ? anexosUrls : null
       };
 
       // Verificar se já não existe um atendimento com este número para esta empresa
@@ -205,7 +233,7 @@ export function AttendanceFormContent() {
 
       toast({
         title: "✨ Atendimento registrado com sucesso!",
-        description: `O atendimento #${createdAttendance.numero} foi criado e o eleitor será notificado.`,
+        description: `O atendimento #${createdAttendance.numero} foi criado e a pessoa será notificada.`,
         variant: "success",
         duration: 5000,
       });
@@ -245,7 +273,8 @@ export function AttendanceFormContent() {
               cep,
               uf,
               logradouro,
-              numero_do_sus
+              numero_do_sus,
+              foto_url
             `)
             .eq('uid', eleitorUid)
             .eq('empresa_uid', company.uid)
@@ -262,7 +291,7 @@ export function AttendanceFormContent() {
             setShowVoterSearch(false);
           } else {
             console.log('Eleitor não encontrado');
-            setError('Eleitor não encontrado');
+            setError('Pessoa não encontrada');
           }
         } catch (error: any) {
           console.error('Erro ao buscar eleitor:', error);
@@ -299,19 +328,29 @@ export function AttendanceFormContent() {
       <div className="p-3 pb-20 sm:pb-4 space-y-4">
         {/* Grupo de campos superior */}
         <div className="grid grid-cols-1 gap-3 sm:gap-4">
-          {/* Eleitor */}
+          {/* Pessoa */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Eleitor
+                Pessoa
               </label>
-              <span className="text-xs text-gray-500 dark:text-gray-400">Selecionado</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Selecionada</span>
             </div>
             <div className="flex items-center p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-100 dark:border-primary-800">
-              <User className="h-5 w-5 text-primary-500 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <span className="text-sm text-gray-900 dark:text-white font-medium">
-                  {selectedVoter ? selectedVoter.nome : 'Nenhum eleitor selecionado'}
+              {selectedVoter?.foto_url ? (
+                <img
+                  src={selectedVoter.foto_url}
+                  alt={`Foto de ${selectedVoter.nome || 'pessoa'}`}
+                  className="h-12 w-12 rounded-xl object-cover mr-3 flex-shrink-0 shadow-sm ring-1 ring-primary-200 dark:ring-primary-700"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-xl bg-white/70 dark:bg-gray-800/70 flex items-center justify-center mr-3 flex-shrink-0">
+                  <User className="h-5 w-5 text-primary-500" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-gray-900 dark:text-white font-medium break-words">
+                  {selectedVoter ? selectedVoter.nome : 'Nenhuma pessoa selecionada'}
                 </span>
                 {selectedVoter && (
                   <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -418,79 +457,6 @@ export function AttendanceFormContent() {
           </div>
         </div>
 
-        {/* Data de Expiração */}
-        <div className="col-span-full">
-          <div className="flex items-center gap-2 mb-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Data de Expiração
-            </label>
-            <div className="group relative">
-              <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg">
-                Ao selecionar uma data de expiração, o sistema notificará sobre este atendimento no dia especificado.
-              </div>
-            </div>
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  'w-full pl-3 text-left font-normal',
-                  !watch('data_expiracao') && 'text-muted-foreground'
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {watch('data_expiracao') ? (
-                  format(watch('data_expiracao') as Date, 'PPP', { locale: ptBR })
-                ) : (
-                  <span>Selecione uma data</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
-              <Calendar
-                mode="single"
-                selected={watch('data_expiracao')}
-                onSelect={(date) => {
-                  setValue('data_expiracao', date);
-                  // Fecha o popover após selecionar a data
-                  const popoverTrigger = document.querySelector('[aria-expanded="true"]');
-                  if (popoverTrigger instanceof HTMLElement) {
-                    popoverTrigger.click();
-                  }
-                }}
-                fromDate={new Date(new Date().setHours(0, 0, 0, 0))}
-                disabled={(date) => date < new Date()}
-                initialFocus
-                locale={ptBR}
-                weekStartsOn={1}
-                className="rounded-md border-0"
-                classNames={{
-                  head_cell: 'text-gray-500 font-medium text-xs py-2',
-                  cell: cn(
-                    'text-center text-sm p-0 relative focus-within:relative focus-within:z-20',
-                    'first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md',
-                    '[&:has([aria-selected])]:bg-primary-100/10'
-                  ),
-                  day: cn(
-                    'h-9 w-9 p-0 font-normal rounded-full transition-colors',
-                    'aria-selected:opacity-100 hover:bg-primary-100',
-                    'focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2'
-                  ),
-                  day_selected: 'bg-primary-600 text-white hover:bg-primary-600 hover:text-white focus:bg-primary-600 focus:text-white',
-                  day_today: 'border border-primary-500 text-primary-600 font-medium',
-                  day_outside: 'text-gray-200 opacity-30 cursor-default',
-                  day_disabled: 'text-gray-200 opacity-30 cursor-not-allowed hover:bg-transparent pointer-events-none select-none',
-                  day_range_middle: 'aria-selected:bg-primary-100',
-                  day_hidden: 'invisible',
-                  caption: 'text-sm font-semibold text-gray-800 dark:text-gray-200'
-                }}
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-
         {/* Descrição */}
         <div className="col-span-full">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -517,14 +483,14 @@ export function AttendanceFormContent() {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Status
           </label>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {statusOptions.map((option) => {
               const isSelected = watch('status') === option.value;
               return (
                 <label
                   key={option.value}
                   className={`
-                    relative flex items-center gap-2 p-2.5 sm:p-3 border rounded-lg cursor-pointer transition-all
+                    relative flex items-center justify-center gap-2 p-2.5 sm:p-3 border rounded-lg cursor-pointer transition-all
                     ${option.color}
                     ${isSelected ? 'ring-2 ring-offset-2 ring-primary-500 dark:ring-offset-gray-800' : 'opacity-70 hover:opacity-100'}
                   `}
@@ -546,6 +512,21 @@ export function AttendanceFormContent() {
               );
             })}
           </div>
+        </div>
+
+        {/* Anexos */}
+        <div className="col-span-full">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Anexos (PDF, Imagens)
+          </label>
+          <FileUpload
+            value={anexos}
+            onChange={setAnexos}
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            multiple={true}
+            maxFiles={5}
+            maxSize={50 * 1024 * 1024} // 50MB
+          />
         </div>
 
         {/* Botões */}

@@ -60,9 +60,10 @@ if (!rootElement) {
 }
 
 ReactDOM.createRoot(rootElement as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  // StrictMode removido: em desenvolvimento ele monta/desmonta/remonta componentes,
+  // o que faz o widget do reCAPTCHA (react-google-recaptcha) renderizar duas vezes
+  // sobrepostas no mesmo container, causando o bug visual de texto duplicado.
+  <App />
 );
 
 // Registra o service worker

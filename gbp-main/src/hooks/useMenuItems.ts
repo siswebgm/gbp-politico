@@ -47,7 +47,7 @@ export function useMenuItems() {
       {
         name: 'Eleitores',
         icon: Users,
-        path: '/app/eleitores',
+        path: '/app/pessoas',
         permission: 'eleitores.view',
         adminOnly: false
       },

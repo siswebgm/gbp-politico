@@ -388,7 +388,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atendimento.eleitor_uid) {
-                              navigate(`/app/eleitores/${atendimento.eleitor_uid}`);
+                              navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
                             }
                           }}
                           className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer"

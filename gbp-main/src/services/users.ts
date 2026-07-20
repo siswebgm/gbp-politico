@@ -6,11 +6,12 @@ export interface User {
   email: string | null;
   contato: string | null;
   nivel_acesso: 'admin' | 'coordenador' | 'analista' | 'colaborador' | 'visitante';
-  status: 'active' | 'pending' | 'blocked';
+  status: 'active' | 'pending' | 'blocked' | 'bloqueado';
   ultimo_acesso: string | null;
   empresa_uid: string;
   foto: string | null;
   adm_empresa?: boolean;
+  tentativas_login?: number;
 }
 
 export interface RegistrationToken {
@@ -95,6 +96,7 @@ export const userService = {
           ultimo_acesso,
           created_at,
           status,
+          tentativas_login,
           foto,
           adm_empresa
         `)

@@ -357,40 +357,39 @@ const ListaAnualOficios: React.FC = () => {
 
   useEffect(() => {
     const fetchTiposDemanda = async () => {
-      if (!company?.uid) return;
-      
+      if (!company?.uid || !ano) return;
+
       try {
-        const { data, error } = await supabaseClient
+        const tiposSet = new Set<string>();
+
+        // 1. Tipos usados em ofícios do ano
+        const { data: oficiosData, error: oficiosError } = await supabaseClient
+          .from('gbp_oficios')
+          .select('tipo_de_demanda')
+          .eq('empresa_uid', company.uid)
+          .filter('numero_oficio', 'ilike', `%/${ano}`)
+          .not('tipo_de_demanda', 'is', null);
+
+        if (oficiosError) {
+          console.error('Erro ao carregar tipos de ofícios:', oficiosError);
+        } else if (oficiosData) {
+          oficiosData.forEach(d => { if (d.tipo_de_demanda) tiposSet.add(d.tipo_de_demanda); });
+        }
+
+        // 2. Tipos cadastrados em gbp_demanda_tipo (inclui os criados via modal)
+        const { data: configData, error: configError } = await supabaseClient
           .from('gbp_demanda_tipo')
           .select('nome_tipo')
-          .eq('empresa_uid', company.uid);
+          .eq('empresa_uid', company.uid)
+          .single();
 
-        if (error) {
-          console.error('Erro ao carregar tipos de demanda:', error);
-          return;
+        if (configError && configError.code !== 'PGRST116') {
+          console.error('Erro ao carregar tipos cadastrados:', configError);
+        } else if (configData?.nome_tipo && Array.isArray(configData.nome_tipo)) {
+          configData.nome_tipo.forEach((t: string) => { if (t) tiposSet.add(t); });
         }
 
-        if (data && data.length > 0) {
-          const tiposSet = new Set<string>();
-          
-          // Processa todos os itens de nome_tipo de todos os registros
-          data.forEach(record => {
-            if (record.nome_tipo && Array.isArray(record.nome_tipo)) {
-              record.nome_tipo.forEach((item: string) => {
-                if (item && item.trim() !== '') {
-                  // Remove espaços em branco e adiciona ao conjunto
-                  tiposSet.add(item.trim());
-                }
-              });
-            }
-          });
-
-          // Converte para array e ordena alfabeticamente
-          const tiposOrdenados = Array.from(tiposSet).sort();
-          setTiposDemanda(tiposOrdenados);
-        } else {
-          setTiposDemanda([]);
-        }
+        setTiposDemanda(Array.from(tiposSet).sort());
       } catch (error) {
         console.error('Erro ao buscar tipos de demanda:', error);
         setTiposDemanda([]);
@@ -398,7 +397,7 @@ const ListaAnualOficios: React.FC = () => {
     };
 
     fetchTiposDemanda();
-  }, [company?.uid]);
+  }, [company?.uid, ano]);
 
   const handleAddNovoTipoDemanda = async () => {
     if (!novoTipoDemanda.trim()) {
@@ -1103,6 +1102,9 @@ const ListaAnualOficios: React.FC = () => {
                       })}
                     </optgroup>
                   ))}
+                  {tiposDemanda.filter(t => !t.includes('::')).map(tipo => (
+                    <option key={tipo} value={tipo}>{tipo}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1160,6 +1162,9 @@ const ListaAnualOficios: React.FC = () => {
                         );
                       })}
                     </optgroup>
+                  ))}
+                  {tiposDemanda.filter(t => !t.includes('::')).map(tipo => (
+                    <option key={tipo} value={tipo}>{tipo}</option>
                   ))}
                 </select>
               </div>
@@ -1477,7 +1482,7 @@ const ListaAnualOficios: React.FC = () => {
                               value=""
                               className="font-medium bg-slate-50 text-slate-800 py-2 border-t border-slate-100 first:border-t-0 cursor-default"
                             >
-                              {getGroupIcon(mainType)} {mainType}
+                              {mainType}
                             </option>
                             {subTypes.map(subType => (
                               <option 
@@ -1490,6 +1495,9 @@ const ListaAnualOficios: React.FC = () => {
                               </option>
                             ))}
                           </Fragment>
+                        ))}
+                        {tiposDemanda.filter(t => !t.includes('::')).map(tipo => (
+                          <option key={tipo} value={tipo}>{tipo}</option>
                         ))}
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -1659,7 +1667,7 @@ const ListaAnualOficios: React.FC = () => {
                               value=""
                               className="font-medium bg-slate-50 text-slate-800 py-2 border-t border-slate-100 first:border-t-0 cursor-default"
                             >
-                              {getGroupIcon(mainType)} {mainType}
+                              {mainType}
                             </option>
                             {subTypes.map(subType => (
                               <option 
