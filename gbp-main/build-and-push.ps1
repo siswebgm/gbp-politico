@@ -21,7 +21,7 @@ if (Test-Path .env) {
 
 # Configurações
 $IMAGE_NAME = "siswebgm/gbp-politico"
-$TAG = "2.9.31"
+$TAG = "2.9.33"
 $FULL_IMAGE_NAME = "${IMAGE_NAME}:${TAG}"
 
 Write-Host "`nConstruindo imagem Docker..." -ForegroundColor Cyan
