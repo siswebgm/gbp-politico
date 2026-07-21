@@ -42,6 +42,15 @@ const MONTH_NAMES = [
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
 ];
 
+const MONTH_NAMES_NORM = MONTH_NAMES.map((m) => normalize(m));
+
+const extractMonthNumber = (norm: string): number | undefined => {
+  for (let i = 0; i < MONTH_NAMES_NORM.length; i++) {
+    if (new RegExp(`\\b${MONTH_NAMES_NORM[i]}\\b`).test(norm)) return i + 1;
+  }
+  return undefined;
+};
+
 const startOfDay = (date: Date) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -56,11 +65,21 @@ const startOfWeek = (date: Date) => {
   return d;
 };
 
-const getBirthdayRange = (text: string): { from: Date; to: Date; label: string } | undefined => {
+const getBirthdayRange = (text: string, allowMonthOnly = false): { from: Date; to: Date; label: string } | undefined => {
   const norm = normalize(text);
-  if (!/\b(aniversariantes|aniversariante|aniversarios|aniversario|niver|niversario)\b/.test(norm)) return undefined;
+  const hasKeyword = /\b(aniversariantes|aniversariante|aniversarios|aniversario|niver|niversario)\b/.test(norm);
+  const explicitMonth = extractMonthNumber(norm);
+
+  if (!hasKeyword && !(allowMonthOnly && explicitMonth)) return undefined;
 
   const now = new Date();
+
+  if (explicitMonth) {
+    const from = new Date(2000, explicitMonth - 1, 1);
+    const to = new Date(2000, explicitMonth, 1);
+    const label = `${MONTH_NAMES[explicitMonth - 1]} de ${now.getFullYear()}`;
+    return { from, to, label };
+  }
 
   if (norm.includes('hoje')) {
     const from = startOfDay(now);
@@ -134,7 +153,8 @@ export const pessoasModule: AssistantModule = {
 
   parse(text, context) {
     const norm = normalize(text);
-    const birthdayRange = getBirthdayRange(text);
+    const isBirthdayContinuation = !!context.previousFilters?.birthdayLabel;
+    const birthdayRange = getBirthdayRange(text, isBirthdayContinuation);
     const { dateFrom, dateTo, label } = getDateRange(text);
     const groupBy = getGroupBy(text);
 

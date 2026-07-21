@@ -18,6 +18,7 @@ export interface AssistantContext {
   bairros: string[];
   statusWpp: string;
   customIntents: AssistantIntent[];
+  previousFilters?: Record<string, any>;
 }
 
 export interface AssistantQuery {

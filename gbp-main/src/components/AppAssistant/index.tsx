@@ -113,7 +113,8 @@ export function AppAssistant() {
           const lastModuleName = lastResultRef.current.module;
           const fallbackModule = assistantModules.find((m) => m.name === lastModuleName);
           if (fallbackModule) {
-            const fallbackQuery = fallbackModule.parse(text, context);
+            const fallbackContext: AssistantContext = { ...context, previousFilters: lastResultRef.current.filters };
+            const fallbackQuery = fallbackModule.parse(text, fallbackContext);
             if (fallbackQuery) {
               module = fallbackModule;
               query = fallbackQuery;
