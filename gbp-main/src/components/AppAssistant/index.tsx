@@ -430,7 +430,7 @@ export function AppAssistant() {
                       {msg.result.action === 'list' && msg.result.rows && (
                         <>
                           <div
-                            className="mobile-scroll-x rounded-xl border border-gray-200 dark:border-gray-700"
+                            className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700"
                           >
                             {renderRows(msg.result.rows, msg.result.module, msg.result.count || 0)}
                           </div>
@@ -614,7 +614,7 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">
                   {row.uid ? (
                     <Link
                       to={`/app/pessoas/${row.uid}`}
@@ -627,10 +627,10 @@ function renderRows(rows: any[], module: string, total: number) {
                     row.nome || '-'
                   )}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.cidade, row.bairro].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">{row.categoria_nome || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.categoria_nome || '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -655,11 +655,11 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || row.id || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">{row.descricao || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[6rem]">{row.status || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[6rem]">{row.categoria_nome || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">{row.eleitor_nome || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">{row.eleitor_whatsapp || '-'}</td>
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">{row.descricao || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.status || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.categoria_nome || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.eleitor_nome || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.eleitor_whatsapp || '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -682,11 +682,11 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">{row.tipo_de_demanda || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">{row.tipo_de_demanda || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.status, row.nivel_de_urgencia].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.cidade, row.bairro, row.logradouro].filter(Boolean).join(' / ') || '-'}
                 </td>
               </tr>
@@ -711,13 +711,13 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">
                   {[row.numero_oficio, row.tipo_de_demanda].filter(Boolean).join(' - ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.status_solicitacao, row.nivel_de_urgencia].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.cidade, row.bairro, row.logradouro].filter(Boolean).join(' / ') || '-'}
                 </td>
               </tr>
@@ -742,11 +742,11 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[6rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">
                   {[row.numero, row.ano].filter(Boolean).join('/') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[10rem]">{row.titulo || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">{row.status_label || row.status || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.titulo || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.status_label || row.status || '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -769,13 +769,13 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">
                   {[row.numero, row.titulo].filter(Boolean).join(' - ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.status, row.prioridade].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">{row.solicitante || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{row.solicitante || '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -798,13 +798,13 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[6rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">
                   {[row.numero_emenda, row.ano].filter(Boolean).join('/') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.status, row.tipo].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {row.valor_total != null
                     ? Number(row.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                     : '-'}
@@ -831,11 +831,11 @@ function renderRows(rows: any[], module: string, total: number) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
             {rows.map((row, idx) => (
               <tr key={row.uid || idx}>
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 truncate max-w-[10rem]">{row.title || '-'}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-100 whitespace-nowrap">{row.title || '-'}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {[row.status, row.type].filter(Boolean).join(' / ') || '-'}
                 </td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 truncate max-w-[8rem]">
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {row.start_time
                     ? new Date(row.start_time).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
                     : '-'}
