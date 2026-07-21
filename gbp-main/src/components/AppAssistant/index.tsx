@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   X,
@@ -27,6 +27,23 @@ const setupTableHorizontalScroll = (el: HTMLDivElement | null) => {
   (el.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = 'touch';
   el.style.touchAction = 'pan-y';
   el.style.position = 'relative';
+
+  const indicator = document.createElement('div');
+  indicator.setAttribute('aria-hidden', 'true');
+  indicator.textContent = '→';
+  indicator.style.cssText =
+    'position:absolute;right:0;top:0;bottom:0;width:1.5rem;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#3b82f6;font-size:0.75rem;text-shadow:0 0 3px rgba(255,255,255,0.8),0 0 2px rgba(255,255,255,0.8);opacity:1;transition:opacity 0.2s ease;z-index:10;';
+  el.appendChild(indicator);
+
+  const updateIndicator = () => {
+    const canScroll = el.scrollWidth > el.clientWidth;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+    indicator.style.opacity = canScroll && !atEnd ? '1' : '0';
+  };
+
+  updateIndicator();
+  el.addEventListener('scroll', updateIndicator, { passive: true });
+  window.addEventListener('resize', updateIndicator);
 
   let startX = 0;
   let startY = 0;
@@ -106,7 +123,9 @@ export function AppAssistant() {
   const [customIntents, setCustomIntents] = useState<AssistantIntent[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastResultRef = useRef<AssistantResult | null>(null);
+  const resultCacheRef = useRef<Map<string, AssistantResult>>(new Map());
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const company = useCompanyStore((state: { company: any }) => state.company);
   const empresaUid = company?.uid;
   const statusWpp = company?.status_wpp || 'close';
@@ -203,7 +222,12 @@ export function AppAssistant() {
           return;
         }
 
-        const result = await module.execute(query, context);
+        const cacheKey = `${module.name}:${JSON.stringify(query)}`;
+        let result = resultCacheRef.current.get(cacheKey);
+        if (!result) {
+          result = await module.execute(query, context);
+          resultCacheRef.current.set(cacheKey, result);
+        }
         lastResultRef.current = result;
 
         const formatCount = (n: number) => n.toLocaleString('pt-BR');
@@ -235,12 +259,13 @@ export function AppAssistant() {
         ]);
       } catch (error) {
         console.error('Erro no assistente:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
         setMessages((prev) => [
           ...prev,
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            text: `Desculpe, ocorreu um erro: ${error instanceof Error ? error.message : 'tente novamente'}.`,
+            text: `Ops, não consegui processar sua pergunta agora. Isso pode ter acontecido por instabilidade na conexão ou dados não disponíveis no momento.\n\nErro: _${errorMessage}_\n\nTente reformular ou perguntar novamente em alguns segundos.`,
           },
         ]);
       } finally {
@@ -295,7 +320,17 @@ export function AppAssistant() {
     [context]
   );
 
-  const quickQuestions = assistantModules.flatMap((m) => m.quickQuestions).slice(0, 5);
+  const quickQuestions = useMemo(() => {
+    const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && m.result);
+    const lastModuleName = lastAssistantMessage?.result?.module;
+    const lastModule = assistantModules.find((m) => m.name === lastModuleName);
+    const primary = lastModule?.quickQuestions || [];
+    if (primary.length >= 5) return primary.slice(0, 5);
+    const fallback = assistantModules
+      .filter((m) => m.name !== lastModuleName)
+      .flatMap((m) => m.quickQuestions);
+    return [...primary, ...fallback].slice(0, 5);
+  }, [messages]);
 
   return (
     <>
@@ -487,7 +522,7 @@ export function AppAssistant() {
                             ref={setupTableHorizontalScroll}
                             className="rounded-xl border border-gray-200 dark:border-gray-700"
                           >
-                            {renderRows(msg.result.rows, msg.result.module, msg.result.count || 0)}
+                            {renderRows(msg.result.rows, msg.result.module)}
                           </div>
                           {(msg.result.count || 0) > msg.result.rows.length && (
                             <div className="text-xs text-gray-500 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-b-xl">
@@ -498,7 +533,20 @@ export function AppAssistant() {
                       )}
 
                       {(msg.result.count || 0) > 0 && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                          {msg.result.action === 'count' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const desc = msg.result!.description.replace(/^(Quantidade|Total) de /i, '').toLowerCase();
+                                handleSend(`mostre ${desc}`);
+                              }}
+                              className="flex-1 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:border-blue-900/40 dark:bg-blue-950/20 dark:hover:bg-blue-950/40"
+                            >
+                              Ver lista
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -538,7 +586,7 @@ export function AppAssistant() {
           <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <div ref={setupTableHorizontalScroll} className="pb-2">
               <div className="flex gap-2 min-w-max">
-                {quickQuestions.map((chip) => (
+                {quickQuestions.map((chip: string) => (
                   <button
                     key={chip}
                     onClick={() => handleSend(chip)}
@@ -654,11 +702,12 @@ function groupLabel(groupBy: string | undefined, module: string) {
   return 'Grupo';
 }
 
-function renderRows(rows: any[], module: string, total: number) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderRows(rows: any[], module: string) {
   if (module === 'pessoas') {
     return (
       <>
-        <table className="min-w-full text-xs">
+        <table className="hidden sm:table min-w-full text-xs">
           <thead className="bg-gray-100 dark:bg-gray-700">
             <tr>
               <th className="text-left px-3 py-2 font-medium text-gray-700 dark:text-gray-200">Nome</th>
@@ -690,6 +739,27 @@ function renderRows(rows: any[], module: string, total: number) {
             ))}
           </tbody>
         </table>
+        <div className="sm:hidden space-y-2 p-2">
+          {rows.map((row, idx) => (
+            <div key={row.uid || idx} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                {row.uid ? (
+                  <Link to={`/app/pessoas/${row.uid}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                    {row.nome || '-'}
+                  </Link>
+                ) : (
+                  row.nome || '-'
+                )}
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-300">
+                <span className="font-medium text-gray-500 dark:text-gray-400">Local:</span> {[row.cidade, row.bairro].filter(Boolean).join(' / ') || '-'}
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                <span className="font-medium text-gray-500 dark:text-gray-400">Categoria:</span> {row.categoria_nome || '-'}
+              </div>
+            </div>
+          ))}
+        </div>
       </>
     );
   }
@@ -939,10 +1009,10 @@ function renderRows(rows: any[], module: string, total: number) {
 }
 
 function renderMessage(text: string) {
-  const regex = /(\*\*[^*]+\*\*|_[^_]+_|\n)/g;
+  const regex = /(\*\*[^*]+\*\*|_[^_]+_|\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s]+|\/app\/[^\s]+)|\n)/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -956,6 +1026,33 @@ function renderMessage(text: string) {
       parts.push(<strong key={match.index}>{token.slice(2, -2)}</strong>);
     } else if (token.startsWith('_')) {
       parts.push(<em key={match.index}>{token.slice(1, -1)}</em>);
+    } else if (token.startsWith('[')) {
+      const label = match[2];
+      const href = match[3];
+      parts.push(
+        href.startsWith('/') ? (
+          <Link key={match.index} to={href} className="text-blue-600 hover:underline">
+            {label}
+          </Link>
+        ) : (
+          <a key={match.index} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+            {label}
+          </a>
+        )
+      );
+    } else {
+      const href = token;
+      parts.push(
+        href.startsWith('/') ? (
+          <Link key={match.index} to={href} className="text-blue-600 hover:underline break-all">
+            {href}
+          </Link>
+        ) : (
+          <a key={match.index} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+            {href}
+          </a>
+        )
+      );
     }
 
     lastIndex = regex.lastIndex;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export type AssistantAction = 'count' | 'list' | 'group' | 'custom';
 
 export interface AssistantIntent {

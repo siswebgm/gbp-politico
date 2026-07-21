@@ -105,12 +105,28 @@ const getBirthdayRange = (text: string, allowMonthOnly = false): { from: Date; t
     return { from: monday, to, label: formatDateRange(monday, to) };
   }
 
+  if (/\b(proxima semana|próxima semana|semana que vem)\b/.test(norm)) {
+    const monday = startOfWeek(addDays(now, 7));
+    const to = startOfDay(addDays(monday, 7));
+    return { from: monday, to, label: formatDateRange(monday, to) };
+  }
+
   const monthMatch = norm.match(/\b(este mes|esse mes|deste mes|desse mes|do mes|do mês)\b/);
   if (monthMatch) {
     const month = now.getMonth() + 1;
     const from = new Date(2000, month - 1, 1);
     const to = new Date(2000, month, 1);
     const label = `${MONTH_NAMES[month - 1]} de ${now.getFullYear()}`;
+    return { from, to, label };
+  }
+
+  const nextMonthMatch = norm.match(/\b(proximo mes|próximo mes|mes que vem|mês que vem)\b/);
+  if (nextMonthMatch) {
+    const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const month = d.getMonth() + 1;
+    const from = new Date(2000, month - 1, 1);
+    const to = new Date(2000, month, 1);
+    const label = `${MONTH_NAMES[month - 1]} de ${d.getFullYear()}`;
     return { from, to, label };
   }
 
@@ -155,6 +171,7 @@ export const pessoasModule: AssistantModule = {
     const { dateFrom, dateTo, label } = getDateRange(text);
     const groupBy = getGroupBy(text);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filters: Record<string, any> = birthdayRange
       ? { birthdayFrom: birthdayRange.from.toISOString(), birthdayTo: birthdayRange.to.toISOString(), birthdayLabel: birthdayRange.label }
       : { dateFrom, dateTo };
@@ -174,6 +191,12 @@ export const pessoasModule: AssistantModule = {
     const cpfMatch = text.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/);
     const cpfValue = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : undefined;
     if (cpfValue) filters.cpf = cpfValue;
+
+    if (!cpfValue) {
+      const phoneMatch = text.match(/\b(?:\d{2}[-\s]?)?9?\d{4}[-\s]?\d{4}\b/);
+      const phoneValue = phoneMatch ? phoneMatch[0].replace(/\D/g, '') : undefined;
+      if (phoneValue && phoneValue.length >= 10) filters.whatsapp = phoneValue;
+    }
 
     const generoValue = extractValue(text, 'genero', STOP_KEYWORDS) || extractValue(text, 'sexo', STOP_KEYWORDS);
     if (generoValue) {
@@ -198,14 +221,14 @@ export const pessoasModule: AssistantModule = {
     const isList = /\b(quem sao|quem são|liste|listar|mostre|mostrar|exiba|exibir|ver|mostrar)\b/.test(norm);
     const isCount = /\b(quantos|quantidade|total|quantas|numero)\b/.test(norm);
 
-    let limit: number | undefined = getLastLimit(text, ['cadastro', 'pessoa', 'eleitor'], ['cadastros', 'pessoas', 'eleitores']);
+    const limit: number | undefined = getLastLimit(text, ['cadastro', 'pessoa', 'eleitor'], ['cadastros', 'pessoas', 'eleitores']);
     const isLast = limit != null;
 
     let action: AssistantQuery['action'] = 'count';
     if (groupBy) action = 'group';
     else if ((isList && !isCount) || isLast) action = 'list';
     else if (birthdayRange && !isCount) action = 'list';
-    else if (filters.cpf && !isCount) action = 'list';
+    else if ((filters.cpf || filters.whatsapp) && !isCount) action = 'list';
 
     const parts: string[] = [];
     if (isLast) {
@@ -290,6 +313,17 @@ export const pessoasModule: AssistantModule = {
     if (query.action === 'group') {
       const groups = groupRows(rows, query.groupBy, context);
       return { ...query, count: rows.length, groups };
+    }
+
+    const isDirectSearch = !!query.filters.cpf || !!query.filters.whatsapp;
+    if (isDirectSearch && sortedRows.length === 1) {
+      const row = sortedRows[0];
+      return {
+        ...query,
+        action: 'custom' as const,
+        count: 1,
+        customResponse: `Encontrei **${row.nome || 'cadastro'}**.\nCidade: ${row.cidade || '-'} / ${row.bairro || '-'}\nCategoria: ${context.categories.find((c) => c.uid === row.categoria_uid)?.nome || '-'}\n/app/pessoas/${row.uid}`,
+      };
     }
 
     const displayRows = sortedRows.slice(0, query.limit ?? 20).map((row) => ({
@@ -379,6 +413,7 @@ function groupRows(rows: Eleitor[], groupBy: string | undefined, context: Assist
       key = row.usuario_uid || '(sem responsável)';
       label = context.responsaveis.find((r) => r.uid === key)?.nome || key;
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       key = String((row as any)[groupBy] || '(não informado)');
       label = key;
     }
