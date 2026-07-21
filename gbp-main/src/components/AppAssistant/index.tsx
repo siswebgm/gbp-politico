@@ -17,6 +17,60 @@ import { assistantTrainingService } from '../../services/assistantTrainingServic
 import { assistantModules, detectModule } from './registry';
 import type { AssistantContext, AssistantIntent, AssistantResult, AssistantQuery } from './types';
 
+const setupTableHorizontalScroll = (el: HTMLDivElement | null) => {
+  if (!el) return;
+  if ((el as unknown as { _hscrollBound?: boolean })._hscrollBound) return;
+  (el as unknown as { _hscrollBound?: boolean })._hscrollBound = true;
+
+  el.style.overflowX = 'auto';
+  el.style.overflowY = 'hidden';
+  (el.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = 'touch';
+  el.style.touchAction = 'pan-y';
+  el.style.position = 'relative';
+
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let isHorizontalScroll = false;
+  let decided = false;
+
+  el.addEventListener(
+    'touchstart',
+    (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].pageX;
+      startY = e.touches[0].pageY;
+      scrollLeft = el.scrollLeft;
+      isHorizontalScroll = false;
+      decided = false;
+    },
+    { passive: true }
+  );
+
+  el.addEventListener(
+    'touchmove',
+    (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const x = e.touches[0].pageX;
+      const y = e.touches[0].pageY;
+      const deltaX = x - startX;
+      const deltaY = y - startY;
+
+      if (!decided) {
+        if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return;
+        isHorizontalScroll = Math.abs(deltaX) > Math.abs(deltaY);
+        decided = true;
+      }
+
+      if (isHorizontalScroll && el.scrollWidth > el.clientWidth) {
+        if (e.cancelable) e.preventDefault();
+        el.scrollLeft = scrollLeft - deltaX;
+      }
+    },
+    { passive: false }
+  );
+};
+
 interface MessageAction {
   label: string;
   href?: string;
@@ -430,7 +484,8 @@ export function AppAssistant() {
                       {msg.result.action === 'list' && msg.result.rows && (
                         <>
                           <div
-                            className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700"
+                            ref={setupTableHorizontalScroll}
+                            className="rounded-xl border border-gray-200 dark:border-gray-700"
                           >
                             {renderRows(msg.result.rows, msg.result.module, msg.result.count || 0)}
                           </div>
