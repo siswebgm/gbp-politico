@@ -143,10 +143,8 @@ export const pessoasModule: AssistantModule = {
   quickQuestions: [
     'Quantos cadastros essa semana?',
     'Cadastros desse mês',
-    'Cadastros desse ano',
     'Cadastros por categoria',
     'Cadastros por bairro',
-    'Cadastros por cidade',
     'Quantos aniversariantes tenho hoje?',
   ],
 

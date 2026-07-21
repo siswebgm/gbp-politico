@@ -295,7 +295,7 @@ export function AppAssistant() {
     [context]
   );
 
-  const quickQuestions = assistantModules.flatMap((m) => m.quickQuestions);
+  const quickQuestions = assistantModules.flatMap((m) => m.quickQuestions).slice(0, 5);
 
   return (
     <>
