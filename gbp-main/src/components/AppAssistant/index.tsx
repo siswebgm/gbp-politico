@@ -536,7 +536,7 @@ export function AppAssistant() {
           </div>
 
           <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-            <div ref={setupTableHorizontalScroll} className="pb-2 hide-scrollbar">
+            <div ref={setupTableHorizontalScroll} className="pb-2">
               <div className="flex gap-2 min-w-max">
                 {quickQuestions.map((chip) => (
                   <button

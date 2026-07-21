@@ -148,7 +148,6 @@ export const pessoasModule: AssistantModule = {
     'Cadastros por bairro',
     'Cadastros por cidade',
     'Quantos aniversariantes tenho hoje?',
-    'O CPF 08990802431 tem cadastrado?',
   ],
 
   parse(text, context) {
