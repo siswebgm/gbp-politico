@@ -430,7 +430,7 @@ export function AppAssistant() {
                       {msg.result.action === 'list' && msg.result.rows && (
                         <>
                           <div
-                            className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700"
+                            className="mobile-scroll-x rounded-xl border border-gray-200 dark:border-gray-700"
                           >
                             {renderRows(msg.result.rows, msg.result.module, msg.result.count || 0)}
                           </div>
