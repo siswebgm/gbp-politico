@@ -37,6 +37,11 @@ const formatNascimentoDisplay = (nascimento?: string | null) => {
   return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
 };
 
+const MONTH_NAMES = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+];
+
 const startOfDay = (date: Date) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -48,12 +53,6 @@ const startOfWeek = (date: Date) => {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
-  return d;
-};
-
-const startOfMonth = (date: Date) => {
-  const d = startOfDay(date);
-  d.setDate(1);
   return d;
 };
 
@@ -87,10 +86,23 @@ const getBirthdayRange = (text: string): { from: Date; to: Date; label: string }
     return { from: monday, to, label: formatDateRange(monday, to) };
   }
 
-  if (/\b(este mes|esse mes|este mês|esse mês)\b/.test(norm)) {
-    const first = startOfMonth(now);
-    const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    return { from: first, to, label: formatDateRange(first, to) };
+  const monthMatch = norm.match(/\b(este mes|esse mes|deste mes|desse mes|do mes|do mês)\b/);
+  if (monthMatch) {
+    const month = now.getMonth() + 1;
+    const from = new Date(2000, month - 1, 1);
+    const to = new Date(2000, month, 1);
+    const label = `${MONTH_NAMES[month - 1]} de ${now.getFullYear()}`;
+    return { from, to, label };
+  }
+
+  const prevMonthMatch = norm.match(/\b(mes passado|mes anterior|ultimo mes|mês passado|do mes passado)\b/);
+  if (prevMonthMatch) {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const month = d.getMonth() + 1;
+    const from = new Date(2000, month - 1, 1);
+    const to = new Date(2000, month, 1);
+    const label = `${MONTH_NAMES[month - 1]} de ${d.getFullYear()}`;
+    return { from, to, label };
   }
 
   const diaMatch = norm.match(/\bdia\s+(\d{1,2})\b/);
@@ -127,7 +139,7 @@ export const pessoasModule: AssistantModule = {
     const groupBy = getGroupBy(text);
 
     const filters: Record<string, any> = birthdayRange
-      ? { birthdayFrom: birthdayRange.from, birthdayTo: birthdayRange.to, birthdayLabel: birthdayRange.label }
+      ? { birthdayFrom: birthdayRange.from.toISOString(), birthdayTo: birthdayRange.to.toISOString(), birthdayLabel: birthdayRange.label }
       : { dateFrom, dateTo };
 
     const categoriaValue = extractValue(text, 'categoria', STOP_KEYWORDS);
