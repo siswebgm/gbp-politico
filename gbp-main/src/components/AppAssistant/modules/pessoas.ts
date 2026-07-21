@@ -346,7 +346,7 @@ export const pessoasModule: AssistantModule = {
       return;
     }
 
-    const headers = ['Nome', 'CPF', 'WhatsApp', 'Gênero', 'Cidade', 'Bairro', 'Categoria', 'Responsável', 'Criado em'];
+    const headers = ['Nome', 'CPF', 'WhatsApp', 'Gênero', 'Cidade', 'Bairro', 'Categoria', 'Responsável', 'Nascimento'];
     const body = rows.map((row) => [
       row.nome,
       row.cpf,
@@ -356,7 +356,7 @@ export const pessoasModule: AssistantModule = {
       row.bairro,
       getCat(row.categoria_uid),
       getResp(row.usuario_uid),
-      row.created_at ? new Date(row.created_at).toLocaleDateString('pt-BR') : '',
+      formatNascimentoDisplay(row.nascimento),
     ]);
 
     exportToPdf(headers, body, 'GBP Político - Pessoas', result.description, rows.length, `${fileName}.pdf`);
