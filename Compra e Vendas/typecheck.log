@@ -1,0 +1,298 @@
+
+> marketplace@0.1.0 typecheck
+> tsc --noEmit
+
+src/app/(main)/anuncios/[id]/editar/page.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/anuncios/[id]/editar/page.tsx(5,31): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/app/(main)/anuncios/[id]/editar/page.tsx(6,58): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/anuncios/[id]/editar/page.tsx(7,37): error TS2307: Cannot find module '@/lib/actions/anuncios' or its corresponding type declarations.
+src/app/(main)/anuncios/[id]/editar/page.tsx(8,29): error TS2307: Cannot find module '@/components/features/anuncios/product-form' or its corresponding type declarations.
+src/app/(main)/anuncios/[id]/editar/page.tsx(46,37): error TS7006: Parameter 'img' implicitly has an 'any' type.
+src/app/(main)/anuncios/novo/page.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/anuncios/novo/page.tsx(5,31): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/app/(main)/anuncios/novo/page.tsx(6,37): error TS2307: Cannot find module '@/lib/actions/anuncios' or its corresponding type declarations.
+src/app/(main)/anuncios/novo/page.tsx(7,29): error TS2307: Cannot find module '@/components/features/anuncios/product-form' or its corresponding type declarations.
+src/app/(main)/favoritos/page.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/favoritos/page.tsx(5,37): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/favoritos/page.tsx(6,29): error TS2307: Cannot find module '@/components/features/anuncios/product-grid' or its corresponding type declarations.
+src/app/(main)/mensagens/[roomId]/page.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/mensagens/[roomId]/page.tsx(24,12): error TS2339: Property 'buyer_id' does not exist on type 'ChatRoomDetail'.
+src/app/(main)/mensagens/[roomId]/page.tsx(24,41): error TS2339: Property 'seller_id' does not exist on type 'ChatRoomDetail'.
+src/app/(main)/mensagens/[roomId]/page.tsx(41,21): error TS2339: Property 'product_title' does not exist on type 'ChatRoomDetail'.
+src/app/(main)/mensagens/[roomId]/page.tsx(42,20): error TS2339: Property 'product_slug' does not exist on type 'ChatRoomDetail'.
+src/app/(main)/mensagens/[roomId]/page.tsx(43,25): error TS2339: Property 'product_image_url' does not exist on type 'ChatRoomDetail'.
+src/app/(main)/mensagens/page.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/mensagens/page.tsx(21,33): error TS2339: Property 'buyer_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/mensagens/page.tsx(21,61): error TS2339: Property 'seller_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/mensagens/page.tsx(21,78): error TS2339: Property 'buyer_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/mensagens/page.tsx(48,38): error TS2339: Property 'buyer_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/mensagens/page.tsx(48,66): error TS2339: Property 'seller_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/mensagens/page.tsx(48,83): error TS2339: Property 'buyer_id' does not exist on type '{ id: string; anuncio_id: string; comprador_id: string; vendedor_id: string; criado_em: string; ultima_mensagem_em: string | null; anuncio_titulo: string; anuncio_slug: string; anuncio_imagem_url: string | null; ultima_mensagem_conteudo: string | null; ultima_mensagem_remetente_id: string | null; ultima_mensagem_cri...'.
+src/app/(main)/meus-anuncios/page.tsx(7,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/meus-anuncios/page.tsx(8,31): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/meus-anuncios/page.tsx(11,36): error TS2307: Cannot find module '@/components/features/anuncios/product-actions-menu' or its corresponding type declarations.
+src/app/(main)/meus-anuncios/page.tsx(62,26): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/(main)/meus-anuncios/page.tsx(64,15): error TS2322: Type '{ chave: any; className: string; children: Element[]; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/app/(main)/page.tsx(3,31): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/app/(main)/page.tsx(10,8): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/page.tsx(11,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/page.tsx(13,29): error TS2307: Cannot find module '@/components/features/categorias/category-nav' or its corresponding type declarations.
+src/app/(main)/page.tsx(15,29): error TS2307: Cannot find module '@/components/features/anuncios/product-grid' or its corresponding type declarations.
+src/app/(main)/page.tsx(16,30): error TS2307: Cannot find module '@/components/ui/section-titulo' or its corresponding type declarations.
+src/app/(main)/painel/page.tsx(14,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(10,8): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(11,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(12,36): error TS2307: Cannot find module '@/lib/services/favoritos' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(17,30): error TS2307: Cannot find module '@/components/features/anuncios/image-gallery' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(18,32): error TS2307: Cannot find module '@/components/features/anuncios/favorite-button' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(19,28): error TS2307: Cannot find module '@/components/features/anuncios/chat-button' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(20,29): error TS2307: Cannot find module '@/components/features/anuncios/share-button' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(21,30): error TS2307: Cannot find module '@/components/features/anuncios/report-dialog' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(22,28): error TS2307: Cannot find module '@/components/features/anuncios/seller-card' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(23,29): error TS2307: Cannot find module '@/components/features/anuncios/product-grid' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(24,30): error TS2307: Cannot find module '@/components/ui/section-titulo' or its corresponding type declarations.
+src/app/(main)/produtos/[slug]/page.tsx(76,24): error TS7006: Parameter 'img' implicitly has an 'any' type.
+src/app/(main)/produtos/[slug]/page.tsx(112,33): error TS7006: Parameter 'img' implicitly has an 'any' type.
+src/app/(main)/produtos/page.tsx(3,32): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/produtos/page.tsx(4,31): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/app/(main)/produtos/page.tsx(6,29): error TS2307: Cannot find module '@/components/features/anuncios/product-grid' or its corresponding type declarations.
+src/app/(main)/produtos/page.tsx(7,37): error TS2307: Cannot find module '@/components/features/anuncios/product-filters' or its corresponding type declarations.
+src/app/(main)/produtos/page.tsx(8,28): error TS2307: Cannot find module '@/components/features/anuncios/sort-select' or its corresponding type declarations.
+src/app/(main)/usuario/[slug]/page.tsx(7,41): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/app/(main)/usuario/[slug]/page.tsx(10,29): error TS2307: Cannot find module '@/components/features/anuncios/product-grid' or its corresponding type declarations.
+src/app/(main)/usuario/[slug]/page.tsx(25,19): error TS2339: Property 'name' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(26,40): error TS2339: Property 'name' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(26,58): error TS2339: Property 'city' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(28,21): error TS2339: Property 'name' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(29,22): error TS2551: Property 'photo_url' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'. Did you mean 'foto_url'?
+src/app/(main)/usuario/[slug]/page.tsx(29,42): error TS2551: Property 'photo_url' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'. Did you mean 'foto_url'?
+src/app/(main)/usuario/[slug]/page.tsx(47,19): error TS2551: Property 'photo_url' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'. Did you mean 'foto_url'?
+src/app/(main)/usuario/[slug]/page.tsx(49,27): error TS2551: Property 'photo_url' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'. Did you mean 'foto_url'?
+src/app/(main)/usuario/[slug]/page.tsx(50,27): error TS2339: Property 'name' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(63,54): error TS2339: Property 'name' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(64,19): error TS2339: Property 'bio' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(65,80): error TS2339: Property 'bio' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(69,21): error TS2339: Property 'city' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(72,25): error TS2339: Property 'city' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(73,25): error TS2339: Property 'state' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/app/(main)/usuario/[slug]/page.tsx(73,45): error TS2339: Property 'state' does not exist on type '{ id: string; slug: string | null; nome: string; foto_url: string | null; biografia: string | null; cidade: string | null; estado: string | null; avaliacao: number; total_avaliacoes: number; criado_em: string; total_anuncios_ativos: number; total_anuncios_vendidos: number; }'.
+src/components/features/auth/forgot-password-form.tsx(12,32): error TS2307: Cannot find module '@/components/ui/form-mensagem' or its corresponding type declarations.
+src/components/features/auth/login-form.tsx(12,43): error TS2307: Cannot find module '@/components/ui/form-mensagem' or its corresponding type declarations.
+src/components/features/auth/register-form.tsx(12,43): error TS2307: Cannot find module '@/components/ui/form-mensagem' or its corresponding type declarations.
+src/components/features/auth/reset-password-form.tsx(11,43): error TS2307: Cannot find module '@/components/ui/form-mensagem' or its corresponding type declarations.
+src/components/features/categories/category-nav.tsx(4,43): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/components/features/categories/category-nav.tsx(34,17): error TS2322: Type '{ chave: any; children: Element; }' is not assignable to type 'DetailedHTMLProps<LiHTMLAttributes<HTMLLIElement>, HTMLLIElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<LiHTMLAttributes<HTMLLIElement>, HTMLLIElement>'.
+src/components/features/categories/category-nav.tsx(39,31): error TS2322: Type '{ nome: any; }' is not assignable to type 'IntrinsicAttributes & { name: string | null; }'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & { name: string | null; }'.
+src/components/features/chat/chat-window.tsx(98,22): error TS2551: Property 'foto_url' does not exist on type '{ id: string; name: string; photo_url: string | null; }'. Did you mean 'photo_url'?
+src/components/features/chat/chat-window.tsx(100,30): error TS2551: Property 'foto_url' does not exist on type '{ id: string; name: string; photo_url: string | null; }'. Did you mean 'photo_url'?
+src/components/features/chat/chat-window.tsx(101,30): error TS2339: Property 'nome' does not exist on type '{ id: string; name: string; photo_url: string | null; }'.
+src/components/features/chat/chat-window.tsx(109,58): error TS2339: Property 'nome' does not exist on type '{ id: string; name: string; photo_url: string | null; }'.
+src/components/features/chat/chat-window.tsx(114,22): error TS2339: Property 'titulo' does not exist on type '{ title: string; slug: string; image_url: string | null; }'.
+src/components/features/chat/chat-window.tsx(124,15): error TS2322: Type '{ chave: string; className: string; children: Element; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/components/features/chat/chat-window.tsx(156,11): error TS2322: Type '{ valor: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; placeholder: string; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'valor' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/chat/chat-window.tsx(157,46): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/chat/chat-window.tsx(161,17): error TS2322: Type '{ tipo: string; size: "icon"; disabled: boolean; children: Element; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/features/products/favorite-button.tsx(7,38): error TS2307: Cannot find module '@/lib/actions/favoritos' or its corresponding type declarations.
+src/components/features/products/image-gallery.tsx(40,23): error TS2304: Cannot find name 'titulo'.
+src/components/features/products/image-gallery.tsx(80,15): error TS2322: Type '{ chave: number; onClick: () => void; className: string; children: Element; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/components/features/products/image-gallery.tsx(108,20): error TS2304: Cannot find name 'titulo'.
+src/components/features/products/image-uploader.tsx(88,15): error TS2322: Type '{ tipo: string; onClick: () => void; className: string; "aria-label": string; children: Element; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/components/features/products/image-uploader.tsx(99,16): error TS2322: Type '{ chave: string; className: string; children: Element[]; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/components/features/products/image-uploader.tsx(101,20): error TS2322: Type '{ tipo: string; nome: string; valor: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/image-uploader.tsx(103,15): error TS2322: Type '{ tipo: string; onClick: () => void; className: string; "aria-label": string; children: Element; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/components/features/products/image-uploader.tsx(129,15): error TS2322: Type '{ tipo: string; accept: string; multiple: true; className: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => Promise<...>; disabled: boolean; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/product-actions-menu.tsx(23,8): error TS2307: Cannot find module '@/lib/actions/anuncios' or its corresponding type declarations.
+src/components/features/products/product-actions-menu.tsx(24,32): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/components/features/products/product-card.tsx(5,36): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/components/features/products/product-filters.tsx(10,43): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/components/features/products/product-filters.tsx(104,15): error TS2322: Type '{ chave: any; onClick: () => void; className: string; children: any; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/components/features/products/product-filters.tsx(123,13): error TS2322: Type '{ tipo: string; min: number; placeholder: string; valor: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(127,51): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/products/product-filters.tsx(131,13): error TS2322: Type '{ tipo: string; min: number; placeholder: string; valor: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(135,51): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/products/product-filters.tsx(138,17): error TS2322: Type '{ tipo: string; size: "sm"; variant: "outline"; className: string; children: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/features/products/product-filters.tsx(150,13): error TS2322: Type '{ id: string; placeholder: string; valor: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'valor' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(151,47): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/products/product-filters.tsx(159,13): error TS2322: Type '{ id: string; placeholder: string; valor: string; onChange: (e: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'valor' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(160,54): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/products/product-filters.tsx(163,17): error TS2322: Type '{ tipo: string; size: "sm"; variant: "outline"; className: string; children: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/features/products/product-filters.tsx(199,13): error TS2322: Type '{ tipo: string; checked: boolean; onChange: () => void; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(208,13): error TS2322: Type '{ tipo: string; checked: boolean; onChange: () => void; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/product-filters.tsx(244,36): error TS2304: Cannot find name 'content'.
+src/components/features/products/product-form.tsx(7,41): error TS2307: Cannot find module '@/lib/actions/anuncios' or its corresponding type declarations.
+src/components/features/products/product-form.tsx(8,43): error TS2307: Cannot find module '@/lib/services/categorias' or its corresponding type declarations.
+src/components/features/products/product-form.tsx(14,43): error TS2307: Cannot find module '@/components/ui/form-mensagem' or its corresponding type declarations.
+src/components/features/products/product-form.tsx(15,51): error TS2307: Cannot find module '@/components/features/anuncios/image-uploader' or its corresponding type declarations.
+src/components/features/products/product-form.tsx(54,28): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(60,11): error TS2322: Type '{ id: string; nome: string; defaultValue: string | undefined; placeholder: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(64,35): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(71,11): error TS2322: Type '{ id: string; nome: string; rows: number; defaultValue: string; className: string; placeholder: string; }' is not assignable to type 'DetailedHTMLProps<TextareaHTMLAttributes<HTMLTextAreaElement>, HTMLTextAreaElement>'.
+  Property 'nome' does not exist on type 'DetailedHTMLProps<TextareaHTMLAttributes<HTMLTextAreaElement>, HTMLTextAreaElement>'.
+src/components/features/products/product-form.tsx(77,35): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(85,13): error TS2322: Type '{ id: string; nome: string; tipo: string; step: string; min: string; defaultValue: number | undefined; placeholder: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(92,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(99,13): error TS2322: Type '{ id: string; nome: string; tipo: string; min: string; defaultValue: number; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(104,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(111,13): error TS2322: Type '{ id: string; nome: string; defaultValue: string; onChange: (e: ChangeEvent<HTMLSelectElement, HTMLSelectElement>) => void; className: string; children: (Element[] | Element)[]; }' is not assignable to type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+  Property 'nome' does not exist on type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+src/components/features/products/product-form.tsx(113,61): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLSelectElement'.
+src/components/features/products/product-form.tsx(116,21): error TS2322: Type '{ valor: string; children: string; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'valor' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(118,23): error TS2322: Type '{ chave: any; valor: any; children: any; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(123,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(130,13): error TS2322: Type '{ id: string; nome: string; defaultValue: string; className: string; disabled: boolean; children: any[]; }' is not assignable to type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+  Property 'nome' does not exist on type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+src/components/features/products/product-form.tsx(135,21): error TS2322: Type '{ valor: string; children: string; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'valor' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(136,51): error TS7006: Parameter 'sub' implicitly has an 'any' type.
+src/components/features/products/product-form.tsx(137,23): error TS2322: Type '{ chave: any; valor: any; children: any; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'chave' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(148,13): error TS2322: Type '{ id: string; nome: string; defaultValue: ProductCondition; className: string; children: Element[]; }' is not assignable to type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+  Property 'nome' does not exist on type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+src/components/features/products/product-form.tsx(152,21): error TS2322: Type '{ valor: string; children: string; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'valor' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(153,21): error TS2322: Type '{ valor: string; children: string; }' is not assignable to type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+  Property 'valor' does not exist on type 'DetailedHTMLProps<OptionHTMLAttributes<HTMLOptionElement>, HTMLOptionElement>'.
+src/components/features/products/product-form.tsx(155,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(160,28): error TS2322: Type '{ id: string; nome: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(161,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(168,13): error TS2322: Type '{ id: string; nome: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(175,31): error TS2322: Type '{ id: string; nome: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(182,13): error TS2322: Type '{ id: string; nome: string; placeholder: string; defaultValue: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'nome' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/products/product-form.tsx(186,37): error TS2304: Cannot find name 'estado'.
+src/components/features/products/product-form.tsx(193,13): error TS2322: Type '{ tipo: string; nome: string; defaultChecked: boolean | undefined; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/product-form.tsx(202,13): error TS2322: Type '{ tipo: string; nome: string; defaultChecked: boolean | undefined; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'tipo' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/components/features/products/product-grid.tsx(1,36): error TS2307: Cannot find module '@/lib/services/anuncios' or its corresponding type declarations.
+src/components/features/products/product-grid.tsx(2,29): error TS2307: Cannot find module '@/components/features/anuncios/product-card' or its corresponding type declarations.
+src/components/features/products/share-button.tsx(27,31): error TS2820: Type '"icone"' is not assignable to type '"default" | "icon" | "lg" | "sm" | null | undefined'. Did you mean '"icon"'?
+src/components/features/search/search-bar.tsx(27,11): error TS2322: Type '{ valor: string; onChange: (event: ChangeEvent<HTMLInputElement, HTMLInputElement>) => void; placeholder: string; className: string; }' is not assignable to type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+  Property 'valor' does not exist on type 'IntrinsicAttributes & InputProps & RefAttributes<HTMLInputElement>'.
+src/components/features/search/search-bar.tsx(28,54): error TS2339: Property 'valor' does not exist on type 'EventTarget & HTMLInputElement'.
+src/components/features/search/search-bar.tsx(33,15): error TS2322: Type '{ tipo: string; size: "sm"; className: string; children: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'tipo' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<HTMLButtonElement>'.
+src/components/layout/header.tsx(4,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/components/layout/header.tsx(27,47): error TS2820: Type '"icone"' is not assignable to type '"default" | "icon" | "lg" | "sm" | null | undefined'. Did you mean '"icon"'?
+src/components/layout/header.tsx(32,47): error TS2820: Type '"icone"' is not assignable to type '"default" | "icon" | "lg" | "sm" | null | undefined'. Did you mean '"icon"'?
+src/components/layout/user-menu.tsx(31,15): error TS2551: Property 'photo_url' does not exist on type '{ id: string; id_autenticacao: string; email: string; nome: string; telefone: string | null; condominio: string | null; endereco: string | null; cidade: string | null; estado: string | null; ... 15 more ...; ultimo_acesso: string | null; }'. Did you mean 'foto_url'?
+src/components/layout/user-menu.tsx(33,26): error TS2551: Property 'photo_url' does not exist on type '{ id: string; id_autenticacao: string; email: string; nome: string; telefone: string | null; condominio: string | null; endereco: string | null; cidade: string | null; estado: string | null; ... 15 more ...; ultimo_acesso: string | null; }'. Did you mean 'foto_url'?
+src/components/layout/user-menu.tsx(33,47): error TS2339: Property 'name' does not exist on type '{ id: string; id_autenticacao: string; email: string; nome: string; telefone: string | null; condominio: string | null; endereco: string | null; cidade: string | null; estado: string | null; ... 15 more ...; ultimo_acesso: string | null; }'.
+src/components/layout/user-menu.tsx(42,63): error TS2339: Property 'name' does not exist on type '{ id: string; id_autenticacao: string; email: string; nome: string; telefone: string | null; condominio: string | null; endereco: string | null; cidade: string | null; estado: string | null; ... 15 more ...; ultimo_acesso: string | null; }'.
+src/lib/actions/auth.ts(43,7): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/auth.ts(80,11): error TS2339: Property 'name' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,34): error TS2339: Property 'phone' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,41): error TS2339: Property 'condominium' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,54): error TS2339: Property 'address' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,63): error TS2339: Property 'city' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,69): error TS2339: Property 'state' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(80,76): error TS2339: Property 'zip' does not exist on type '{ nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }'.
+src/lib/actions/auth.ts(90,7): error TS2353: Object literal may only specify known properties, and 'dados' does not exist in type '{ emailRedirectTo?: string | undefined; data?: object | undefined; captchaToken?: string | undefined; channel?: "sms" | "whatsapp" | undefined; }'.
+src/lib/actions/auth.ts(97,7): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/auth.ts(116,5): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/auth.ts(152,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/auth.ts(157,5): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/auth.ts(183,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ActionState'. Did you mean to write 'message'?
+src/lib/actions/chat-messages.ts(6,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/lib/actions/chat-messages.ts(15,8): error TS2304: Cannot find name 'content'.
+src/lib/actions/chat-messages.ts(22,15): error TS2304: Cannot find name 'content'.
+src/lib/actions/chat.ts(6,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/lib/actions/chat.ts(24,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; } | null>'.
+src/lib/actions/chat.ts(37,11): error TS2339: Property 'dados' does not exist on type 'PostgrestResponseSuccess<{ id: any; }>'.
+src/lib/actions/chat.ts(37,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; }>'.
+src/lib/actions/chat.ts(62,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type '{ success: boolean; message?: string | undefined; }'. Did you mean to write 'message'?
+src/lib/actions/chat.ts(70,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type '{ success: boolean; message?: string | undefined; }'. Did you mean to write 'message'?
+src/lib/actions/chat.ts(85,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type '{ success: boolean; message?: string | undefined; }'. Did you mean to write 'message'?
+src/lib/actions/chat.ts(88,27): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type '{ success: boolean; message?: string | undefined; }'. Did you mean to write 'message'?
+src/lib/actions/favorites.ts(6,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/lib/actions/favorites.ts(20,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; } | null>'.
+src/lib/actions/products.ts(7,32): error TS2307: Cannot find module '@/lib/services/usuarios' or its corresponding type declarations.
+src/lib/actions/products.ts(43,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ProductActionState'. Did you mean to write 'message'?
+src/lib/actions/products.ts(51,67): error TS2339: Property 'dados' does not exist on type 'SafeParseSuccess<{ titulo: string; descricao?: string | undefined; preco: number; categoryId: string; subcategoryId?: string | undefined; condicao: "novo" | "usado"; quantidade: number; cidade: string; ... 4 more ...; videoUrl?: string | undefined; }>'.
+src/lib/actions/products.ts(54,11): error TS2339: Property 'dados' does not exist on type 'PostgrestResponseSuccess<{ id: any; slug: any; }>'.
+src/lib/actions/products.ts(54,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; slug: any; }>'.
+src/lib/actions/products.ts(77,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ProductActionState'. Did you mean to write 'message'?
+src/lib/actions/products.ts(106,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ProductActionState'. Did you mean to write 'message'?
+src/lib/actions/products.ts(114,67): error TS2339: Property 'dados' does not exist on type 'SafeParseSuccess<{ titulo: string; descricao?: string | undefined; preco: number; categoryId: string; subcategoryId?: string | undefined; condicao: "novo" | "usado"; quantidade: number; cidade: string; ... 4 more ...; videoUrl?: string | undefined; }>'.
+src/lib/actions/products.ts(117,11): error TS2339: Property 'dados' does not exist on type 'PostgrestResponseSuccess<{ slug: any; }>'.
+src/lib/actions/products.ts(117,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ slug: any; }>'.
+src/lib/actions/products.ts(141,30): error TS2561: Object literal may only specify known properties, but 'mensagem' does not exist in type 'ProductActionState'. Did you mean to write 'message'?
+src/lib/actions/products.ts(151,8): error TS2551: Property 'ordem' does not exist on type 'PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, any, any, { order: any; }[], "anuncio_imagens", unknown, "GET", false>'. Did you mean 'order'?
+src/lib/actions/products.ts(252,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<any>'.
+src/lib/actions/products.ts(262,11): error TS2339: Property 'dados' does not exist on type 'PostgrestResponseSuccess<{ id: any; }>'.
+src/lib/actions/products.ts(262,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; }>'.
+src/lib/actions/products.ts(289,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ order: any; url: any; }[]>'.
+src/lib/actions/products.ts(300,21): error TS7006: Parameter 'img' implicitly has an 'any' type.
+src/lib/services/banners.ts(16,20): error TS2304: Cannot find name 'position'.
+src/lib/services/categories.ts(14,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<any[]>'.
+src/lib/services/categories.ts(22,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<any[]>'.
+src/lib/services/categories.ts(29,34): error TS7006: Parameter 'category' implicitly has an 'any' type.
+src/lib/services/categories.ts(32,8): error TS7006: Parameter 'sub' implicitly has an 'any' type.
+src/lib/services/chat.ts(39,11): error TS2339: Property 'dados' does not exist on type 'PostgrestResponseSuccess<{ anuncio_id: any; comprador_id: any; id: any; vendedor_id: any; }>'.
+src/lib/services/chat.ts(39,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ anuncio_id: any; comprador_id: any; id: any; vendedor_id: any; }>'.
+src/lib/services/chat.ts(51,12): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ slug: any; titulo: any; }>'.
+src/lib/services/chat.ts(51,32): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ foto_url: any; id: any; nome: any; }>'.
+src/lib/services/chat.ts(51,54): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ url: any; } | null>'.
+src/lib/services/chat.ts(95,6): error TS2551: Property 'ordem' does not exist on type 'PostgrestFilterBuilder<{ PostgrestVersion: "12"; }, any, any, any[], "mensagens", unknown, "GET", false>'. Did you mean 'order'?
+src/lib/services/chat.ts(103,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ id: any; }[]>'.
+src/lib/services/chat.ts(117,18): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/lib/services/dashboard.ts(17,12): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ situacao: any; visualizacoes: any; }[]>'.
+src/lib/services/dashboard.ts(37,29): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/services/dashboard.ts(38,29): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/services/dashboard.ts(39,27): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/services/dashboard.ts(40,30): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/lib/services/dashboard.ts(40,35): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/services/products.ts(71,19): error TS2304: Cannot find name 'city'.
+src/lib/services/products.ts(93,7): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'tipo' does not exist in type '{ config?: string | undefined; type?: "phrase" | "plain" | "websearch" | undefined; }'.
+src/lib/services/products.ts(200,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ criado_em: any; id: any; preco: any; situacao: any; slug: any; titulo: any; visualizacoes: any; }[]>'.
+src/lib/services/products.ts(210,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ anuncio_id: any; ordem: any; url: any; }[]>'.
+src/lib/services/products.ts(216,21): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/services/products.ts(220,24): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/lib/services/products.ts(223,21): error TS7006: Parameter 'img' implicitly has an 'any' type.
+src/lib/services/products.ts(229,11): error TS2339: Property 'dados' does not exist on type 'PostgrestSingleResponse<{ anuncio_id: any; }[]>'.
+src/lib/services/products.ts(244,22): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/lib/services/products.ts(247,43): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/lib/services/products.ts(247,46): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/lib/services/products.ts(249,15): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/lib/services/products.ts(249,43): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/lib/services/users.ts(12,5): error TS2339: Property 'dados' does not exist on type 'UserResponse'.
+src/schemas/auth.ts(35,5): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'mensagem' does not exist in type 'Partial<Omit<ZodCustomIssue, "code">> | ((arg: { nome: string; email: string; password: string; confirmPassword: string; telefone: string; condominio?: string | undefined; endereco?: string | undefined; cidade: string; estado: string; cep: string; }) => Partial<...>)'.
+src/schemas/auth.ts(58,5): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'mensagem' does not exist in type 'Partial<Omit<ZodCustomIssue, "code">> | ((arg: { password: string; confirmPassword: string; }) => Partial<Omit<ZodCustomIssue, "code">>)'.
+src/schemas/product.ts(9,41): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, but 'mensagem' does not exist in type '{ errorMap?: ZodErrorMap | undefined; invalid_type_error?: string | undefined; required_error?: string | undefined; message?: string | undefined; description?: string | undefined; }'. Did you mean to write 'message'?

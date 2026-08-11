@@ -1,0 +1,54 @@
+version: "3.7"
+
+services:
+  marketplace:
+    image: siswebgm/marketplace:v0.1.1
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SITE_URL=http://IP-DO-SERVIDOR:3000
+      - NEXT_PUBLIC_SITE_NAME=Marketplace
+      - NEXT_PUBLIC_SUPABASE_URL=https://studio.gbppolitico.com
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzM2MzkxNjAwLAogICJleHAiOiAxODk0MTU4MDAwCn0.6Djbu2O_EC7CNlJRKRmPMrCDw2hKdyn4oF5EWzWS2cA
+    networks:
+      - network_public
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.marketplace.rule=HostRegexp(`{host:.+}`)"
+        - "traefik.http.routers.marketplace.entrypoints=web"
+        - "traefik.http.services.marketplace.loadbalancer.server.port=3000"
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+networks:
+  network_public:
+    external: true
+    name: network_public
