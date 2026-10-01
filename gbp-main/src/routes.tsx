@@ -48,6 +48,10 @@ import EditarProjeto from './pages/Documents/ProjetosLei/EditarProjeto';
 import { Requerimentos } from './pages/Documents/Requerimentos';
 import UploadRequerimento from './pages/Documents/Requerimentos/UploadRequerimento';
 import EditRequerimento from './pages/Documents/Requerimentos/EditRequerimento';
+import DispararNotificacao from './pages/Notificacoes/Disparar';
+import HistoricoNotificacoes from './pages/Notificacoes/Historico';
+import ConfiguracaoNotificacoes from './pages/Notificacoes/Configuracao';
+import { AceitarNotificacoes } from './pages/public/AceitarNotificacoes';
 import ViewRequerimento from './pages/Documents/Requerimentos/ViewRequerimento';
 import EmendasParlamentares from './pages/Documents/EmendasParlamentares';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -187,6 +191,9 @@ export function AppRoutes() {
           </PublicLayout>
         }
       />
+
+      {/* Rota pública de convite para notificações */}
+      <Route path="/notificacoes/aceitar/:empresa_uid" element={<AceitarNotificacoes />} />
 
       {/* Rota pública para atendimentos */}
       <Route
@@ -364,6 +371,11 @@ export function AppRoutes() {
         <Route path="mapa-eleitoral" element={<ElectoralMap />} />
         <Route path="settings">
           <Route index element={<Settings />} />
+        </Route>
+        <Route path="notificacoes">
+          <Route path="disparar" element={<AdminRoute><DispararNotificacao /></AdminRoute>} />
+          <Route path="historico" element={<AdminRoute><HistoricoNotificacoes /></AdminRoute>} />
+          <Route path="configuracao" element={<AdminRoute><ConfiguracaoNotificacoes /></AdminRoute>} />
         </Route>
         <Route path="configuracoes">
           <Route path="gerenciar-formulario" element={<GerenciarFormulario />} />

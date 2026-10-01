@@ -2,21 +2,21 @@ import { supabaseClient } from '../lib/supabase';
 // Firebase desabilitado
 // import { messaging } from '../lib/firebase';
 // import { getMessaging, getToken } from 'firebase/messaging';
-import * as rs from 'jsrsasign';
+import { notificationLogsService } from './notificationLogs';
 
 interface SendNotificationParams {
   title: string;
   body: string;
   data?: Record<string, string>;
   userIds?: string[];
+  empresa_uid?: string;
+  imagem_url?: string;
+  link_direcionar?: string;
+  tipo_midia?: string;
+  url_midia?: string;
 }
 
-// Firebase desabilitado - configuração comentada
-// const serviceAccount = { ... };
-
 class NotificationService {
-  private accessToken: string | null = null;
-  private accessTokenExpiration: number = 0;
   private maxRetries = 3;
   private retryDelay = 1000; // 1 segundo
 
@@ -36,7 +36,7 @@ class NotificationService {
     }
   }
 
-  private async handleInvalidToken(token: string, userId: string) {
+  async handleInvalidToken(token: string, userId: string) {
     console.log('Debug - Removendo token inválido:', { 
       userId, 
       tokenParcial: token?.substring(0, 10) + '...' 
@@ -88,79 +88,6 @@ class NotificationService {
       });
     } catch (error) {
       console.error('Erro ao remover token inválido:', error);
-    }
-  }
-
-  private async getAccessToken(): Promise<string> {
-    try {
-      // Verifica se já temos um token válido em cache
-      if (this.accessToken && Date.now() < this.accessTokenExpiration - 300000) { // 5 minutos de margem
-        return this.accessToken;
-      }
-
-      // Gera um novo token JWT
-      const now = Math.floor(Date.now() / 1000);
-      const expTime = now + 3600; // 1 hora de validade
-
-      const header = {
-        alg: 'RS256',
-        typ: 'JWT'
-      };
-
-      const payload = {
-        iss: serviceAccount.client_email,
-        sub: serviceAccount.client_email,
-        aud: 'https://oauth2.googleapis.com/token',
-        iat: now,
-        exp: expTime,
-        scope: 'https://www.googleapis.com/auth/firebase.messaging'
-      };
-
-      // Gera o token JWT usando jsrsasign
-      const token = rs.KJUR.jws.JWS.sign(
-        'RS256',
-        JSON.stringify(header),
-        JSON.stringify(payload),
-        serviceAccount.private_key
-      );
-
-      // Obtém o token de acesso do Google OAuth2
-      const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion: token
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Erro ao obter token de acesso:', {
-          status: response.status,
-          statusText: response.statusText,
-          error
-        });
-        throw new Error(`Erro ao obter token de acesso: ${response.status} - ${error}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.access_token || !data.expires_in) {
-        console.error('Resposta inválida ao obter token:', data);
-        throw new Error('Resposta inválida ao obter token de acesso');
-      }
-
-      // Salva o token em cache
-      this.accessToken = data.access_token;
-      this.accessTokenExpiration = Date.now() + (data.expires_in * 1000);
-
-      return data.access_token;
-    } catch (error) {
-      console.error('Erro ao obter token de acesso:', error);
-      throw error;
     }
   }
 
@@ -340,6 +267,37 @@ class NotificationService {
       throw error;
     }
     */ // FIM DO CÓDIGO COMENTADO
+  }
+
+  async enviarParaTokens(params: {
+    tokens: string[];
+    title: string;
+    body: string;
+    imagem_url?: string;
+    link?: string;
+    data?: Record<string, string>;
+  }): Promise<Array<{ token: string; success: boolean; invalid_token?: boolean; error?: string }>> {
+    const userUid = localStorage.getItem('user_uid');
+    if (!userUid) {
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const baseUrl = (import.meta.env.VITE_PUSH_API_URL as string | undefined) || 'https://app.gbppolitico.com/push-api';
+
+    const response = await fetch(`${baseUrl}/enviar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-uid': userUid
+      },
+      body: JSON.stringify(params)
+    });
+
+    const corpo = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`Erro ao enviar notificações: ${corpo?.error || response.status}`);
+    }
+    return corpo?.results || [];
   }
 
   async sendTestNotification(userId: string) {

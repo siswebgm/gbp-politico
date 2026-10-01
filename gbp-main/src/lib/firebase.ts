@@ -1,41 +1,81 @@
-// Firebase desabilitado temporariamente para resolver problemas de build
-// import { initializeApp } from 'firebase/app';
-// import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { initializeApp } from 'firebase/app';
+import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
 
-// const firebaseConfig = {
-//   apiKey: "AIzaSyBwIsr-o9tj5noU9EQwR2z3hXRZSZTpHW0",
-//   authDomain: "gbppolitico.firebaseapp.com",
-//   projectId: "gbppolitico",
-//   storageBucket: "gbppolitico.firebasestorage.app",
-//   messagingSenderId: "48941500586",
-//   appId: "1:48941500586:web:7eb764b449bdb1292f28d3",
-//   measurementId: "G-THXVFQBT44"
-// };
+const firebaseConfig = {
+  apiKey: 'AIzaSyD68oM2v_1zskhGgoHFnUW0REFAf-hyuxE',
+  authDomain: 'sistema-para-vereador.firebaseapp.com',
+  projectId: 'sistema-para-vereador',
+  storageBucket: 'sistema-para-vereador.firebasestorage.app',
+  messagingSenderId: '955852815886',
+  appId: '1:955852815886:web:a625a99a6d2969b11fc65f'
+};
 
-// // Initialize Firebase
-// const app = initializeApp(firebaseConfig);
-// const messaging = getMessaging(app);
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 
-// Mock Firebase para evitar erros
-const messaging = null;
+const app = initializeApp(firebaseConfig);
 
-// Service Worker desabilitado junto com Firebase
+let messaging: Messaging | null = null;
 
-// Função para solicitar permissão e obter o token (DESABILITADA)
-export async function requestNotificationPermission() {
-  console.log('Firebase desabilitado - notificações não disponíveis');
-  return null;
+async function getMessagingInstance(): Promise<Messaging | null> {
+  if (messaging) return messaging;
+  try {
+    if (!(await isSupported())) return null;
+    messaging = getMessaging(app);
+    return messaging;
+  } catch (error) {
+    console.error('Erro ao inicializar Firebase Messaging:', error);
+    return null;
+  }
 }
 
-// Função para lidar com mensagens em primeiro plano (DESABILITADA)
-export function onMessageListener() {
-  console.log('Firebase desabilitado - listener de mensagens não disponível');
-  return () => {};
+// Solicita permissão e retorna o token FCM (ou null se não for possível)
+export async function requestNotificationPermission(): Promise<string | null> {
+  try {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return null;
+
+    if (!VAPID_KEY) {
+      console.warn('VITE_FIREBASE_VAPID_KEY não definida - token FCM não será gerado');
+      return null;
+    }
+
+    const permission =
+      Notification.permission === 'default'
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    if (permission !== 'granted') return null;
+
+    const instance = await getMessagingInstance();
+    if (!instance) return null;
+
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;
+
+    const token = await getToken(instance, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration
+    });
+    return token || null;
+  } catch (error) {
+    console.error('Erro ao obter token de notificação:', error);
+    return null;
+  }
+}
+
+// Mensagens recebidas com o app em primeiro plano
+export function onMessageListener(callback?: (payload: any) => void) {
+  let unsubscribe: () => void = () => {};
+  getMessagingInstance().then((instance) => {
+    if (instance) {
+      unsubscribe = onMessage(instance, (payload) => callback?.(payload));
+    }
+  });
+  return () => unsubscribe();
 }
 
 export async function sendTestNotification() {
-  console.log('Firebase desabilitado - notificação de teste não disponível');
-  return false;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  new Notification('GBP Politico', { body: 'Notificação de teste' });
+  return true;
 }
 
-export { messaging }; 
+export { messaging };

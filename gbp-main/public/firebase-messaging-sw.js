@@ -5,12 +5,12 @@ const CACHE_NAME = 'notification-cache-v1';
 const MAX_NOTIFICATIONS = 50;
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBwIsr-o9tj5noU9EQwR2z3hXRZSZTpHW0",
-  authDomain: "gbppolitico.firebaseapp.com",
-  projectId: "gbppolitico",
-  storageBucket: "gbppolitico.firebasestorage.app",
-  messagingSenderId: "48941500586",
-  appId: "1:48941500586:web:7eb764b449bdb1292f28d3"
+  apiKey: "AIzaSyD68oM2v_1zskhGgoHFnUW0REFAf-hyuxE",
+  authDomain: "sistema-para-vereador.firebaseapp.com",
+  projectId: "sistema-para-vereador",
+  storageBucket: "sistema-para-vereador.firebasestorage.app",
+  messagingSenderId: "955852815886",
+  appId: "1:955852815886:web:a625a99a6d2969b11fc65f"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -118,7 +118,6 @@ messaging.onBackgroundMessage(async (payload) => {
         badge: payload.notification?.image || defaultLogo,
         timestamp: Date.now(),
         data: payload.data || {},
-        showTrigger: new TimestampTrigger(Date.now()),
         priority: 2
       }
     };

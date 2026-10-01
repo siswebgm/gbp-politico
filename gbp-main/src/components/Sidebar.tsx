@@ -6,7 +6,6 @@ import {
   CalendarCheck,
   Calendar,
   FileText,
-  MessageSquare,
   Map,
   Target,
   UserCircle,
@@ -16,6 +15,7 @@ import {
   ChevronRight,
   Search,
   AlertTriangle,
+  Megaphone,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider';
@@ -33,17 +33,20 @@ interface NavigationItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   items?: { name: string; href: string }[];
+  submenu?: boolean;
   parent?: string;
 }
 
 const RESTRICTED_PATHS = [
   '/app/resultados-eleitorais',
   '/app/disparo-de-midia',
+  '/app/relatorio-disparo',
   '/app/mapa-eleitoral',
   '/app/strategy',
   '/app/users',
   '/app/settings',
-  '/app/pesquisas'
+  '/app/pesquisas',
+  '/app/notificacoes'
 ];
 
 const navigation: NavigationItem[] = [
@@ -68,7 +71,16 @@ const navigation: NavigationItem[] = [
   },
   { name: 'Documentos', href: '/app/documentos', icon: FileText },
   { name: 'Demandas Ruas', href: '/app/documentos/demandas-ruas', icon: AlertTriangle },
-  { name: 'Disparo de Mídia', href: '/app/disparo-de-midia', icon: MessageSquare },
+  {
+    name: 'Disparos',
+    href: '/app/disparo-de-midia',
+    icon: Megaphone,
+    submenu: true,
+    items: [
+      { name: 'Disparo de Mídia', href: '/app/disparo-de-midia' },
+      { name: 'Notificações Push', href: '/app/notificacoes/disparar' }
+    ]
+  },
   { name: 'Mapa Eleitoral', href: '/app/mapa-eleitoral', icon: Map },
   { name: 'Estratégia', href: '/app/strategy', icon: Target },
   { name: 'Usuários', href: '/app/users', icon: UserCircle },
@@ -84,6 +96,14 @@ interface MenuItemProps {
   onToggle: (e: React.MouseEvent) => void;
   onClick: () => void;
   badge?: number;
+  pathname: string;
+}
+
+function getActiveSubHref(item: NavigationItem, pathname: string): string | undefined {
+  if (!item.submenu) return undefined;
+  return item.items
+    ?.filter(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 }
 
 const MenuItem = React.memo(function MenuItem({ 
@@ -94,8 +114,13 @@ const MenuItem = React.memo(function MenuItem({
   expanded, 
   onToggle, 
   onClick,
-  badge
+  badge,
+  pathname
 }: MenuItemProps) {
+  const hasChildren = !!item.submenu && !!item.items?.length;
+  const showChildren = hasChildren && expanded && !isCollapsed;
+  const activeSubHref = getActiveSubHref(item, pathname);
+
   return (
     <div className="mb-1.5">
       <div 
@@ -111,7 +136,13 @@ const MenuItem = React.memo(function MenuItem({
       >
         <Link
           to={item.href}
-          onClick={onClick}
+          onClick={(e) => {
+            if (hasChildren && !isCollapsed) {
+              onToggle(e);
+              return;
+            }
+            onClick();
+          }}
           className={`flex-1 flex items-center ${item.parent ? 'pl-8' : ''} relative`}
         >
           <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-transform duration-200 ${
@@ -140,7 +171,7 @@ const MenuItem = React.memo(function MenuItem({
             </>
           )}
         </Link>
-        {isParent && !isCollapsed && (
+        {(isParent || hasChildren) && !isCollapsed && (
           <button
             onClick={onToggle}
             className="ml-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -154,6 +185,24 @@ const MenuItem = React.memo(function MenuItem({
           </button>
         )}
       </div>
+      {showChildren && (
+        <div className="mt-1 ml-7 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-0.5">
+          {item.items!.map(sub => (
+            <Link
+              key={sub.href}
+              to={sub.href}
+              onClick={onClick}
+              className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                activeSubHref === sub.href
+                  ? 'bg-blue-50 text-blue-600 font-medium dark:bg-blue-800/50 dark:text-white'
+                  : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
+              }`}
+            >
+              {sub.name}
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
@@ -281,6 +330,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return () => clearInterval(interval);
   }, [temAcessoDemandasRuas, company?.plano, company?.uid]);
 
+  useEffect(() => {
+    const parents = navigation.filter(n => getActiveSubHref(n, location.pathname));
+    if (parents.length === 0) return;
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      parents.forEach(p => next.add(p.href));
+      return next;
+    });
+  }, [location.pathname]);
+
   const toggleItem = useCallback((href: string) => {
     setExpandedItems(prev => new Set(prev.has(href) ? [...prev].filter(item => item !== href) : [...prev, href]));
   }, []);
@@ -375,6 +434,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   // Documentos só fica ativo se não for a rota de demandas-ruas
                   isActive = location.pathname.startsWith('/app/documentos') && 
                              !location.pathname.startsWith('/app/documentos/demandas-ruas');
+                } else if (item.submenu) {
+                  isActive = !!getActiveSubHref(item, location.pathname) || location.pathname.startsWith(item.href);
                 } else {
                   isActive = location.pathname.startsWith(item.href);
                 }
@@ -395,6 +456,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       toggleItem(item.href);
                     }}
                     onClick={handleMobileClose}
+                    pathname={location.pathname}
                     badge={item.href === '/app/documentos/demandas-ruas' ? demandasHoje : undefined}
                   />
                 );
