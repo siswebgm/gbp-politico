@@ -3,12 +3,13 @@ import { useParams } from 'react-router-dom';
 import { ArrowLeft, Bell, BellRing, Check, CheckCircle, XCircle, AlertCircle, User, Phone, Loader2 } from 'lucide-react';
 import { requestNotificationPermission } from '../../../lib/firebase';
 import { notificationSubscribersService, EmpresaPublica } from '../../../services/notificationSubscribers';
+import { supabaseClient } from '../../../lib/supabase';
 
 type Etapa = 'inicial' | 'processando' | 'sucesso' | 'negado' | 'nao_suportado' | 'erro';
 type MotivoNegado = 'bloqueado' | 'ignorado' | 'inseguro';
 
 export function AceitarNotificacoes() {
-  const { empresa_uid } = useParams<{ empresa_uid: string }>();
+  const { empresa_uid, eleitor_uid } = useParams<{ empresa_uid: string; eleitor_uid?: string }>();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [etapa, setEtapa] = useState<Etapa>('inicial');
@@ -31,6 +32,29 @@ export function AceitarNotificacoes() {
       ativo = false;
     };
   }, [empresa_uid]);
+
+  // Buscar dados do eleitor se eleitor_uid for fornecido
+  useEffect(() => {
+    const fetchEleitor = async () => {
+      if (!eleitor_uid) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('nome, whatsapp')
+          .eq('uid', eleitor_uid)
+          .single();
+        
+        if (!error && data) {
+          setNome(data.nome || '');
+          setTelefone(data.whatsapp || '');
+        }
+      } catch (e) {
+        console.error('[AceitarNotificacoes] Falha ao carregar eleitor:', e);
+      }
+    };
+    
+    fetchEleitor();
+  }, [eleitor_uid]);
 
   const exibirLogo = !!empresa?.logo && !logoFalhou;
 

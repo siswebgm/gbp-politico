@@ -18,6 +18,7 @@ import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown'
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import jsPDF from 'jspdf';
+import { createAttendanceMessage, replaceMessageTags } from '../../services/attendanceMessages';
 import {
   Dialog,
   DialogContent,
@@ -1442,9 +1443,10 @@ export const NovaPessoa: React.FC = () => {
         // Inserir todos os atendimentos
         if (atendimentosParaCriar.length > 0) {
           console.log('Dados dos atendimentos:', atendimentosParaCriar);
-          const { error: atendimentoError } = await supabaseClient
+          const { data: atendimentosCriados, error: atendimentoError } = await supabaseClient
             .from('gbp_atendimentos')
-            .insert(atendimentosParaCriar);
+            .insert(atendimentosParaCriar)
+            .select('uid');
 
           if (atendimentoError) {
             console.error('Erro ao criar atendimentos:', atendimentoError);
@@ -1454,6 +1456,57 @@ export const NovaPessoa: React.FC = () => {
               description: `Erro ao criar atendimentos: ${atendimentoError.message}`,
               variant: "destructive",
             });
+          } else {
+            // Buscar configurações da empresa para mensagens automáticas
+            const { data: empresaConfig } = await supabaseClient
+              .from('gbp_empresas')
+              .select('mensagens_ativadas, mensagem_padrao_atendimento, mensagem_delay_minutos')
+              .eq('uid', company?.uid)
+              .single();
+
+            // Se mensagens estiverem ativadas, criar registros em gbp_mensagens_atendimentos
+            if (empresaConfig?.mensagens_ativadas && empresaConfig?.mensagem_padrao_atendimento) {
+              for (let i = 0; i < atendimentosCriados.length; i++) {
+                const atendimento = atendimentosCriados[i];
+                const atendimentoData = atendimentosParaCriar[i];
+
+                // Usar o delay configurado na empresa
+                const delayMinutos = empresaConfig.mensagem_delay_minutos ?? 30;
+                const dataProgramada = delayMinutos === 0 
+                  ? new Date().toISOString() 
+                  : new Date(Date.now() + delayMinutos * 60 * 1000).toISOString();
+
+                // Buscar nome da categoria
+                let categoriaNome = '';
+                if (atendimentoData.categoria_uid && categoriaTipos) {
+                  const categoria = categoriaTipos.find(cat => cat.uid === atendimentoData.categoria_uid);
+                  categoriaNome = categoria?.nome || '';
+                }
+
+                // Substituir tags na mensagem
+                const mensagemProcessada = replaceMessageTags(empresaConfig.mensagem_padrao_atendimento, {
+                  nome: formattedData.nome,
+                  categoria: categoriaNome,
+                  cliente: company?.nome || '',
+                  empresa_uid: company?.uid || '',
+                  eleitor_uid: eleitorData.uid,
+                });
+
+                try {
+                  await createAttendanceMessage({
+                    atendimento_uid: atendimento.uid,
+                    eleitor_uid: eleitorData.uid,
+                    mensagem_texto: mensagemProcessada,
+                    empresa_uid: company?.uid || '',
+                    data_programada_envio: dataProgramada,
+                  });
+                  console.log('Mensagem de atendimento criada para:', atendimento.uid, 'com delay:', delayMinutos, 'minutos');
+                } catch (msgError) {
+                  console.error('Erro ao criar mensagem de atendimento:', msgError);
+                  // Não interromper o fluxo principal se falhar a criação da mensagem
+                }
+              }
+            }
           }
         }
       }

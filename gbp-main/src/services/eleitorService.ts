@@ -3,6 +3,7 @@ import { Eleitor, EleitorFormData, EleitorFilters } from '../types/eleitor';
 import * as XLSX from 'xlsx';
 import { RESTRICTED_ACCESS_LEVELS } from '../constants/accessLevels';
 import { toAccentInsensitiveRegex, toCpfRegex } from '../components/AppAssistant/utils';
+import { createAttendanceMessage, replaceMessageTags } from './attendanceMessages';
 
 interface ListResponse {
   data: Eleitor[];
@@ -1124,6 +1125,71 @@ class EleitorService {
       }
 
       console.log('[DEBUG] Atendimento criado com sucesso:', newAtendimento);
+
+      // Buscar configurações da empresa para mensagens automáticas
+      const { data: empresaConfig } = await supabaseClient
+        .from('gbp_empresas')
+        .select('mensagens_ativadas, mensagem_padrao_atendimento, mensagem_delay_minutos')
+        .eq('uid', empresa_uid)
+        .single();
+
+      // Se mensagens estiverem ativadas, criar registro em gbp_mensagens_atendimentos
+      if (empresaConfig?.mensagens_ativadas && empresaConfig?.mensagem_padrao_atendimento) {
+        // Usar configuração da empresa para delay
+        const delayMinutos = empresaConfig.mensagem_delay_minutos ?? 30;
+        const dataProgramada = delayMinutos === 0 
+          ? new Date().toISOString() 
+          : new Date(Date.now() + delayMinutos * 60 * 1000).toISOString();
+
+        // Buscar dados do eleitor para substituir tags
+        const { data: eleitorData } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('nome')
+          .eq('uid', data.eleitor_uid)
+          .single();
+
+        // Buscar nome da categoria se fornecido
+        let categoriaNome = '';
+        if (data.categoria_uid) {
+          const { data: categoriaData } = await supabaseClient
+            .from('gbp_categoria_tipos')
+            .select('nome')
+            .eq('uid', data.categoria_uid)
+            .single();
+          categoriaNome = categoriaData?.nome || '';
+        }
+
+        // Buscar nome da empresa
+        const { data: empresaNomeData } = await supabaseClient
+          .from('gbp_empresas')
+          .select('nome')
+          .eq('uid', empresa_uid)
+          .single();
+
+        // Substituir tags na mensagem
+        const mensagemProcessada = replaceMessageTags(empresaConfig.mensagem_padrao_atendimento, {
+          nome: eleitorData?.nome || '',
+          categoria: categoriaNome,
+          cliente: empresaNomeData?.nome || '',
+          empresa_uid: empresa_uid,
+          eleitor_uid: data.eleitor_uid,
+        });
+
+        try {
+          await createAttendanceMessage({
+            atendimento_uid: newAtendimento.uid,
+            eleitor_uid: data.eleitor_uid,
+            mensagem_texto: mensagemProcessada,
+            empresa_uid: empresa_uid,
+            data_programada_envio: dataProgramada,
+          });
+          console.log('[DEBUG] Mensagem de atendimento criada para:', newAtendimento.uid, 'com delay:', delayMinutos, 'minutos');
+        } catch (msgError) {
+          console.error('[DEBUG] Erro ao criar mensagem de atendimento:', msgError);
+          // Não interromper o fluxo principal se falhar a criação da mensagem
+        }
+      }
+
       return newAtendimento;
     } catch (error) {
       console.error('[DEBUG] Erro ao criar atendimento:', error);

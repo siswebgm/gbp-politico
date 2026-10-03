@@ -26,8 +26,9 @@ interface RegistrarInscritoParams {
 }
 
 class NotificationSubscribersService {
-  gerarLinkConvite(empresaUid: string): string {
-    return `${window.location.origin}/notificacoes/aceitar/${empresaUid}`;
+  gerarLinkConvite(empresaUid: string, eleitorUid?: string): string {
+    const baseLink = `${window.location.origin}/notificacoes/aceitar/${empresaUid}`;
+    return eleitorUid ? `${baseLink}/${eleitorUid}` : baseLink;
   }
 
   async buscarEmpresaPublica(empresaUid: string): Promise<EmpresaPublica | null> {

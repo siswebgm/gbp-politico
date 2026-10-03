@@ -76,7 +76,6 @@ import ResponderPesquisa from './pages/PesquisaEleitoral/ResponderPesquisa';
 import ObrigadoPesquisa from './pages/PesquisaEleitoral/ObrigadoPesquisa';
 import { SelectCompany } from './pages/SelectCompany';
 import { GerenciamentoAmbientes } from './pages/GerenciamentoAmbientes';
-import { AssistenteTreinamento } from './pages/AssistenteTreinamento';
 import { OwnerRoute } from './components/OwnerRoute';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -193,7 +192,7 @@ export function AppRoutes() {
       />
 
       {/* Rota pública de convite para notificações */}
-      <Route path="/notificacoes/aceitar/:empresa_uid" element={<AceitarNotificacoes />} />
+      <Route path="/notificacoes/aceitar/:empresa_uid/:eleitor_uid?" element={<AceitarNotificacoes />} />
 
       {/* Rota pública para atendimentos */}
       <Route
@@ -371,6 +370,7 @@ export function AppRoutes() {
         <Route path="mapa-eleitoral" element={<ElectoralMap />} />
         <Route path="settings">
           <Route index element={<Settings />} />
+          <Route path=":tab" element={<Settings />} />
         </Route>
         <Route path="notificacoes">
           <Route path="disparar" element={<AdminRoute><DispararNotificacao /></AdminRoute>} />
@@ -385,7 +385,6 @@ export function AppRoutes() {
             <WhatsAppPage />
           </Suspense>
         } />
-        <Route path="assistente/treinamento" element={<OwnerRoute><AssistenteTreinamento /></OwnerRoute>} />
         <Route path="strategy" element={<AdminRoute><Strategy /></AdminRoute>} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
         <Route path="reconhecimento-facial" element={<ReconhecimentoFacial />} />
