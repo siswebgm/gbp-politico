@@ -5,6 +5,7 @@ import { IndicadoSettings } from './components/IndicadoSettings';
 import { BirthdaySettings } from './components/BirthdaySettings';
 import { ExtensaoSettings } from './components/ExtensaoSettings';
 import { MessageSettings } from './components/MessageSettings';
+import { CompanySettings } from './components/CompanySettings';
 import { 
   Cog, 
   Users, 
@@ -16,14 +17,15 @@ import {
   ChevronLeft, 
   Chrome, 
   Send, 
-  ExternalLink 
+  ExternalLink,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useNavigate } from 'react-router-dom';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
 
-type SettingsTab = 'categorias' | 'indicados' | 'aniversario' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'extensao' | 'mensagens';
+type SettingsTab = 'categorias' | 'indicados' | 'aniversario' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'extensao' | 'mensagens' | 'empresa';
 
 // Helper para adicionar scroll horizontal com touch (comprovado no projeto)
 const setupHorizontalScroll = (el: HTMLDivElement | null) => {
@@ -157,6 +159,7 @@ export function Settings() {
     { id: 'mensagens', label: 'Mensagens', icon: Send, adminOnly: true, desc: 'Configuração de notificações push para atendimentos' },
     { id: 'form', label: 'Formulário de Cadastro', icon: FormInput, isExternal: true, desc: 'Personalize o formulário público' },
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, isExternal: true, desc: 'Conexão e instâncias do WhatsApp' },
+    { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Edite os dados da empresa atual' },
     { id: 'extensao', label: 'Extensão', icon: Chrome, desc: 'Integração com extensão do navegador' },
     { id: 'upload', label: 'Upload', icon: Upload, isExternal: true, desc: 'Importação em massa de contatos' },
     { id: 'planos', label: 'Planos', icon: CreditCard, isExternal: true, desc: 'Assinatura e limites da conta' }
@@ -297,6 +300,7 @@ export function Settings() {
 
                 {/* Componentes */}
                 <div>
+                  {activeTab === 'empresa' && <CompanySettings />}
                   {activeTab === 'categorias' && <CategorySettings />}
                   {activeTab === 'indicados' && <IndicadoSettings />}
                   {activeTab === 'aniversario' && <BirthdaySettings />}
