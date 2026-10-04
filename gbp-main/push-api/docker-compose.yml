@@ -1,0 +1,19 @@
+# Stack para deploy no Portainer (Build method: Repository)
+# Compose path: push-api/docker-compose.yml
+#
+# Defina as variáveis abaixo na seção "Environment variables" do Portainer:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, FIREBASE_SERVICE_ACCOUNT
+# FIREBASE_SERVICE_ACCOUNT = conteúdo inteiro do JSON da service account (1 linha)
+
+services:
+  push-api:
+    build: .
+    container_name: push-api
+    restart: unless-stopped
+    ports:
+      - "3400:3400"
+    environment:
+      PORT: "3400"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
