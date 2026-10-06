@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   gbppolitico:
-    image: siswebgm/gbp-politico:2.9.33
+    image: siswebgm/gbp-politico:2.9.42
     networks:
       - network_public
     healthcheck:
@@ -44,6 +44,33 @@ services:
         reservations:
           cpus: '0.5'
           memory: 128M
+
+  push-api:
+    image: siswebgm/gbp-push-api:1.0.0
+    networks:
+      - network_public
+    environment:
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
+      SUPABASE_URL: https://studio.gbppolitico.com
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      ALLOWED_ORIGINS: https://app.gbppolitico.com,http://localhost:3000
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.gbp-push-api.rule=Host(`app.gbppolitico.com`) && PathPrefix(`/push-api`)"
+        - "traefik.http.routers.gbp-push-api.entrypoints=websecure"
+        - "traefik.http.routers.gbp-push-api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.gbp-push-api.middlewares=gbp-push-api-strip"
+        - "traefik.http.middlewares.gbp-push-api-strip.stripprefix.prefixes=/push-api"
+        - "traefik.http.services.gbp-push-api.loadbalancer.server.port=3400"
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
 networks:
   network_public:

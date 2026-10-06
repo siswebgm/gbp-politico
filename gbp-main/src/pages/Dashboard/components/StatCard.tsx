@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../../hooks/useAuth';
-import { Users, Calendar, Clock, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -54,38 +53,43 @@ export function StatCard({
       )}
       <div 
         className={cn(
-          "rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow h-[90px]",
+          "rounded-xl shadow-sm p-4 cursor-pointer hover:shadow-md transition-shadow h-[100px]",
           highlight 
             ? "bg-red-50 dark:bg-red-900/20 border-2 border-red-500 dark:border-red-400 hover:shadow-lg hover:border-red-600 dark:hover:border-red-500" 
             : "bg-white dark:bg-gray-800"
         )}
         onClick={() => setIsDetailsOpen(!isDetailsOpen)}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className={`p-1.5 rounded-lg ${color} bg-opacity-10`}>
-              <Icon className={`h-6 w-6 ${color}`} />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">{title}</p>
-              <div className="flex items-baseline">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {value.toLocaleString('pt-BR')}
-                </p>
+        <div className="flex items-center gap-4 h-full">
+          <div className={`p-3 rounded-xl flex-shrink-0 bg-gradient-to-br ${
+            color === 'text-blue-700' ? 'from-blue-300 to-blue-400' :
+            color === 'text-green-700' ? 'from-green-300 to-green-400' :
+            color === 'text-yellow-700' ? 'from-yellow-300 to-yellow-400' :
+            color === 'text-orange-700' ? 'from-orange-300 to-orange-400' :
+            color === 'text-purple-700' ? 'from-purple-300 to-purple-400' :
+            color === 'text-indigo-700' ? 'from-indigo-300 to-indigo-400' :
+            'from-gray-300 to-gray-400'
+          }`}>
+            <Icon className={`h-6 w-6 text-white`} />
+          </div>
+          <div className="flex-1 flex justify-between items-center">
+            <div className="flex flex-col">
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</p>
+              <div
+                className={`flex items-center text-sm font-medium ${
+                  stats?.crescimento >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                }`}
+              >
+                {stats?.crescimento >= 0 ? <TrendingUp className="h-3.5 w-3.5 mr-1" /> : <TrendingDown className="h-3.5 w-3.5 mr-1" />}
+                {stats?.crescimento >= 0 ? '+' : ''}{(stats?.crescimento || 0).toFixed(1)}%
               </div>
             </div>
-          </div>
-          <div className="text-right">
-            <div
-              className={`inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                stats?.crescimento >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
-              }`}
-              title="Comparado ao mês anterior"
-            >
-              {stats?.crescimento >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {stats?.crescimento >= 0 ? '+' : ''}{(stats?.crescimento || 0).toFixed(1)}%
+            <div className="flex flex-col items-end">
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">TOTAL</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {value.toLocaleString('pt-BR')}
+              </p>
             </div>
-            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">vs mês anterior</p>
           </div>
         </div>
       </div>

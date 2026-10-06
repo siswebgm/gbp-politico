@@ -395,7 +395,7 @@ export function Layout() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0 h-full" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--safe-area-inset-bottom)' }}>
-          <div className="w-full flex flex-col px-0 py-3 lg:px-4 lg:py-4">
+          <div className="w-full flex flex-col px-0 pt-3 lg:px-4 lg:pt-4">
             <ErrorBoundary FallbackComponent={ErrorFallback}>
               <Outlet />
             </ErrorBoundary>

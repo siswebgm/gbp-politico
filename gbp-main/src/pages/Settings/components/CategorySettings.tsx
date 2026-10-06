@@ -1,5 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { PlusCircle, CheckCircle, XCircle, Search, FileEdit, Trash2, Settings, Ban, Loader2, AlertTriangle, Users } from 'lucide-react';
+import { 
+  PlusCircle, 
+  CheckCircle, 
+  XCircle, 
+  Search, 
+  FileEdit, 
+  Trash2, 
+  Settings, 
+  Ban, 
+  Loader2, 
+  AlertTriangle, 
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical
+} from 'lucide-react';
 import { useCategories } from '../../../hooks/useCategories';
 import { useCategoriaTipos } from '../../../hooks/useCategoriaTipos';
 import { toast, ToastContainer } from 'react-toastify';
@@ -82,6 +97,27 @@ export function CategorySettings() {
 
   const [newTipo, setNewTipo] = useState({ nome: '', isCreating: false });
   
+  // Paginação por grupo de categorias (10 por página)
+  const [groupPages, setGroupPages] = useState<Record<string, number>>({});
+  const ITENS_POR_PAGINA = 10;
+
+  // Menu suspenso de ações da categoria (3 pontinhos)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('[data-category-menu]')) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setGroupPages({});
+  }, [searchTerm]);
+
   // Estado local para cores em tempo real
   const [localColors, setLocalColors] = useState<Record<string, string>>({});
 
@@ -448,22 +484,22 @@ export function CategorySettings() {
   return (
     <div className="space-y-4 md:space-y-6 relative min-h-screen pb-20 sm:pb-0">
       <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:justify-between">
-        <div className="w-full sm:max-w-md relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-indigo-300 h-5 w-5 stroke-[1.5]" />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
             placeholder="Buscar por nome ou tipo..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-indigo-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+            className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
           />
         </div>
         <button
           onClick={handleStartCreate}
-          className="hidden sm:flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm whitespace-nowrap"
+          className="hidden sm:inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium shadow-xs whitespace-nowrap"
         >
-          <PlusCircle className="h-5 w-5" />
+          <PlusCircle className="h-4 w-4" />
           Nova Categoria
         </button>
       </div>
@@ -649,53 +685,60 @@ export function CategorySettings() {
           Nenhuma categoria encontrada
         </div>
       ) : (
-        <div className="grid gap-4 sm:gap-6">
+        <div className="grid gap-3 sm:gap-4">
           {categoriasAgrupadas.map((grupo) => (
-            <div key={grupo.tipo.uid} className="bg-white rounded-lg shadow border overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 px-2 sm:px-4 py-3 border-b flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-between">
+            <div key={grupo.tipo.uid} className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 relative">
+              <div className="bg-gray-50/90 dark:bg-gray-750 px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-700 rounded-t-xl flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-between">
                 {editingTipoId === grupo.tipo.uid ? (
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                     <input
                       type="text"
                       value={editingTipoData.nome}
                       onChange={(e) => setEditingTipoData({ nome: toUpperCase(e.target.value) })}
-                      className="flex-1 px-4 py-2 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 uppercase bg-white"
+                      className="flex-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
-                    <div className="flex items-center gap-2 self-end">
+                    <div className="flex items-center gap-1 self-end">
                       <button
                         onClick={() => handleUpdateTipo(grupo.tipo.uid)}
-                        className="p-2.5 text-emerald-500 hover:text-white hover:bg-emerald-500 transition-all rounded-full hover:shadow-md"
+                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
                         title="Salvar"
                       >
-                        <CheckCircle className="h-5 w-5 stroke-[1.5] transform hover:scale-110 transition-transform" />
+                        <CheckCircle className="h-4 w-4" />
                       </button>
                       <button
                         onClick={handleCancelEditTipo}
-                        className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-400 transition-all rounded-full hover:shadow-md"
+                        className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         title="Cancelar"
                       >
-                        <XCircle className="h-5 w-5 stroke-[1.5] transform hover:scale-110 transition-transform" />
+                        <XCircle className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <h3 className="text-lg font-semibold text-indigo-900 uppercase">{grupo.tipo.nome}</h3>
-                    <div className="flex items-center gap-2 ml-auto">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h3 className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider truncate">
+                        {grupo.tipo.nome}
+                      </h3>
+                      <span className="px-2 py-0.5 text-[10px] font-semibold bg-gray-200/70 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full flex-shrink-0">
+                        {grupo.categorias.length}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 ml-auto">
                       <button
                         onClick={() => handleStartEditTipo(grupo.tipo)}
-                        className="p-2.5 text-indigo-400 hover:text-white hover:bg-indigo-400 transition-all rounded-full hover:shadow-md"
+                        className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         title="Editar Tipo"
                       >
-                        <Settings className="h-5 w-5 stroke-[1.5] transform hover:rotate-90 transition-transform duration-300" />
+                        <Settings className="h-4 w-4" />
                       </button>
                       {grupo.categorias.length === 0 && grupo.tipo.uid !== 'sem-tipo' && (
                         <button
                           onClick={() => handleDeleteTipoClick(grupo.tipo)}
-                          className="p-2.5 text-rose-400 hover:text-white hover:bg-rose-400 transition-all rounded-full hover:shadow-md group"
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                           title="Excluir Tipo"
                         >
-                          <Trash2 className="h-5 w-5 stroke-[1.5] transform group-hover:scale-110 transition-transform" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -703,113 +746,179 @@ export function CategorySettings() {
                 )}
               </div>
 
-              <div className="divide-y divide-indigo-100">
-                {grupo.categorias.map((categoria) => (
-                  <div key={categoria.uid} className="px-2 sm:px-4 py-2 hover:bg-indigo-50/50 transition-colors">
-                    {editingId === categoria.uid ? (
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                        <div className="flex-1 flex flex-col sm:flex-row gap-4">
-                          <input
-                            type="text"
-                            value={editingData.nome}
-                            onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
-                            className="flex-1 px-4 py-2 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                          />
-                          <select
-                            value={editingData.tipo_uid || ''}
-                            onChange={(e) => setEditingData({ ...editingData, tipo_uid: e.target.value })}
-                            className="w-full sm:w-auto px-4 py-2 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                          >
-                            <option value="">Sem tipo</option>
-                            {tipos?.map((tipo) => (
-                              <option key={tipo.uid} value={tipo.uid} className="uppercase">
-                                {tipo.nome.toUpperCase()}
-                              </option>
-                            ))}
-                          </select>
+              <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                {(() => {
+                  const totalItens = grupo.categorias.length;
+                  const temPaginacao = totalItens > ITENS_POR_PAGINA;
+                  const totalPaginas = Math.ceil(totalItens / ITENS_POR_PAGINA);
+                  const paginaAtual = Math.min(Math.max(1, groupPages[grupo.tipo.uid] || 1), totalPaginas || 1);
+                  const startIndex = (paginaAtual - 1) * ITENS_POR_PAGINA;
+                  const endIndex = startIndex + ITENS_POR_PAGINA;
+                  const categoriasExibidas = temPaginacao ? grupo.categorias.slice(startIndex, endIndex) : grupo.categorias;
+
+                  return (
+                    <>
+                      {categoriasExibidas.map((categoria) => (
+                        <div key={categoria.uid} className="px-3.5 py-2 hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          {editingId === categoria.uid ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                                <input
+                                  type="text"
+                                  value={editingData.nome}
+                                  onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
+                                  className="flex-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                />
+                                <select
+                                  value={editingData.tipo_uid || ''}
+                                  onChange={(e) => setEditingData({ ...editingData, tipo_uid: e.target.value })}
+                                  className="w-full sm:w-auto px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                >
+                                  <option value="">Sem tipo</option>
+                                  {tipos?.map((tipo) => (
+                                    <option key={tipo.uid} value={tipo.uid} className="uppercase">
+                                      {tipo.nome.toUpperCase()}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-1 self-end sm:self-auto">
+                                <button
+                                  onClick={() => handleUpdate(categoria.uid)}
+                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                  title="Salvar"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 justify-between">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <input
+                                  type="color"
+                                  value={localColors[categoria.uid] || categoria.cor || '#3B82F6'}
+                                  onChange={async (e) => {
+                                    const newColor = e.target.value;
+                                    setLocalColors(prev => ({ ...prev, [categoria.uid]: newColor }));
+                                    try {
+                                      const { error } = await supabaseClient
+                                        .from('gbp_categorias')
+                                        .update({ cor: newColor })
+                                        .eq('uid', categoria.uid);
+                                      if (error) throw error;
+                                      refetch();
+                                    } catch (error) {
+                                      console.error('Erro ao atualizar cor:', error);
+                                      toast.error('Erro ao atualizar cor');
+                                      setLocalColors(prev => {
+                                        const newColors = { ...prev };
+                                        delete newColors[categoria.uid];
+                                        return newColors;
+                                      });
+                                    }
+                                  }}
+                                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-md cursor-pointer border border-black/15 shadow-2xs hover:scale-105 transition-transform flex-shrink-0"
+                                  style={{ 
+                                    backgroundColor: localColors[categoria.uid] || categoria.cor || '#3B82F6',
+                                    appearance: 'none',
+                                    WebkitAppearance: 'none',
+                                    MozAppearance: 'none'
+                                  }}
+                                  title="Alterar cor da categoria"
+                                />
+                                <span className="text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                                  {categoria.nome}
+                                </span>
+                              </div>
+                              <div className="relative flex-shrink-0" data-category-menu>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(prev => prev === categoria.uid ? null : categoria.uid);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                  title="Opções"
+                                  aria-label="Opções da categoria"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+
+                                {openMenuId === categoria.uid && (
+                                  <div className="absolute right-0 top-full mt-1 w-32 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-30">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        handleStartEdit(categoria);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                                    >
+                                      <FileEdit className="h-3.5 w-3.5 text-blue-500" />
+                                      <span>Editar</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        handleDeleteClick(categoria);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                      <span>Excluir</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
-                          <button
-                            onClick={() => handleUpdate(categoria.uid)}
-                            className="p-2.5 text-emerald-500 hover:text-white hover:bg-emerald-500 transition-all rounded-full hover:shadow-md"
-                            title="Salvar"
-                          >
-                            <CheckCircle className="h-5 w-5 stroke-[1.5] transform hover:scale-110 transition-transform" />
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-400 transition-all rounded-full hover:shadow-md"
-                            title="Cancelar"
-                          >
-                            <XCircle className="h-5 w-5 stroke-[1.5] transform hover:scale-110 transition-transform" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="relative">
-                            <input
-                              type="color"
-                              value={localColors[categoria.uid] || categoria.cor || '#3B82F6'}
-                              onChange={async (e) => {
-                                const newColor = e.target.value;
-                                
-                                // Atualiza imediatamente no estado local
-                                setLocalColors(prev => ({ ...prev, [categoria.uid]: newColor }));
-                                
-                                try {
-                                  const { error } = await supabaseClient
-                                    .from('gbp_categorias')
-                                    .update({ cor: newColor })
-                                    .eq('uid', categoria.uid);
-                                  
-                                  if (error) throw error;
-                                  // Atualiza silenciosamente sem toast
-                                  refetch();
-                                } catch (error) {
-                                  console.error('Erro ao atualizar cor:', error);
-                                  toast.error('Erro ao atualizar cor');
-                                  // Reverte a cor local em caso de erro
-                                  setLocalColors(prev => {
-                                    const newColors = { ...prev };
-                                    delete newColors[categoria.uid];
-                                    return newColors;
-                                  });
-                                }
-                              }}
-                              className="w-12 h-12 rounded-lg cursor-pointer border-2 border-gray-300 hover:border-indigo-400 transition-colors"
-                              style={{ 
-                                backgroundColor: localColors[categoria.uid] || categoria.cor || '#3B82F6',
-                                appearance: 'none',
-                                WebkitAppearance: 'none',
-                                MozAppearance: 'none'
-                              }}
-                              title="Alterar cor da categoria"
-                            />
+                      ))}
+
+                      {temPaginacao && (
+                        <div className="bg-gray-50/80 dark:bg-gray-750 px-3.5 py-2 border-t border-gray-200 dark:border-gray-700 rounded-b-xl flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                          <span>
+                            Mostrando <strong className="font-semibold text-gray-700 dark:text-gray-300">{startIndex + 1}–{Math.min(endIndex, totalItens)}</strong> de <strong className="font-semibold text-gray-700 dark:text-gray-300">{totalItens}</strong>
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setGroupPages(prev => ({ ...prev, [grupo.tipo.uid]: paginaAtual - 1 }))}
+                              disabled={paginaAtual <= 1}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+                              title="Página anterior"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Anterior</span>
+                            </button>
+                            <span className="px-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                              {paginaAtual} / {totalPaginas}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setGroupPages(prev => ({ ...prev, [grupo.tipo.uid]: paginaAtual + 1 }))}
+                              disabled={paginaAtual >= totalPaginas}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+                              title="Próxima página"
+                            >
+                              <span className="hidden sm:inline">Próxima</span>
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                          <span className="text-slate-700 flex-1">{categoria.nome}</span>
                         </div>
-                        <div className="flex items-center gap-2 ml-auto">
-                          <button
-                            onClick={() => handleStartEdit(categoria)}
-                            className="p-2.5 text-indigo-400 hover:text-white hover:bg-indigo-400 transition-all rounded-full hover:shadow-md group"
-                            title="Editar Categoria"
-                          >
-                            <FileEdit className="h-5 w-5 stroke-[1.5] transform group-hover:scale-110 transition-transform" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(categoria)}
-                            className="p-2.5 text-rose-400 hover:text-white hover:bg-rose-400 transition-all rounded-full hover:shadow-md group"
-                            title="Excluir Categoria"
-                          >
-                            <Trash2 className="h-5 w-5 stroke-[1.5] transform group-hover:scale-110 transition-transform" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           ))}

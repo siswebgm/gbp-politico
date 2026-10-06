@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Eye, MousePointer, Filter, ArrowLeft } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Eye, MousePointer, Filter, ArrowLeft, Megaphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationLogs } from '../../../hooks/useNotificationLogs';
 import { format } from 'date-fns';
@@ -9,8 +9,34 @@ export default function HistoricoNotificacoes() {
   const navigate = useNavigate();
   const { logs, stats, userStats, loading, error } = useNotificationLogs();
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'enviada' | 'entregue' | 'visualizada' | 'erro'>('todos');
-  
+  const [filtroCampanha, setFiltroCampanha] = useState<string>('');
+
+  // Disparos únicos detectados nos logs
+  const campanhas = (() => {
+    const map = new Map<string, { uid: string; nome: string; data: string; total: number }>();
+    logs.forEach((l) => {
+      if (!l.campanha_uid) return;
+      const atual = map.get(l.campanha_uid);
+      if (atual) {
+        map.set(l.campanha_uid, {
+          ...atual,
+          data: l.data_criacao > atual.data ? l.data_criacao : atual.data,
+          total: atual.total + 1
+        });
+      } else {
+        map.set(l.campanha_uid, {
+          uid: l.campanha_uid,
+          nome: l.campanha_nome || 'Disparo sem nome',
+          data: l.data_criacao,
+          total: 1
+        });
+      }
+    });
+    return [...map.values()].sort((a, b) => b.data.localeCompare(a.data));
+  })();
+
   const logsFiltrados = logs.filter(log => {
+    if (filtroCampanha && log.campanha_uid !== filtroCampanha) return false;
     if (filtroStatus === 'todos') return true;
     if (filtroStatus === 'enviada') return log.enviada;
     if (filtroStatus === 'entregue') return log.entregue;
@@ -19,6 +45,26 @@ export default function HistoricoNotificacoes() {
     return true;
   });
   
+  // Estatísticas recalculadas para o disparo selecionado (ou globais)
+  const statsVista = (() => {
+    if (!filtroCampanha) return stats;
+    const base = logs.filter(l => l.campanha_uid === filtroCampanha);
+    const total = base.length;
+    if (total === 0) return stats;
+    const enviadas = base.filter(l => l.enviada).length;
+    const entregues = base.filter(l => l.entregue).length;
+    const visualizadas = base.filter(l => l.visualizada).length;
+    const clicadas = base.filter(l => l.clicada).length;
+    return {
+      total, enviadas, entregues, visualizadas, clicadas,
+      taxa_entrega: total > 0 ? (entregues / total) * 100 : 0,
+      taxa_visualizacao: total > 0 ? (visualizadas / total) * 100 : 0,
+      taxa_clique: total > 0 ? (clicadas / total) * 100 : 0
+    };
+  })();
+
+  const campanhaSelecionada = campanhas.find(c => c.uid === filtroCampanha);
+
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="space-y-4 pb-6">
@@ -42,8 +88,30 @@ export default function HistoricoNotificacoes() {
           </div>
         </header>
         
+        {/* Banner do disparo selecionado */}
+        {campanhaSelecionada && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-3">
+            <Megaphone className="h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 truncate">
+                {campanhaSelecionada.nome}
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                {campanhaSelecionada.total} destinatário{campanhaSelecionada.total !== 1 ? 's' : ''} · {format(new Date(campanhaSelecionada.data), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltroCampanha('')}
+              className="text-xs text-blue-700 dark:text-blue-300 hover:underline whitespace-nowrap"
+            >
+              Ver todos
+            </button>
+          </div>
+        )}
+
         {/* Estatísticas */}
-        {stats && (
+        {statsVista && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -53,7 +121,7 @@ export default function HistoricoNotificacoes() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {stats.enviadas}
+                {statsVista.enviadas}
               </p>
             </div>
             
@@ -65,10 +133,10 @@ export default function HistoricoNotificacoes() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {stats.entregues}
+                {statsVista.entregues}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.taxa_entrega.toFixed(1)}% de entrega
+                {statsVista.taxa_entrega.toFixed(1)}% de entrega
               </p>
             </div>
             
@@ -80,10 +148,10 @@ export default function HistoricoNotificacoes() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {stats.visualizadas}
+                {statsVista.visualizadas}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.taxa_visualizacao.toFixed(1)}% visualizadas
+                {statsVista.taxa_visualizacao.toFixed(1)}% visualizadas
               </p>
             </div>
             
@@ -95,10 +163,10 @@ export default function HistoricoNotificacoes() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {stats.clicadas}
+                {statsVista.clicadas}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {stats.taxa_clique.toFixed(1)}% de clique
+                {statsVista.taxa_clique.toFixed(1)}% de clique
               </p>
             </div>
           </div>
@@ -132,7 +200,27 @@ export default function HistoricoNotificacoes() {
         )}
         
         {/* Filtros */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 space-y-3">
+          {campanhas.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <Megaphone className="h-5 w-5 flex-shrink-0 text-gray-600 dark:text-gray-400" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">Filtrar por disparo:</span>
+              </div>
+              <select
+                value={filtroCampanha}
+                onChange={(e) => setFiltroCampanha(e.target.value)}
+                className="w-full sm:w-auto min-w-0 sm:min-w-[16rem] px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Todos os disparos</option>
+                {campanhas.map(c => (
+                  <option key={c.uid} value={c.uid}>
+                    {c.nome} — {format(new Date(c.data), 'dd/MM HH:mm')} ({c.total})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-4">
               <Filter className="h-5 w-5 flex-shrink-0 text-gray-600 dark:text-gray-400" />
@@ -205,6 +293,17 @@ export default function HistoricoNotificacoes() {
                         <span>
                           {format(new Date(log.data_criacao), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                         </span>
+                        {log.campanha_nome && (
+                          <button
+                            type="button"
+                            onClick={() => setFiltroCampanha(log.campanha_uid || '')}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                            title="Ver resultado deste disparo"
+                          >
+                            <Megaphone className="h-3 w-3" />
+                            {log.campanha_nome}
+                          </button>
+                        )}
                         {log.tipo_midia && (
                           <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
                             {log.tipo_midia}

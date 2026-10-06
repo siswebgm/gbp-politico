@@ -5,7 +5,7 @@ import { requestNotificationPermission } from '../../../lib/firebase';
 import { notificationSubscribersService, EmpresaPublica } from '../../../services/notificationSubscribers';
 import { supabaseClient } from '../../../lib/supabase';
 
-type Etapa = 'inicial' | 'processando' | 'sucesso' | 'negado' | 'nao_suportado' | 'erro';
+type Etapa = 'inicial' | 'processando' | 'sucesso' | 'negado' | 'nao_suportado' | 'ja_inscrito' | 'erro';
 type MotivoNegado = 'bloqueado' | 'ignorado' | 'inseguro';
 
 export function AceitarNotificacoes() {
@@ -57,6 +57,9 @@ export function AceitarNotificacoes() {
   }, [eleitor_uid]);
 
   const exibirLogo = !!empresa?.logo && !logoFalhou;
+  // Com eleitor_uid, os dados já vêm do cadastro — não precisa pedir ao usuário
+  const identificado = !!eleitor_uid;
+  const primeiroNome = nome.trim().split(' ')[0] || '';
 
   const suportado = typeof window !== 'undefined' && 'Notification' in window;
 
@@ -87,6 +90,7 @@ export function AceitarNotificacoes() {
       if (permissao === 'denied') {
         await notificationSubscribersService.registrar({
           empresa_uid,
+          eleitor_uid,
           nome,
           telefone,
           permissao
@@ -101,6 +105,7 @@ export function AceitarNotificacoes() {
 
       await notificationSubscribersService.registrar({
         empresa_uid,
+        eleitor_uid,
         nome,
         telefone,
         token,
@@ -108,6 +113,10 @@ export function AceitarNotificacoes() {
       });
       setEtapa('sucesso');
     } catch (error: any) {
+      if (error?.code === 'JA_REGISTRADO') {
+        setEtapa('ja_inscrito');
+        return;
+      }
       setMensagemErro(error?.message || 'Não foi possível concluir a ativação.');
       setEtapa('erro');
     }
@@ -142,10 +151,12 @@ export function AceitarNotificacoes() {
               </p>
             )}
             <h1 className="text-2xl font-bold text-gray-900 text-center leading-snug">
-              Ative as notificações
+              {identificado && primeiroNome ? `Olá, ${primeiroNome}!` : 'Ative as notificações'}
             </h1>
             <p className="mt-1 mb-4 text-sm text-gray-500 text-center whitespace-nowrap">
-              Receba avisos e novidades no seu celular.
+              {identificado && primeiroNome
+                ? 'Ative as notificações no seu celular.'
+                : 'Receba avisos e novidades no seu celular.'}
             </p>
 
             <ul className="mb-4 space-y-2 rounded-2xl bg-blue-50/70 px-4 py-3">
@@ -159,31 +170,33 @@ export function AceitarNotificacoes() {
               ))}
             </ul>
 
-            <div className="space-y-2.5 mb-4">
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  autoComplete="name"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Seu nome (opcional)"
-                  className="w-full h-11 pl-11 pr-4 text-base bg-gray-50 border border-gray-200 rounded-xl placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                />
+            {!identificado && (
+              <div className="space-y-2.5 mb-4">
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    autoComplete="name"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    placeholder="Seu nome (opcional)"
+                    className="w-full h-11 pl-11 pr-4 text-base bg-gray-50 border border-gray-200 rounded-xl placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={telefone}
+                    onChange={(e) => setTelefone(e.target.value)}
+                    placeholder="Seu WhatsApp (opcional)"
+                    className="w-full h-11 pl-11 pr-4 text-base bg-gray-50 border border-gray-200 rounded-xl placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="Seu WhatsApp (opcional)"
-                  className="w-full h-11 pl-11 pr-4 text-base bg-gray-50 border border-gray-200 rounded-xl placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                />
-              </div>
-            </div>
+            )}
 
             <button
               onClick={handleAtivar}
@@ -223,6 +236,28 @@ export function AceitarNotificacoes() {
                 Permissão registrada. O serviço de envio ainda está sendo configurado.
               </p>
             )}
+            <a
+              href="https://www.google.com"
+              className="mt-8 inline-flex items-center justify-center gap-1 px-4 py-3 text-sm font-medium text-gray-400 hover:text-gray-600 active:text-gray-700 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </a>
+          </div>
+        )}
+
+        {etapa === 'ja_inscrito' && (
+          <div className="text-center">
+            <div className="h-20 w-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-10 w-10 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Você já está inscrito!
+            </h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              <span className="block whitespace-nowrap">Este dispositivo já recebe nossas notificações.</span>
+              <span className="block whitespace-nowrap">Não precisa ativar novamente.</span>
+            </p>
             <a
               href="https://www.google.com"
               className="mt-8 inline-flex items-center justify-center gap-1 px-4 py-3 text-sm font-medium text-gray-400 hover:text-gray-600 active:text-gray-700 transition-colors"

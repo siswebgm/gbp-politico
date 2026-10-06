@@ -36,6 +36,7 @@ export function MessageSettings() {
     { tag: '{nome}', label: 'Nome do Eleitor', exemplo: 'João Silva', cor: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800' },
     { tag: '{categoria}', label: 'Categoria', exemplo: 'Saúde e Medicamentos', cor: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' },
     { tag: '{cliente}', label: 'Gabinete / Mandato', exemplo: company?.nome || 'Gabinete', cor: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800' },
+    { tag: '{saudacao}', label: 'Saudação (bom dia/tarde/noite — definido no envio)', exemplo: 'Bom dia', cor: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800' },
   ];
 
   // Inserir tag na posição do cursor
@@ -66,6 +67,7 @@ export function MessageSettings() {
         .replace(/\{nome\}/gi, 'João Silva')
         .replace(/\{categoria\}/gi, 'Saúde e Medicamentos')
         .replace(/\{cliente\}/gi, company?.nome || 'Gabinete do Vereador')
+        .replace(/\{saudacao\}/gi, 'Bom dia')
     : 'Olá João Silva, seu atendimento foi registrado com sucesso. Em breve entraremos em contato.';
 
   // Verifica se usuário é admin
@@ -330,6 +332,7 @@ export function MessageSettings() {
             <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
               <li>Ao salvar um atendimento, o sistema prepara a mensagem personalizada para o WhatsApp cadastrado do eleitor.</li>
               <li>As tags <code className="bg-blue-100 dark:bg-blue-800 px-1 py-0.5 rounded text-[11px] font-bold">{"{nome}"}</code> e <code className="bg-blue-100 dark:bg-blue-800 px-1 py-0.5 rounded text-[11px] font-bold">{"{categoria}"}</code> são substituídas pelos dados do atendimento.</li>
+              <li>A tag <code className="bg-blue-100 dark:bg-blue-800 px-1 py-0.5 rounded text-[11px] font-bold">{"{saudacao}"}</code> é substituída na hora do envio por "Bom dia", "Boa tarde" ou "Boa noite" (definido pela automação/N8N).</li>
               <li>O envio respeitará o tempo de espera configurado para dar tempo de ajustes imediatos.</li>
             </ul>
           </div>

@@ -1,5 +1,18 @@
 import { supabaseClient } from '../lib/supabase';
 
+export interface MidiaAnexo {
+  tipo: 'imagem' | 'video' | 'audio' | 'pdf';
+  url: string;
+  nome?: string;
+  legenda?: string;
+}
+
+export interface RespostaItem {
+  texto?: string | null;
+  midias?: MidiaAnexo[];
+  data: string;
+}
+
 export interface NotificationLog {
   uid: string;
   empresa_uid: string;
@@ -11,6 +24,7 @@ export interface NotificationLog {
   link_direcionar?: string;
   tipo_midia?: string;
   url_midia?: string;
+  midias?: MidiaAnexo[];
   enviada: boolean;
   entregue: boolean;
   visualizada: boolean;
@@ -24,6 +38,14 @@ export interface NotificationLog {
   plataforma?: string;
   dispositivo_modelo?: string;
   versao_app?: string;
+  resposta?: string;
+  data_resposta?: string;
+  resposta_midias?: MidiaAnexo[];
+  respostas?: RespostaItem[];
+  respostas_admin?: RespostaItem[];
+  etiquetas?: string[];
+  campanha_uid?: string | null;
+  campanha_nome?: string | null;
 }
 
 export interface CreateNotificationLogParams {
@@ -36,7 +58,10 @@ export interface CreateNotificationLogParams {
   link_direcionar?: string;
   tipo_midia?: string;
   url_midia?: string;
+  midias?: MidiaAnexo[];
   plataforma?: string;
+  campanha_uid?: string;
+  campanha_nome?: string;
 }
 
 export interface NotificationStats {
@@ -145,6 +170,116 @@ class NotificationLogsService {
     }
   }
 
+  // Registrar resposta do usuário (chat na página pública /notificacao/:uid)
+  // Cada envio vira um novo item no array `respostas` (histórico de conversa)
+  async saveResposta(uid: string, resposta: string, midias?: MidiaAnexo[]): Promise<RespostaItem> {
+    const agora = new Date().toISOString();
+
+    // Busca o histórico atual para acrescentar a nova mensagem
+    const { data: atual } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .select('respostas')
+      .eq('uid', uid)
+      .single();
+
+    const lista: RespostaItem[] = Array.isArray(atual?.respostas) ? atual.respostas : [];
+    const novo: RespostaItem = { texto: resposta || null, midias: midias || [], data: agora };
+
+    const { error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .update({
+        resposta: resposta || null,
+        data_resposta: agora,
+        resposta_midias: midias || [],
+        respostas: [...lista, novo]
+      })
+      .eq('uid', uid);
+
+    if (error) {
+      console.error('Erro ao salvar resposta:', error);
+      throw new Error(`Erro ao salvar resposta: ${error.message}`);
+    }
+    return novo;
+  }
+
+  // Registrar resposta do ADMIN na conversa (página /app/notificacoes/conversas)
+  async saveRespostaAdmin(uid: string, resposta: string, midias?: MidiaAnexo[]): Promise<RespostaItem> {
+    const agora = new Date().toISOString();
+
+    const { data: atual } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .select('respostas_admin')
+      .eq('uid', uid)
+      .single();
+
+    const lista: RespostaItem[] = Array.isArray(atual?.respostas_admin) ? atual.respostas_admin : [];
+    const novo: RespostaItem = { texto: resposta || null, midias: midias || [], data: agora };
+
+    const { error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .update({ respostas_admin: [...lista, novo] })
+      .eq('uid', uid);
+
+    if (error) {
+      console.error('Erro ao salvar resposta do admin:', error);
+      throw new Error(`Erro ao salvar resposta: ${error.message}`);
+    }
+    return novo;
+  }
+
+  // Salvar etiquetas de gerenciamento da conversa (página Conversas)
+  async salvarEtiquetas(uid: string, etiquetas: string[]): Promise<void> {
+    const { error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .update({ etiquetas })
+      .eq('uid', uid);
+
+    if (error) {
+      console.error('Erro ao salvar etiquetas:', error);
+      throw new Error(`Erro ao salvar etiquetas: ${error.message}`);
+    }
+  }
+
+  // Listar conversas: notificações que receberam resposta (ou resposta do admin)
+  async listarConversas(empresaUid: string, limit = 100): Promise<any[]> {
+    const { data, error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .select(`
+        uid, titulo, mensagem, midias, resposta, respostas, respostas_admin, etiquetas,
+        data_resposta, data_criacao, usuario_uid, inscrito_uid,
+        usuario:gbp_usuarios!usuario_uid(uid, nome, notification_token),
+        inscrito:gbp_notificacoes_inscritos!inscrito_uid(uid, nome, telefone, token)
+      `)
+      .eq('empresa_uid', empresaUid)
+      .or('resposta.not.is.null,respostas_admin.not.is.null')
+      .order('data_resposta', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Erro ao listar conversas:', error);
+      throw new Error(`Erro ao listar conversas: ${error.message}`);
+    }
+    return data || [];
+  }
+
+  // 
+
+  // Buscar log por uid
+  async getLogByUid(uid: string): Promise<NotificationLog | null> {
+    const { data, error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .select('*')
+      .eq('uid', uid)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar log de notificação:', error);
+      return null;
+    }
+
+    return data;
+  }
+
   // Buscar logs por empresa
   async getLogsByEmpresa(
     empresaUid: string,
@@ -226,7 +361,7 @@ class NotificationLogsService {
       .select('uid, nome, email, notification_token, notification_status')
       .eq('empresa_uid', empresaUid)
       .not('notification_token', 'is', null)
-      .neq('notification_status', 'invalid_token');
+      .or('notification_status.is.null,notification_status.neq.invalid_token');
 
     if (error) {
       console.error('Erro ao buscar usuários com notificação:', error);

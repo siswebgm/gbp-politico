@@ -3,6 +3,7 @@ import { supabaseClient } from '../lib/supabase';
 export interface NotificacaoInscrito {
   uid: string;
   empresa_uid: string;
+  eleitor_uid?: string | null;
   nome: string | null;
   telefone: string | null;
   token: string | null;
@@ -15,10 +16,12 @@ export interface NotificacaoInscrito {
 export interface EmpresaPublica {
   nome: string | null;
   logo: string | null;
+  storage?: string | null;
 }
 
 interface RegistrarInscritoParams {
   empresa_uid: string;
+  eleitor_uid?: string;
   nome?: string;
   telefone?: string;
   token?: string | null;
@@ -34,7 +37,7 @@ class NotificationSubscribersService {
   async buscarEmpresaPublica(empresaUid: string): Promise<EmpresaPublica | null> {
     const { data, error } = await supabaseClient
       .from('gbp_empresas')
-      .select('nome, logo')
+      .select('nome, logo, storage')
       .eq('uid', empresaUid)
       .maybeSingle();
 
@@ -49,6 +52,7 @@ class NotificationSubscribersService {
       .from('gbp_notificacoes_inscritos')
       .insert({
         empresa_uid: params.empresa_uid,
+        eleitor_uid: params.eleitor_uid || null,
         nome: params.nome || null,
         telefone: params.telefone || null,
         token: params.token || null,
@@ -62,24 +66,37 @@ class NotificationSubscribersService {
 
     if (error) {
       if (error.code === '23505' && params.token) {
-        const { data: existente, error: updateError } = await supabaseClient
+        // Pode haver linhas duplicadas com o mesmo token — atualiza todas e retorna a primeira
+        const { data: atualizados, error: updateError } = await supabaseClient
           .from('gbp_notificacoes_inscritos')
           .update({
             nome: params.nome || null,
             telefone: params.telefone || null,
+            eleitor_uid: params.eleitor_uid || null,
             permissao: params.permissao,
             ativo: params.permissao === 'granted',
             atualizado_em: new Date().toISOString()
           })
           .eq('empresa_uid', params.empresa_uid)
           .eq('token', params.token)
-          .select()
-          .single();
+          .select();
 
         if (updateError) {
           throw new Error(`Erro ao atualizar inscrição: ${updateError.message}`);
         }
-        return existente as NotificacaoInscrito;
+        if (!atualizados || atualizados.length === 0) {
+          // Conflito de token, mas nenhuma linha atualizável — já está inscrito
+          const jaRegistrado = new Error('Você já está inscrito neste dispositivo.') as any;
+          jaRegistrado.code = 'JA_REGISTRADO';
+          throw jaRegistrado;
+        }
+        return atualizados[0] as NotificacaoInscrito;
+      }
+      if (error.code === '23505') {
+        // Violação de unicidade sem token para atualizar — já está inscrito
+        const jaRegistrado = new Error('Você já está inscrito neste dispositivo.') as any;
+        jaRegistrado.code = 'JA_REGISTRADO';
+        throw jaRegistrado;
       }
       throw new Error(`Erro ao registrar inscrição: ${error.message}`);
     }

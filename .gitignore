@@ -1,1 +1,14 @@
 node_modules
+
+# Segredos  NUNCA commitar
+*firebase-adminsdk*.json
+*.env.local
+
+# Backups e artefatos de build
+ext_gbp/
+gbp-main-backup-*/
+docker-extracted/
+gbp-main-dist/
+*.log
+*.aab
+*.tar.gz

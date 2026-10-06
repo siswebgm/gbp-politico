@@ -23,6 +23,6 @@ gbp-main/.cache/**
 gbp-main/coverage
 gbp-main/coverage/**
 
-# Exclude local env/secrets
-gbp-main/.env
-gbp-main/.env.*
+# Exclude local env overrides (keep base .env - VITE_* vars are public client-side)
+gbp-main/.env.local
+gbp-main/.env.*.local

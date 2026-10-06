@@ -81,22 +81,71 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Exibe a notificação diretamente no evento push (não depende do SDK,
+// que falha silenciosamente ao exibir payloads com 'notification')
+self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push recebido:', event.data ? event.data.text() : '(sem dados)');
+
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    console.error('[Service Worker] Falha ao parsear payload:', e);
+    return;
+  }
+
+  const data = payload.data || {};
+  const notification = payload.notification || {};
+  const title = notification.title || data.title || 'GBP Politico';
+  const body = notification.body || data.body || 'Nova notificação';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: notification.icon || data.icon_url || data.badge_url || undefined,
+      image: notification.image || undefined,
+      badge: notification.icon || data.badge_url || data.icon_url || undefined,
+      tag: data.id || 'gbp-notification',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [200, 100, 200],
+      actions: [
+        { action: 'open', title: 'Visualizar' }
+      ],
+      data: {
+        ...data,
+        link: data.link || (payload.fcmOptions && payload.fcmOptions.link) || ''
+      }
+    }).then(() => {
+      console.log('[Service Worker] Notificação exibida');
+    }).catch((err) => {
+      console.error('[Service Worker] Erro ao exibir notificação:', err);
+    })
+  );
+});
+
 // Tratamento de mensagens em background
 messaging.onBackgroundMessage(async (payload) => {
   console.log('[Service Worker] Mensagem recebida em background:', payload);
 
   try {
     const defaultLogo = '//8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png';
-    
+    const data = payload.data || {};
+    const empresaNome = data.empresa_nome || 'GBP Politico';
+    // Logo da empresa enviado como icon_url/badge_url; fallback para imagem da notificação
+    const companyIcon =
+      data.badge_url || data.icon_url || payload.notification?.icon || defaultLogo;
+
     const notificationData = {
-      title: payload.notification?.title || payload.data?.title || 'GBP Politico',
+      title: payload.notification?.title || empresaNome,
       options: {
-        body: payload.notification?.body || payload.data?.message || 'Nova notificação',
-        icon: payload.notification?.image || defaultLogo,
-        badge: payload.notification?.image || defaultLogo,
-        tag: payload.data?.id || 'notification',
+        body: payload.notification?.body || data.message || 'Nova notificação',
+        icon: companyIcon,
+        badge: companyIcon,
+        tag: data.id || 'notification',
         data: {
-          ...payload.data,
+          ...data,
+          link: data.link || payload.fcmOptions?.link || '',
           dateOfArrival: Date.now(),
           primaryKey: 1
         },
@@ -114,10 +163,7 @@ messaging.onBackgroundMessage(async (payload) => {
         ],
         dir: 'auto',
         lang: 'pt-BR',
-        image: payload.notification?.image || defaultLogo,
-        badge: payload.notification?.image || defaultLogo,
-        timestamp: Date.now(),
-        data: payload.data || {},
+        image: payload.notification?.image || undefined,
         priority: 2
       }
     };
@@ -151,13 +197,19 @@ self.addEventListener('notificationclick', async (event) => {
   const data = notification.data || {};
   
   if (action === 'open') {
-    let urlToOpen = new URL('/', self.location.origin).href;
-    
-    // Se tiver um ID específico, adiciona à URL
-    if (data.id) {
-      urlToOpen += `app/lembretes/${data.id}`;
+    let urlToOpen;
+
+    // Prioridade: link enviado no payload (personalizado por disparo)
+    if (data.link) {
+      urlToOpen = /^https?:\/\//i.test(data.link)
+        ? data.link
+        : new URL(data.link, self.location.origin).href;
     } else {
-      urlToOpen += 'app/lembretes';
+      // Sem link personalizado: abre a página pública de visualização da notificação
+      urlToOpen = new URL(
+        data.id ? `notificacao/${data.id}` : '',
+        self.location.origin
+      ).href;
     }
 
     event.waitUntil(
@@ -180,4 +232,4 @@ self.addEventListener('notificationclick', async (event) => {
 // Tratamento de fechamento de notificações
 self.addEventListener('notificationclose', (event) => {
   console.log('[Service Worker] Notificação fechada:', event);
-}); 
+});

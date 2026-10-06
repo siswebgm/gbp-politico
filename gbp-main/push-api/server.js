@@ -89,44 +89,104 @@ async function requireAuth(req, res, next) {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// FCM limita sendEachForMulticast a 500 tokens por chamada
+const FCM_BATCH_SIZE = 500;
+
 app.post('/enviar', requireAuth, async (req, res) => {
-  const { tokens, title, body, imagem_url, link, data = {} } = req.body || {};
+  const { tokens, title, body, imagem_url, icon_url, badge_url, empresa_nome, link, data = {} } = req.body || {};
 
   if (!Array.isArray(tokens) || tokens.length === 0 || !title || !body) {
     return res.status(400).json({ error: 'Informe tokens, title e body' });
   }
 
   const stringData = {};
-  Object.entries({ ...data, link: link || '' }).forEach(([k, v]) => {
+  Object.entries({
+    ...data,
+    link: link || '',
+    empresa_nome: empresa_nome || '',
+    icon_url: icon_url || '',
+    badge_url: badge_url || '',
+  }).forEach(([k, v]) => {
     stringData[k] = String(v ?? '');
   });
 
-  const results = await Promise.all(
-    tokens.map(async (token) => {
-      try {
-        await admin.messaging().send({
-          token,
-          notification: { title, body, ...(imagem_url ? { imageUrl: imagem_url } : {}) },
-          data: stringData,
-          webpush: {
-            headers: { Urgency: 'high', TTL: '86400' },
-            ...(link ? { fcmOptions: { link } } : {}),
-          },
+  const icon = badge_url || icon_url || undefined;
+
+  const buildMessage = (batchTokens) => ({
+    tokens: batchTokens,
+    notification: {
+      title,
+      body,
+      ...(imagem_url ? { imageUrl: imagem_url } : {}),
+    },
+    data: stringData,
+    webpush: {
+      headers: { Urgency: 'high', TTL: '86400' },
+      notification: {
+        title,
+        body,
+        ...(icon ? { icon, badge: icon } : {}),
+        ...(imagem_url ? { image: imagem_url } : {}),
+        requireInteraction: true,
+        renotify: true,
+        tag: 'gbp-notification',
+        vibrate: [200, 100, 200],
+      },
+      ...(link ? { fcmOptions: { link } } : {}),
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'default',
+        ...(icon ? { icon } : {}),
+        ...(imagem_url ? { imageUrl: imagem_url } : {}),
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          alert: { title, body },
+          sound: 'default',
+          badge: 1,
+        },
+      },
+      ...(imagem_url ? { fcmOptions: { imageUrl: imagem_url } } : {}),
+    },
+  });
+
+  const results = [];
+
+  // Envia em lotes de até 500 tokens (limite do FCM), sequencialmente
+  for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
+    const batchTokens = tokens.slice(i, i + FCM_BATCH_SIZE);
+    try {
+      const response = await admin.messaging().sendEachForMulticast(buildMessage(batchTokens));
+      response.responses.forEach((r, idx) => {
+        const code = r.error?.code || '';
+        const msg = r.error?.message || '';
+        const invalidToken =
+          code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token' ||
+          code === 'messaging/unregistered' ||
+          code === 'messaging/mismatched-credential' ||
+          /unregistered|not.?registered|invalid.?token|sender.?id.?mismatch/i.test(msg);
+        if (!r.success) {
+          console.log('[push-api] Falha no token', batchTokens[idx]?.substring(0, 15) + '...', '| code:', code, '| msg:', msg);
+        }
+        results.push({
+          token: batchTokens[idx],
+          success: r.success,
+          invalid_token: invalidToken,
+          ...(r.error ? { error: r.error.message } : {}),
         });
-        return { token, success: true };
-      } catch (error) {
-        const code = error.code || '';
-        return {
-          token,
-          success: false,
-          invalid_token:
-            code === 'messaging/registration-token-not-registered' ||
-            code === 'messaging/invalid-registration-token',
-          error: error.message,
-        };
-      }
-    }),
-  );
+      });
+    } catch (error) {
+      // Falha no lote inteiro (ex.: erro de rede/credencial): marca todos como falha
+      batchTokens.forEach((token) => {
+        results.push({ token, success: false, error: error.message });
+      });
+    }
+  }
 
   res.json({ results });
 });

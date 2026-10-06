@@ -5,6 +5,7 @@ interface Company {
   uid: string;
   nome: string;
   apelido?: string | null;
+  logo?: string | null;
   token: string | null;
   instancia: string | null;
   porta: string | null;

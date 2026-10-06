@@ -55,6 +55,7 @@ export function useNotificationSetup() {
 
   // Setup principal das notificações
   useEffect(() => {
+    let cancelled = false;
     const setupNotifications = async () => {
       console.log('Iniciando setup de notificações...', { 
         user,
@@ -79,7 +80,7 @@ export function useNotificationSetup() {
         // Primeiro, verificar se o usuário existe e seu token atual
         const { data: userData, error: userError } = await supabaseClient
           .from('gbp_usuarios')
-          .select('notification_token')
+          .select('notification_token, notification_status')
           .eq('id', user.id)
           .single();
 
@@ -92,8 +93,42 @@ export function useNotificationSetup() {
           return;
         }
 
-        // Se já tem um token válido, não precisa solicitar novo
+        // Se já tem um token, confere se o navegador ainda usa o mesmo
+        // (FCM pode rotacionar o token ou a subscription pode ter sido resetada)
         if (userData?.notification_token) {
+          console.log('Token de notificação já existe:', userData.notification_token.substring(0, 20) + '...');
+
+          if (state.permission === 'granted') {
+            const tokenAtual = await requestNotificationPermission();
+            if (cancelled) return;
+            if (tokenAtual && tokenAtual !== userData.notification_token) {
+              console.log('Token FCM mudou — atualizando no banco');
+              await supabaseClient
+                .from('gbp_usuarios')
+                .update({
+                  notification_token: tokenAtual,
+                  notification_status: 'enabled',
+                  notification_updated_at: new Date().toISOString()
+                })
+                .eq('id', user.id);
+              setState(prev => ({ ...prev, token: tokenAtual, error: null }));
+              return;
+            }
+          }
+
+          // Se ficou marcado como invalid_token (token novo salvo sem resetar),
+          // reabilita para voltar a aparecer na lista de destinatários
+          if (userData.notification_status === 'invalid_token') {
+            console.log('Status invalid_token com token válido — reativando');
+            await supabaseClient
+              .from('gbp_usuarios')
+              .update({
+                notification_status: 'enabled',
+                notification_updated_at: new Date().toISOString()
+              })
+              .eq('id', user.id);
+          }
+
           setState(prev => ({
             ...prev,
             token: userData.notification_token
@@ -101,8 +136,11 @@ export function useNotificationSetup() {
           return;
         }
 
-        // Se não tem permissão e nunca pediu, solicita
-        if (state.permission === 'default') {
+        console.log('Sem token no banco — permissão:', state.permission);
+
+        // Se não tem token: pede permissão (default) ou gera novo token
+        // quando já está granted (ex.: token foi invalidado pelo FCM)
+        if (state.permission === 'default' || state.permission === 'granted') {
           console.log('Solicitando permissão para notificações...');
           
           // Solicitar permissão e obter token
@@ -117,10 +155,15 @@ export function useNotificationSetup() {
           console.log('Token obtido:', token);
           
           try {
-            // Salvar token no banco de dados
+            // Salvar token no banco de dados e reativar o status
+            // (handleInvalidToken marca como 'invalid_token' quando o FCM rejeita)
             const { error: updateError } = await supabaseClient
               .from('gbp_usuarios')
-              .update({ notification_token: token })
+              .update({
+                notification_token: token,
+                notification_status: 'enabled',
+                notification_updated_at: new Date().toISOString()
+              })
               .eq('id', user.id);
 
             if (updateError) {
@@ -154,7 +197,8 @@ export function useNotificationSetup() {
     };
 
     setupNotifications();
+    return () => { cancelled = true; };
   }, [user, state.isSupported, state.permission]);
 
   return state;
-} 
+}

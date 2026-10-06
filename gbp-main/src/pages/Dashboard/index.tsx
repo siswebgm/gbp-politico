@@ -8,9 +8,10 @@ import {
   UserCheck, 
   CalendarCheck, 
   Book, 
-  FileSpreadsheet, 
-  BookOpen, 
-  Calendar, 
+  BookOpen,
+  ClipboardList, 
+  Scale, 
+  CalendarClock, 
   TrendingUp, 
   RefreshCw, 
   ChevronRight, 
@@ -19,7 +20,21 @@ import {
   CheckCircle,
   XCircle,
   MapPin,
-  Info
+  Info,
+  Headset,
+  FileEdit,
+  Landmark,
+  FileCheck,
+  UserCircle,
+  FileSignature,
+  Clipboard,
+  Gavel,
+  CalendarDays,
+  MessageCircle,
+  User,
+  File,
+  Calendar,
+  Hammer
 } from 'lucide-react';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { format } from 'date-fns';
@@ -275,7 +290,7 @@ export function Dashboard() {
       const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
       
       if (sessionError || !session) {
-        console.error('Erro de autenticação:', sessionError);
+        if (sessionError) console.error('Erro de autenticação:', sessionError);
         return;
       }
 
@@ -567,37 +582,25 @@ export function Dashboard() {
             {/* Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <StatCard
-                title="Total de Atendimentos"
+                title="ATENDIMENTOS"
                 value={Number(dashboardData?.totalAtendimentos || 0)}
                 total={Number(dashboardData?.totalAtendimentos || 0)}
-                icon={MessageSquare}
+                icon={Phone}
                 color="text-blue-700"
                 stats={dashboardData.atendimentosStats}
                 showDetailsLink
                 detailsUrl="/app/atendimentos/relatorios"
               />
               <StatCard
-                title="Total de Pessoas"
+                title="PESSOAS"
                 value={Number(dashboardData?.totalEleitores || 0)}
                 total={Number(dashboardData?.totalEleitores || 0)}
                 icon={Users}
                 color="text-green-700"
                 stats={dashboardData.eleitoresStats}
-                footer={
-                  <Link
-                    to="/app/pessoas/relatorio"
-                    className={cn(
-                      "text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300",
-                      "flex items-center gap-1"
-                    )}
-                  >
-                    Ver detalhes
-                    <ChevronRight className="h-3 w-3" />
-                  </Link>
-                }
               />
               <StatCard
-                title="Total de Ofícios"
+                title="OFÍCIOS"
                 value={Number(dashboardData?.totalOficios || 0)}
                 total={Number(dashboardData?.totalOficios || 0)}
                 icon={FileText}
@@ -605,15 +608,15 @@ export function Dashboard() {
                 stats={dashboardData.oficiosStats}
               />
               <StatCard
-                title="Total de Requerimentos"
+                title="REQUERIMENTOS"
                 value={Number(dashboardData?.totalRequerimentos || 0)}
                 total={Number(dashboardData?.totalRequerimentos || 0)}
-                icon={FileSpreadsheet}
+                icon={FileEdit}
                 color="text-orange-700"
                 stats={dashboardData.requerimentosStats}
               />
               <StatCard
-                title="Total de Projetos"
+                title="PROJETO DE LEI"
                 value={Number(dashboardData?.totalProjetosLei || 0)}
                 total={Number(dashboardData?.totalProjetosLei || 0)}
                 icon={BookOpen}
@@ -621,10 +624,10 @@ export function Dashboard() {
                 stats={dashboardData.projetosLeiStats}
               />
               <StatCard
-                title="Total de Agendamentos"
+                title="AGENDAMENTOS"
                 value={Number(dashboardData?.totalAgendamentos || 0)}
                 total={Number(dashboardData?.totalAgendamentos || 0)}
-                icon={Calendar}
+                icon={CalendarCheck}
                 color="text-indigo-700"
                 stats={dashboardData.agendamentosStats}
               />

@@ -49,8 +49,10 @@ import { Requerimentos } from './pages/Documents/Requerimentos';
 import UploadRequerimento from './pages/Documents/Requerimentos/UploadRequerimento';
 import EditRequerimento from './pages/Documents/Requerimentos/EditRequerimento';
 import DispararNotificacao from './pages/Notificacoes/Disparar';
+import ConversasNotificacoes from './pages/Notificacoes/Conversas';
 import HistoricoNotificacoes from './pages/Notificacoes/Historico';
 import ConfiguracaoNotificacoes from './pages/Notificacoes/Configuracao';
+import VisualizarNotificacao from './pages/Notificacoes/Visualizar';
 import { AceitarNotificacoes } from './pages/public/AceitarNotificacoes';
 import ViewRequerimento from './pages/Documents/Requerimentos/ViewRequerimento';
 import EmendasParlamentares from './pages/Documents/EmendasParlamentares';
@@ -193,6 +195,9 @@ export function AppRoutes() {
 
       {/* Rota pública de convite para notificações */}
       <Route path="/notificacoes/aceitar/:empresa_uid/:eleitor_uid?" element={<AceitarNotificacoes />} />
+
+      {/* Rota pública de visualização da notificação (aberta ao clicar no push) */}
+      <Route path="/notificacao/:uid" element={<VisualizarNotificacao />} />
 
       {/* Rota pública para atendimentos */}
       <Route
@@ -374,6 +379,7 @@ export function AppRoutes() {
         </Route>
         <Route path="notificacoes">
           <Route path="disparar" element={<AdminRoute><DispararNotificacao /></AdminRoute>} />
+          <Route path="conversas" element={<AdminRoute><ConversasNotificacoes /></AdminRoute>} />
           <Route path="historico" element={<AdminRoute><HistoricoNotificacoes /></AdminRoute>} />
           <Route path="configuracao" element={<AdminRoute><ConfiguracaoNotificacoes /></AdminRoute>} />
         </Route>

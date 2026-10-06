@@ -274,6 +274,9 @@ class NotificationService {
     title: string;
     body: string;
     imagem_url?: string;
+    icon_url?: string;
+    badge_url?: string;
+    empresa_nome?: string;
     link?: string;
     data?: Record<string, string>;
   }): Promise<Array<{ token: string; success: boolean; invalid_token?: boolean; error?: string }>> {

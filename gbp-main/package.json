@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/generate-version.js && vite --port 3000",
-    "dev:all": "concurrently \"npm run dev\" \"cd server && node server.js\"",
+    "dev:all": "concurrently \"npm run dev\" \"cd server && node server.js\" \"cd push-api && node server.js\"",
+    "push-api": "cd push-api && set FIREBASE_SERVICE_ACCOUNT_FILE=sistema-para-vereador-firebase-adminsdk-fbsvc-81863ed918.json&& node server.js",
     "build": "node scripts/generate-version.js && vite build",
     "build:memory": "cross-env NODE_OPTIONS=--max_old_space_size=6144 node scripts/generate-version.js && vite build --mode production",
     "build:low-mem": "cross-env NODE_OPTIONS=--max_old_space_size=8192 node scripts/generate-version.js && vite build --mode production --sourcemap=false",
@@ -92,7 +93,7 @@
     "emoji-picker-react": "^4.12.0",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
-    "firebase": "^11.2.0",
+    "firebase": "^11.10.0",
     "framer-motion": "^12.4.7",
     "googleapis": "^144.0.0",
     "html-to-image": "^1.11.13",

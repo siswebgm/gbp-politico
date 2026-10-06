@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   X,
   Send,
@@ -112,6 +112,9 @@ const WELCOME_MESSAGE: Message = {
 
 export function AppAssistant() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Na página Conversas o botão sobreporia o campo de resposta — oculta aí
+  const ocultarBotao = location.pathname === '/app/notificacoes/conversas';
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
@@ -334,6 +337,7 @@ export function AppAssistant() {
 
   return (
     <>
+      {!ocultarBotao && (
       <button
         onClick={() => setIsOpen(!isOpen)}
         aria-label={!isOpen && statusWpp !== 'open' ? 'Abrir assistente — WhatsApp desconectado' : 'Abrir assistente'}
@@ -353,8 +357,9 @@ export function AppAssistant() {
           </span>
         )}
       </button>
+      )}
 
-      {isOpen && (
+      {isOpen && !ocultarBotao && (
         <div className="fixed bottom-24 sm:bottom-24 left-3 sm:left-4 md:left-6 z-[100] w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] md:w-[28rem] h-[calc(100vh-9rem)] sm:h-[32rem] max-h-[32rem] sm:max-h-[40rem] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex flex-col border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
             <div className="flex items-center gap-2">

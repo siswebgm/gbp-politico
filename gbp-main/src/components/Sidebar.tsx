@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../providers/AuthProvider';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { demandasRuasService } from '../services/demandasRuasService';
+import { notificationLogsService } from '../services/notificationLogs';
 import { supabaseClient } from '../lib/supabase';
 
 interface SidebarProps {
@@ -78,7 +79,8 @@ const navigation: NavigationItem[] = [
     submenu: true,
     items: [
       { name: 'Disparo de Mídia', href: '/app/disparo-de-midia' },
-      { name: 'Notificações Push', href: '/app/notificacoes/disparar' }
+      { name: 'Notificações Push', href: '/app/notificacoes/disparar' },
+      { name: 'Conversas', href: '/app/notificacoes/conversas' }
     ]
   },
   { name: 'Mapa Eleitoral', href: '/app/mapa-eleitoral', icon: Map },
@@ -96,6 +98,7 @@ interface MenuItemProps {
   onToggle: (e: React.MouseEvent) => void;
   onClick: () => void;
   badge?: number;
+  subBadges?: Record<string, number>;
   pathname: string;
 }
 
@@ -115,6 +118,7 @@ const MenuItem = React.memo(function MenuItem({
   onToggle, 
   onClick,
   badge,
+  subBadges,
   pathname
 }: MenuItemProps) {
   const hasChildren = !!item.submenu && !!item.items?.length;
@@ -192,13 +196,18 @@ const MenuItem = React.memo(function MenuItem({
               key={sub.href}
               to={sub.href}
               onClick={onClick}
-              className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 activeSubHref === sub.href
                   ? 'bg-blue-50 text-blue-600 font-medium dark:bg-blue-800/50 dark:text-white'
                   : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
               }`}
             >
-              {sub.name}
+              <span>{sub.name}</span>
+              {(subBadges?.[sub.href] ?? 0) > 0 && (
+                <span className="ml-2 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-green-500 text-white">
+                  {subBadges![sub.href]}
+                </span>
+              )}
             </Link>
           ))}
         </div>
@@ -214,6 +223,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const isAdmin = user?.nivel_acesso === 'admin';
   const canSeeAmbiente = Number((user as any)?.cota_criar_empresas ?? 0) > 0;
   const [demandasHoje, setDemandasHoje] = useState<number>(0);
+  const [conversasPendentes, setConversasPendentes] = useState<number>(0);
   const [canSwitchCompany, setCanSwitchCompany] = useState(false);
 
   // Planos que têm acesso ao módulo de Demandas Ruas
@@ -330,15 +340,33 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return () => clearInterval(interval);
   }, [temAcessoDemandasRuas, company?.plano, company?.uid]);
 
+  // Badge de conversas: quantas têm última mensagem do destinatário aguardando resposta
   useEffect(() => {
-    const parents = navigation.filter(n => getActiveSubHref(n, location.pathname));
-    if (parents.length === 0) return;
-    setExpandedItems(prev => {
-      const next = new Set(prev);
-      parents.forEach(p => next.add(p.href));
-      return next;
-    });
-  }, [location.pathname]);
+    if (!company?.uid || !isAdmin) return;
+
+    const carregar = async () => {
+      try {
+        const dados = await notificationLogsService.listarConversas(company.uid!, 200);
+        const pendentes = dados.filter((c: any) => {
+          const resp = Array.isArray(c.respostas) ? c.respostas : [];
+          const adm = Array.isArray(c.respostas_admin) ? c.respostas_admin : [];
+          const ultResp = resp.length
+            ? new Date(resp[resp.length - 1].data).getTime()
+            : (c.data_resposta ? new Date(c.data_resposta).getTime() : 0);
+          const ultAdm = adm.length ? new Date(adm[adm.length - 1].data).getTime() : 0;
+          return ultResp > ultAdm;
+        }).length;
+        setConversasPendentes(pendentes);
+      } catch { /* silencioso */ }
+    };
+
+    carregar();
+    const interval = setInterval(carregar, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [company?.uid, isAdmin]);
+
+  // Submenus só expandem/recolhem manualmente (clique no chevron).
+  // Ao clicar num item filho, handleMobileClose recolhe tudo.
 
   const toggleItem = useCallback((href: string) => {
     setExpandedItems(prev => new Set(prev.has(href) ? [...prev].filter(item => item !== href) : [...prev, href]));
@@ -387,6 +415,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [isAdmin, user?.nivel_acesso, temAcessoDemandasRuas, canSwitchCompany, canSeeAmbiente]);
 
   const handleMobileClose = useCallback(() => {
+    // Recolhe submenus expandidos ao navegar
+    setExpandedItems(prev => (prev.size ? new Set() : prev));
     if (window.innerWidth < 1024) {
       onClose();
     }
@@ -458,6 +488,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     onClick={handleMobileClose}
                     pathname={location.pathname}
                     badge={item.href === '/app/documentos/demandas-ruas' ? demandasHoje : undefined}
+                    subBadges={{ '/app/notificacoes/conversas': conversasPendentes }}
                   />
                 );
               })}
