@@ -240,12 +240,15 @@ class NotificationLogsService {
     }
   }
 
-  // Listar conversas: notificações que receberam resposta (ou resposta do admin)
-  async listarConversas(empresaUid: string, limit = 100): Promise<any[]> {
+  // Listar conversas: UMA conversa por pessoa (estilo WhatsApp).
+  // Cada notificação enviada gera um log próprio, mas respostas do mesmo
+  // inscrito/usuário são mescladas numa única thread — mesmo quando o token
+  // rotacionou e a pessoa já teve mais de um registro de inscrito.
+  async listarConversas(empresaUid: string, limit = 200): Promise<any[]> {
     const { data, error } = await supabaseClient
       .from('gbp_notificacoes_log')
       .select(`
-        uid, titulo, mensagem, midias, resposta, respostas, respostas_admin, etiquetas,
+        uid, titulo, mensagem, midias, resposta, resposta_midias, respostas, respostas_admin, etiquetas,
         data_resposta, data_criacao, usuario_uid, inscrito_uid,
         usuario:gbp_usuarios!usuario_uid(uid, nome, notification_token),
         inscrito:gbp_notificacoes_inscritos!inscrito_uid(uid, nome, telefone, token)
@@ -259,7 +262,96 @@ class NotificationLogsService {
       console.error('Erro ao listar conversas:', error);
       throw new Error(`Erro ao listar conversas: ${error.message}`);
     }
-    return data || [];
+    return this.agruparPorPessoa(data || []);
+  }
+
+  // Mescla os logs da mesma pessoa num único objeto de conversa.
+  // O log mais recente vira o "canônico" (uid, inscrito, etiquetas, token),
+  // e as respostas/notificações de todos os logs compõem a linha do tempo.
+  private agruparPorPessoa(logs: any[]): any[] {
+    const grupos = new Map<string, any[]>();
+    for (const log of logs) {
+      const chave = log.inscrito_uid
+        ? `i:${log.inscrito_uid}`
+        : log.usuario_uid
+          ? `u:${log.usuario_uid}`
+          : `log:${log.uid}`;
+      const lista = grupos.get(chave) || [];
+      lista.push(log);
+      grupos.set(chave, lista);
+    }
+
+    return [...grupos.values()].map((lista) => {
+      const ordenados = [...lista].sort(
+        (a, b) => new Date(b.data_criacao).getTime() - new Date(a.data_criacao).getTime()
+      );
+      const canonico = ordenados[0];
+
+      const respostas = ordenados.flatMap((l) =>
+        Array.isArray(l.respostas) && l.respostas.length
+          ? l.respostas
+          : (l.resposta
+              ? [{ texto: l.resposta, midias: l.resposta_midias || [], data: l.data_resposta }]
+              : [])
+      );
+      const respostas_admin = ordenados.flatMap((l) =>
+        Array.isArray(l.respostas_admin) ? l.respostas_admin : []
+      );
+
+      // Notificações que a pessoa recebeu, em ordem cronológica — cada uma
+      // vira uma "bolha" na conversa, como as mensagens recebidas no WhatsApp
+      const notificacoes = ordenados
+        .map((l) => ({
+          uid: l.uid,
+          titulo: l.titulo,
+          mensagem: l.mensagem,
+          midias: l.midias,
+          data_criacao: l.data_criacao
+        }))
+        .sort((a, b) => new Date(a.data_criacao).getTime() - new Date(b.data_criacao).getTime());
+
+      const datas = [...respostas, ...respostas_admin]
+        .map((r: any) => r?.data)
+        .filter(Boolean)
+        .map((d: string) => new Date(d).getTime());
+      const ultimaAtividade = Math.max(
+        ...(datas.length ? datas : [0]),
+        new Date(canonico.data_resposta || 0).getTime(),
+        new Date(canonico.data_criacao).getTime()
+      );
+
+      return {
+        ...canonico,
+        respostas,
+        respostas_admin,
+        notificacoes,
+        log_uids: ordenados.map((l) => l.uid),
+        data_resposta: new Date(ultimaAtividade).toISOString()
+      };
+    }).sort((a, b) => new Date(b.data_resposta).getTime() - new Date(a.data_resposta).getTime());
+  }
+
+  // Conversa completa da pessoa dona do log informado: todos os logs do mesmo
+  // inscrito/usuário em ordem cronológica. Usada pela página pública
+  // /notificacao/:uid para exibir a thread inteira em vez de um aviso isolado.
+  async getConversaByLogUid(logUid: string): Promise<{ log: NotificationLog; logs: NotificationLog[] } | null> {
+    const log = await this.getLogByUid(logUid);
+    if (!log) return null;
+
+    const pessoaUid = (log as any).inscrito_uid || (log as any).usuario_uid;
+    const campo = (log as any).inscrito_uid ? 'inscrito_uid' : 'usuario_uid';
+    if (!pessoaUid) return { log, logs: [log] };
+
+    const { data, error } = await supabaseClient
+      .from('gbp_notificacoes_log')
+      .select('*')
+      .eq(campo, pessoaUid)
+      .order('data_criacao', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return { log, logs: [log] };
+    }
+    return { log, logs: data as NotificationLog[] };
   }
 
   // 

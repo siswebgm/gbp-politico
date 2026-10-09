@@ -4,7 +4,7 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "set FIREBASE_SERVICE_ACCOUNT_FILE=sistema-para-vereador-firebase-adminsdk-fbsvc-81863ed918.json&& node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

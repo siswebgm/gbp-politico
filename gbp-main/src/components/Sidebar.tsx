@@ -7,7 +7,7 @@ import {
   Calendar,
   FileText,
   Map,
-  Target,
+  BarChart3,
   UserCircle,
   Settings,
   Building2,
@@ -43,7 +43,7 @@ const RESTRICTED_PATHS = [
   '/app/disparo-de-midia',
   '/app/relatorio-disparo',
   '/app/mapa-eleitoral',
-  '/app/strategy',
+  '/app/pessoas/relatorio',
   '/app/users',
   '/app/settings',
   '/app/pesquisas',
@@ -84,7 +84,7 @@ const navigation: NavigationItem[] = [
     ]
   },
   { name: 'Mapa Eleitoral', href: '/app/mapa-eleitoral', icon: Map },
-  { name: 'Estratégia', href: '/app/strategy', icon: Target },
+  { name: 'Relatório', href: '/app/pessoas/relatorio', icon: BarChart3 },
   { name: 'Usuários', href: '/app/users', icon: UserCircle },
   { name: 'Configurações', href: '/app/settings', icon: Settings },
 ];
@@ -464,6 +464,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   // Documentos só fica ativo se não for a rota de demandas-ruas
                   isActive = location.pathname.startsWith('/app/documentos') && 
                              !location.pathname.startsWith('/app/documentos/demandas-ruas');
+                } else if (item.href === '/app/pessoas') {
+                  // Pessoas não fica ativo na rota do relatório — o menu "Relatório" cobre essa página
+                  isActive = location.pathname.startsWith('/app/pessoas') &&
+                             !location.pathname.startsWith('/app/pessoas/relatorio');
                 } else if (item.submenu) {
                   isActive = !!getActiveSubHref(item, location.pathname) || location.pathname.startsWith(item.href);
                 } else {

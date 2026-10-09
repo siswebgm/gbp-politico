@@ -62,7 +62,6 @@ import NovoOficio from './pages/Documents/Oficios/NovoOficio';
 import ListaAnualOficios from './pages/Documents/Oficios/ListaAnual';
 import EditarOficio from './pages/Documents/Oficios/EditarOficio';
 import { PlanosPage } from './pages/app/Planos';
-import { Strategy } from './pages/Strategy';
 import WhatsAppPage from './pages/WhatsApp/index';
 import { Suspense, lazy } from 'react';
 import { PessoasReport } from './pages/PessoasReport';
@@ -391,7 +390,6 @@ export function AppRoutes() {
             <WhatsAppPage />
           </Suspense>
         } />
-        <Route path="strategy" element={<AdminRoute><Strategy /></AdminRoute>} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
         <Route path="reconhecimento-facial" element={<ReconhecimentoFacial />} />
         

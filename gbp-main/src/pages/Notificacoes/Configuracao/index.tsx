@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Copy, ExternalLink, MessageCircle, Users, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, ExternalLink, MessageCircle, Users, CheckCircle, XCircle, Trash2, Clock } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -15,7 +15,7 @@ export default function ConfiguracaoNotificacoes() {
   const navigate = useNavigate();
   const [inscritos, setInscritos] = useState<NotificacaoInscrito[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filtroPermissao, setFiltroPermissao] = useState<'todos' | 'autorizou' | 'nao_autorizou'>('todos');
+  const [filtroPermissao, setFiltroPermissao] = useState<'todos' | 'autorizou' | 'bloqueou' | 'nao_ativou'>('todos');
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativo' | 'inativo'>('todos');
   const [paraExcluir, setParaExcluir] = useState<NotificacaoInscrito | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -78,7 +78,8 @@ export default function ConfiguracaoNotificacoes() {
 
   const inscritosFiltrados = inscritos.filter((i) => {
     if (filtroPermissao === 'autorizou' && i.permissao !== 'granted') return false;
-    if (filtroPermissao === 'nao_autorizou' && i.permissao === 'granted') return false;
+    if (filtroPermissao === 'bloqueou' && i.permissao !== 'denied') return false;
+    if (filtroPermissao === 'nao_ativou' && (i.permissao === 'granted' || i.permissao === 'denied')) return false;
     if (filtroStatus === 'ativo' && !i.ativo) return false;
     if (filtroStatus === 'inativo' && i.ativo) return false;
     return true;
@@ -87,7 +88,8 @@ export default function ConfiguracaoNotificacoes() {
   const opcoesPermissao = [
     { value: 'todos', label: 'Todos', total: inscritos.length },
     { value: 'autorizou', label: 'Autorizou', total: inscritos.filter((i) => i.permissao === 'granted').length },
-    { value: 'nao_autorizou', label: 'Não autorizou', total: inscritos.filter((i) => i.permissao !== 'granted').length }
+    { value: 'bloqueou', label: 'Bloqueou', total: inscritos.filter((i) => i.permissao === 'denied').length },
+    { value: 'nao_ativou', label: 'Não ativou', total: inscritos.filter((i) => i.permissao !== 'granted' && i.permissao !== 'denied').length }
   ] as const;
 
   const opcoesStatus = [
@@ -104,13 +106,15 @@ export default function ConfiguracaoNotificacoes() {
     }`;
 
   const autorizados = inscritos.filter((i) => i.permissao === 'granted').length;
-  const negados = inscritos.filter((i) => i.permissao === 'denied').length;
+  const bloquearam = inscritos.filter((i) => i.permissao === 'denied').length;
+  const aguardando = inscritos.filter((i) => i.permissao !== 'granted' && i.permissao !== 'denied').length;
   const comToken = inscritos.filter((i) => !!i.token).length;
 
   const cards = [
     { label: 'Total de acessos', valor: inscritos.length, cor: 'text-blue-600' },
     { label: 'Autorizaram', valor: autorizados, cor: 'text-green-600' },
-    { label: 'Negaram', valor: negados, cor: 'text-red-600' },
+    { label: 'Bloquearam', valor: bloquearam, cor: 'text-red-600' },
+    { label: 'Aguardando', valor: aguardando, cor: 'text-yellow-600' },
     { label: 'Com token de envio', valor: comToken, cor: 'text-purple-600' }
   ];
 
@@ -182,7 +186,7 @@ export default function ConfiguracaoNotificacoes() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {cards.map((c) => (
             <div key={c.label} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">{c.label}</p>
@@ -251,9 +255,13 @@ export default function ConfiguracaoNotificacoes() {
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 whitespace-nowrap">
                         <CheckCircle className="h-4 w-4" /> Autorizou
                       </span>
+                    ) : i.permissao === 'denied' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-50 text-red-700 whitespace-nowrap" title="Bloqueou notificações no navegador. Para reverter, precisa desbloquear nas configurações do navegador e abrir o link novamente.">
+                        <XCircle className="h-4 w-4" /> Bloqueou
+                      </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-50 text-red-700 whitespace-nowrap">
-                        <XCircle className="h-4 w-4" /> Não autorizou
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-yellow-50 text-yellow-700 whitespace-nowrap" title="Ainda não ativou as notificações. Envie o link de convite.">
+                        <Clock className="h-4 w-4" /> Não ativou
                       </span>
                     )}
                     <div className="flex items-center gap-3">

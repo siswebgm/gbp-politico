@@ -47,7 +47,107 @@ class NotificationSubscribersService {
     return (data as EmpresaPublica | null) ?? null;
   }
 
+  // Busca cadastros que já representam esta mesma pessoa. O token FCM rotaciona
+  // (reinstalação, refresh do service worker), então o "mesmo usuário" pode chegar
+  // com um token novo — identificamos por eleitor_uid, telefone ou o token atual.
+  private async buscarExistentes(params: RegistrarInscritoParams): Promise<NotificacaoInscrito[]> {
+    const encontrados = new Map<string, NotificacaoInscrito>();
+    const add = (rows: NotificacaoInscrito[] | null | undefined) =>
+      (rows || []).forEach((r) => encontrados.set(r.uid, r));
+
+    if (params.eleitor_uid) {
+      const { data } = await supabaseClient
+        .from('gbp_notificacoes_inscritos')
+        .select('*')
+        .eq('empresa_uid', params.empresa_uid)
+        .eq('eleitor_uid', params.eleitor_uid);
+      add(data as NotificacaoInscrito[] | null);
+    }
+
+    // Telefone: compara só os últimos 9 dígitos (ignora DDI/DDD/máscara)
+    const fone9 = (params.telefone || '').replace(/\D/g, '').slice(-9);
+    if (fone9.length >= 8) {
+      const { data } = await supabaseClient
+        .from('gbp_notificacoes_inscritos')
+        .select('*')
+        .eq('empresa_uid', params.empresa_uid)
+        .not('telefone', 'is', null);
+      add((data as NotificacaoInscrito[] | null)?.filter((i) =>
+        (i.telefone || '').replace(/\D/g, '').slice(-9) === fone9
+      ));
+    }
+
+    if (params.token) {
+      const { data } = await supabaseClient
+        .from('gbp_notificacoes_inscritos')
+        .select('*')
+        .eq('empresa_uid', params.empresa_uid)
+        .eq('token', params.token);
+      add(data as NotificacaoInscrito[] | null);
+    }
+
+    return [...encontrados.values()];
+  }
+
+  // Transfere o histórico de conversa dos duplicados para o canônico e remove
+  // as linhas extras — a pessoa fica com UM cadastro e UMA conversa.
+  private async fundirDuplicados(canonicoUid: string, duplicados: NotificacaoInscrito[]) {
+    const extras = duplicados.filter((d) => d.uid !== canonicoUid).map((d) => d.uid);
+    if (!extras.length) return;
+
+    await supabaseClient
+      .from('gbp_notificacoes_log')
+      .update({ inscrito_uid: canonicoUid })
+      .in('inscrito_uid', extras);
+
+    await supabaseClient
+      .from('gbp_notificacoes_inscritos')
+      .delete()
+      .in('uid', extras);
+  }
+
+  private primeiro<T>(...valores: (T | null | undefined)[]): T | null {
+    return (valores.find((v) => v != null && v !== '') as T) ?? null;
+  }
+
   async registrar(params: RegistrarInscritoParams) {
+    // Mesma pessoa já cadastrada (token rotacionou ou novo convite): atualiza o
+    // registro existente com o token atual em vez de criar um inscrito novo.
+    const existentes = await this.buscarExistentes(params);
+    if (existentes.length > 0) {
+      const ordenados = [...existentes].sort(
+        (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+      );
+      const canonico = ordenados[0];
+      const extras = ordenados.slice(1);
+
+      if (extras.length) {
+        await this.fundirDuplicados(canonico.uid, extras);
+      }
+
+      const { data: atualizado, error: updErr } = await supabaseClient
+        .from('gbp_notificacoes_inscritos')
+        .update({
+          eleitor_uid: this.primeiro(params.eleitor_uid, canonico.eleitor_uid, ...extras.map((e) => e.eleitor_uid)),
+          nome: this.primeiro(params.nome, canonico.nome, ...extras.map((e) => e.nome)),
+          telefone: this.primeiro(params.telefone, canonico.telefone, ...extras.map((e) => e.telefone)),
+          token: this.primeiro(params.token, canonico.token, ...extras.map((e) => e.token)),
+          permissao: params.permissao,
+          plataforma: navigator.platform || null,
+          user_agent: navigator.userAgent,
+          ativo: params.permissao === 'granted',
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('uid', canonico.uid)
+        .select()
+        .single();
+
+      if (updErr) {
+        throw new Error(`Erro ao atualizar inscrição: ${updErr.message}`);
+      }
+      return atualizado as NotificacaoInscrito;
+    }
+
     const { data, error } = await supabaseClient
       .from('gbp_notificacoes_inscritos')
       .insert({
@@ -89,6 +189,14 @@ class NotificationSubscribersService {
           const jaRegistrado = new Error('Você já está inscrito neste dispositivo.') as any;
           jaRegistrado.code = 'JA_REGISTRADO';
           throw jaRegistrado;
+        }
+        // Mesmo token em mais de uma linha: funde tudo no mais antigo atualizado
+        if (atualizados.length > 1) {
+          const ordenados = [...atualizados].sort(
+            (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+          );
+          await this.fundirDuplicados(ordenados[0].uid, ordenados);
+          return ordenados[0] as NotificacaoInscrito;
         }
         return atualizados[0] as NotificacaoInscrito;
       }

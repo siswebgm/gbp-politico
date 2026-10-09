@@ -9,6 +9,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import * as Dialog from '@radix-ui/react-dialog';
+import { NestedCategoryDropdown } from '../../../components/NestedCategoryDropdown';
+import { categoryService, type CategoryWithType } from '../../../services/categories';
 
 interface Observation {
   uid: string;
@@ -145,7 +147,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
   const [anexoToDelete, setAnexoToDelete] = useState<{ anexo: any; index: number } | null>(null);
   const [editingCategory, setEditingCategory] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
-  const [categories, setCategories] = useState<Array<{ uid: string; nome: string }>>([]);
+  const [categories, setCategories] = useState<CategoryWithType[]>([]);
   const [selectedCategory, setSelectedCategory] = useState(initialAtendimento?.categoria_uid || '');
   const [descriptionText, setDescriptionText] = useState(initialAtendimento?.descricao || '');
   const [anexos, setAnexos] = useState<any[]>(() => {
@@ -259,11 +261,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
     const fetchCategories = async () => {
       if (!atendimento?.empresa_uid) return;
       
-      const { data: categoriesData } = await supabaseClient
-        .from('gbp_categorias')
-        .select('uid, nome')
-        .eq('empresa_uid', atendimento.empresa_uid)
-        .order('nome');
+      const categoriesData = await categoryService.list(atendimento.empresa_uid);
       
       if (categoriesData) {
         setCategories(categoriesData);
@@ -373,13 +371,7 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
       setReminders(lembreteData || []);
 
       // Carregar categorias
-      const { data: categoriasData, error: categoriasError } = await supabaseClient
-        .from('gbp_categorias')
-        .select('uid,nome')
-        .eq('empresa_uid', company?.uid)
-        .order('nome', { ascending: true });
-
-      if (categoriasError) throw categoriasError;
+      const categoriasData = await categoryService.list(company!.uid);
       setCategories(categoriasData || []);
 
       // Carregar anexos do atendimento
@@ -887,19 +879,12 @@ export function AttendanceDrawer({ isOpen, onClose, atendimento: initialAtendime
                         </div>
                         {editingCategory ? (
                           <div className="mt-2 bg-white rounded-lg border border-blue-200 p-3 shadow-sm">
-                            <select
+                            <NestedCategoryDropdown
                               value={selectedCategory}
-                              onChange={(e) => setSelectedCategory(e.target.value)}
-                              className="block w-full rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 pl-2 pr-10 text-gray-900 dark:text-white bg-white dark:bg-gray-700 shadow-sm"
-                              style={{ fontSize: '1rem' }}
-                            >
-                              <option value="">Selecione uma categoria</option>
-                              {categories.map((cat) => (
-                                <option key={cat.uid} value={cat.uid} className="py-2 pl-1">
-                                  {cat.nome}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(uid) => setSelectedCategory(uid)}
+                              categories={categories}
+                              placeholder="Selecione uma categoria"
+                            />
                             <div className="mt-3 flex justify-end space-x-2">
                               <button
                                 onClick={() => setEditingCategory(false)}

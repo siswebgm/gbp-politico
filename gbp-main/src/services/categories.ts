@@ -15,6 +15,16 @@ export interface CategoriaTipo {
   uid: string;
   nome: string;
   empresa_uid: string;
+  grupo_uid?: string | null;
+  grupo?: { uid: string; nome: string } | null;
+  created_at: string;
+}
+
+export interface CategoriaGrupo {
+  id: number;
+  uid: string;
+  nome: string;
+  empresa_uid: string;
   created_at: string;
 }
 
@@ -35,6 +45,11 @@ export const categoryService = {
           uid,
           nome,
           empresa_uid,
+          grupo_uid,
+          grupo:gbp_categoria_grupos!gbp_categoria_tipos_grupo_uid_fkey(
+            uid,
+            nome
+          ),
           created_at
         )
       `)
@@ -146,14 +161,20 @@ export const checkCategoryHasVoters = async (categoryId: string): Promise<boolea
 };
 
 export const categoriaTipoService = {
-  update: async (uid: string, updates: Partial<Omit<CategoriaTipo, 'uid' | 'id' | 'created_at' | 'empresa_uid'>>): Promise<CategoriaTipo> => {
+  update: async (uid: string, updates: Partial<Omit<CategoriaTipo, 'uid' | 'id' | 'created_at' | 'empresa_uid' | 'grupo'>>): Promise<CategoriaTipo> => {
     console.log('Iniciando atualização de tipo:', { uid, updates });
+
+    const updateData: Record<string, unknown> = {};
+    if (updates.nome !== undefined) {
+      updateData.nome = updates.nome.trim();
+    }
+    if (updates.grupo_uid !== undefined) {
+      updateData.grupo_uid = updates.grupo_uid;
+    }
 
     const { data, error } = await supabaseClient
       .from('gbp_categoria_tipos')
-      .update({
-        nome: updates.nome?.trim(),
-      })
+      .update(updateData)
       .eq('uid', uid)
       .select('*')
       .single();
@@ -210,5 +231,77 @@ export const categoriaTipoService = {
     }
 
     console.log('Tipo excluído com sucesso');
+  }
+};
+
+export const categoriaGrupoService = {
+  list: async (companyUid: string): Promise<CategoriaGrupo[]> => {
+    const { data, error } = await supabaseClient
+      .from('gbp_categoria_grupos')
+      .select('*')
+      .eq('empresa_uid', companyUid)
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao buscar grupos de categoria:', error);
+      throw error;
+    }
+
+    return data || [];
+  },
+
+  create: async (grupo: { nome: string; empresa_uid: string }): Promise<CategoriaGrupo> => {
+    if (!grupo.nome?.trim()) {
+      throw new Error('Nome é obrigatório');
+    }
+
+    if (!grupo.empresa_uid) {
+      throw new Error('Empresa não encontrada');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('gbp_categoria_grupos')
+      .insert([{
+        nome: grupo.nome.trim(),
+        empresa_uid: grupo.empresa_uid
+      }])
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Erro ao criar grupo de categoria:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  update: async (uid: string, updates: { nome?: string }): Promise<CategoriaGrupo> => {
+    const { data, error } = await supabaseClient
+      .from('gbp_categoria_grupos')
+      .update({ nome: updates.nome?.trim() })
+      .eq('uid', uid)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Erro ao atualizar grupo de categoria:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  delete: async (uid: string): Promise<void> => {
+    // Tipos vinculados ficam com grupo_uid = null (ON DELETE SET NULL)
+    const { error } = await supabaseClient
+      .from('gbp_categoria_grupos')
+      .delete()
+      .eq('uid', uid);
+
+    if (error) {
+      console.error('Erro ao excluir grupo de categoria:', error);
+      throw error;
+    }
   }
 };

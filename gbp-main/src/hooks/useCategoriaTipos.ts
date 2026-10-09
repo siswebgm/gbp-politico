@@ -23,6 +23,10 @@ export function useCategoriaTipos() {
         .from('gbp_categoria_tipos')
         .select(`
           *,
+          grupo:gbp_categoria_grupos!gbp_categoria_tipos_grupo_uid_fkey(
+            uid,
+            nome
+          ),
           categorias:gbp_categorias(
             uid,
             id,

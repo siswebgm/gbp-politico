@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Clock, Hourglass, CheckCircle, FileText, Tag, Check, User, Users } from 'lucide-react';
+import { Clock, Hourglass, CheckCircle, FileText, Check, User, Users, Bell, BellOff, BellRing } from 'lucide-react';
 import { supabaseClient } from '../../../lib/supabase';
 import { AlertCircle } from 'lucide-react';
 import { useCompanyStore } from '../../../store/useCompanyStore';
@@ -12,11 +12,11 @@ import { useUserData } from '../../../hooks/useUserData';
 import { useIndicados } from '../../../hooks/useIndicados';
 import { useToast } from "../../../components/ui/use-toast";
 import { useCategories } from '../../../hooks/useCategories';
-import { useCategoryTypes } from '../../../hooks/useCategoryTypes';
+import { NestedCategoryDropdown } from '../../../components/NestedCategoryDropdown';
 import { FileUpload } from '../../../components/ui/file-upload';
+import { createAttendanceMessage, replaceMessageTags } from '../../../services/attendanceMessages';
 
 interface AttendanceFormData {
-  categoria_tipo_uid: string;
   categoria_uid: string;
   descricao: string;
   status: string;
@@ -24,7 +24,6 @@ interface AttendanceFormData {
 }
 
 const attendanceSchema = z.object({
-  categoria_tipo_uid: z.string().min(1, 'Selecione um tipo de categoria'),
   categoria_uid: z.string().min(1, 'Selecione uma categoria'),
   descricao: z.string().min(1, 'Descrição é obrigatória'),
   status: z.string().min(1, 'Status é obrigatório'),
@@ -62,13 +61,17 @@ export function AttendanceFormContent() {
   const { data: indicados } = useIndicados();
   const [selectedVoter, setSelectedVoter] = useState<any>(null);
   const [showVoterSearch, setShowVoterSearch] = useState(true);
-  const { data: categoryTypes } = useCategoryTypes();
   const { data: categories } = useCategories();
-  const [filteredCategories, setFilteredCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<File[]>([]);
   const { toast } = useToast();
+  // Inscrição do eleitor em gbp_notificacoes_inscritos (push notifications)
+  const [inscricaoEleitor, setInscricaoEleitor] = useState<{
+    uid: string;
+    permissao: string;
+    ativo: boolean;
+  } | null>(null);
 
   const {
     register,
@@ -231,6 +234,57 @@ export function AttendanceFormContent() {
 
       console.log('Atendimento criado:', createdAttendance);
 
+      // Registrar mensagem automática em gbp_mensagens_atendimentos
+      // (mesmo padrão do eleitorService: só cria se a empresa tiver
+      // mensagens_ativadas e um template mensagem_padrao_atendimento)
+      if (selectedVoter?.uid) {
+        try {
+          const { data: empresaConfig } = await supabaseClient
+            .from('gbp_empresas')
+            .select('nome, mensagens_ativadas, mensagem_padrao_atendimento, mensagem_delay_minutos')
+            .eq('uid', company.uid)
+            .single();
+
+          if (empresaConfig?.mensagens_ativadas && empresaConfig?.mensagem_padrao_atendimento) {
+            const delayMinutos = empresaConfig.mensagem_delay_minutos ?? 30;
+            const dataProgramada = delayMinutos === 0
+              ? new Date().toISOString()
+              : new Date(Date.now() + delayMinutos * 60 * 1000).toISOString();
+
+            // Nome da categoria para a tag {categoria}
+            let categoriaNome = '';
+            if (data.categoria_uid) {
+              const { data: categoriaData } = await supabaseClient
+                .from('gbp_categoria_tipos')
+                .select('nome')
+                .eq('uid', data.categoria_uid)
+                .single();
+              categoriaNome = categoriaData?.nome || '';
+            }
+
+            const mensagemProcessada = replaceMessageTags(empresaConfig.mensagem_padrao_atendimento, {
+              nome: selectedVoter.nome || '',
+              categoria: categoriaNome,
+              cliente: empresaConfig.nome || '',
+              empresa_uid: company.uid,
+              eleitor_uid: selectedVoter.uid,
+            });
+
+            await createAttendanceMessage({
+              atendimento_uid: createdAttendance.uid,
+              eleitor_uid: selectedVoter.uid,
+              mensagem_texto: mensagemProcessada,
+              empresa_uid: company.uid,
+              data_programada_envio: dataProgramada,
+            });
+            console.log('Mensagem de atendimento registrada para:', createdAttendance.uid, 'delay:', delayMinutos, 'min');
+          }
+        } catch (msgError) {
+          // Não interrompe o fluxo principal se a mensagem falhar
+          console.error('Erro ao registrar mensagem de atendimento:', msgError);
+        }
+      }
+
       toast({
         title: "✨ Atendimento registrado com sucesso!",
         description: `O atendimento #${createdAttendance.numero} foi criado e a pessoa será notificada.`,
@@ -289,6 +343,45 @@ export function AttendanceFormContent() {
             console.log('Eleitor encontrado:', eleitor);
             setSelectedVoter(eleitor);
             setShowVoterSearch(false);
+
+            // Registra o eleitor em gbp_notificacoes_inscritos a cada
+            // atendimento (upsert no índice único empresa_uid + eleitor_uid):
+            // - não existe → cria (permissao usa o default 'default' e
+            //   ativo=true do banco)
+            // - já existe → atualiza nome/telefone/atualizado_em sem tocar em
+            //   permissao, token ou ativo (não apaga quem já autorizou)
+            try {
+              const { data: inscricao, error: erroInscricao } = await supabaseClient
+                .from('gbp_notificacoes_inscritos')
+                .upsert(
+                  {
+                    empresa_uid: company.uid,
+                    eleitor_uid: eleitorUid,
+                    nome: eleitor.nome || null,
+                    telefone: eleitor.whatsapp || null,
+                    atualizado_em: new Date().toISOString()
+                  },
+                  { onConflict: 'empresa_uid,eleitor_uid' }
+                )
+                .select('uid, permissao, ativo')
+                .single();
+
+              if (erroInscricao) {
+                console.error('Erro ao registrar inscrição do eleitor:', erroInscricao);
+                // Fallback: ainda exibe o status se o registro já existir
+                const { data: existente } = await supabaseClient
+                  .from('gbp_notificacoes_inscritos')
+                  .select('uid, permissao, ativo')
+                  .eq('empresa_uid', company.uid)
+                  .eq('eleitor_uid', eleitorUid)
+                  .maybeSingle();
+                setInscricaoEleitor(existente || null);
+              } else {
+                setInscricaoEleitor(inscricao);
+              }
+            } catch (e) {
+              console.error('Erro ao registrar inscrição do eleitor:', e);
+            }
           } else {
             console.log('Eleitor não encontrado');
             setError('Pessoa não encontrada');
@@ -363,74 +456,52 @@ export function AttendanceFormContent() {
                     )}
                   </div>
                 )}
+                {/* Status da inscrição em notificações do eleitor */}
+                {inscricaoEleitor && (
+                  <div className="mt-1.5">
+                    {inscricaoEleitor.permissao === 'granted' && inscricaoEleitor.ativo ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <BellRing className="h-3 w-3" />
+                        Inscrito e ativo — recebe notificações
+                      </span>
+                    ) : inscricaoEleitor.permissao === 'denied' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                        <BellOff className="h-3 w-3" />
+                        Notificações bloqueadas pelo eleitor
+                      </span>
+                    ) : !inscricaoEleitor.ativo ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        <BellOff className="h-3 w-3" />
+                        Inscrição inativa
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                        <Bell className="h-3 w-3" />
+                        Identificado — aguardando ativação das notificações
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Grupo Categoria e Indicado - Em linha no desktop */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Tipo de Categoria */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tipo de Categoria
-              </label>
-              <div className="relative">
-                <select
-                  {...register('categoria_tipo_uid')}
-                  onChange={(e) => {
-                    const tipoUid = e.target.value;
-                    setValue('categoria_tipo_uid', tipoUid);
-                    setValue('categoria_uid', ''); // Limpa a categoria selecionada
-                    // Filtra as categorias baseado no tipo selecionado
-                    if (tipoUid && categories) {
-                      setFilteredCategories(categories.filter(cat => cat.tipo_uid === tipoUid));
-                    } else {
-                      setFilteredCategories([]);
-                    }
-                  }}
-                  className="block w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  <option value="">Tipo</option>
-                  {categoryTypes?.map((type) => (
-                    <option key={type.uid} value={type.uid}>
-                      {type.nome}
-                    </option>
-                  ))}
-                </select>
-                <Tag className="absolute right-2 top-2.5 h-4 w-4 text-gray-400" />
-              </div>
-              {errors.categoria_tipo_uid && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                  {errors.categoria_tipo_uid.message}
-                </p>
-              )}
-            </div>
-
-            {/* Categoria */}
+            {/* Categoria — mesma hierarquia de Nova Pessoa: Grupo > Tipo > Categoria
+                (sem grupos na empresa, exibe apenas Tipo > Categoria) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Categoria
               </label>
-              <div className="relative">
-                <select
-                  {...register('categoria_uid')}
-                  className="block w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  <option value="">Categoria</option>
-                  {filteredCategories.map((category) => (
-                    <option key={category.uid} value={category.uid}>
-                      {category.nome}
-                    </option>
-                  ))}
-                </select>
-                <Tag className="absolute right-2 top-2.5 h-4 w-4 text-gray-400" />
-              </div>
-              {errors.categoria_uid && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                  {errors.categoria_uid.message}
-                </p>
-              )}
+              <NestedCategoryDropdown
+                value={watch('categoria_uid')}
+                onChange={(uid) => setValue('categoria_uid', uid, { shouldValidate: true })}
+                categories={(categories as any) || []}
+                placeholder="Selecione uma categoria..."
+                error={errors.categoria_uid?.message}
+              />
             </div>
           </div>
 

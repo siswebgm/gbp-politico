@@ -144,8 +144,23 @@ export default function DispararNotificacao() {
         });
       }
 
+      // Deduplica: a mesma pessoa pode ter mais de um registro de inscrito
+      // (tokens antigos do FCM). Mantém só o cadastro mais recente — a lista
+      // vem ordenada por criado_em desc, então o primeiro encontrado vence.
+      const chavesVistas = new Set<string>();
       const listaInscritos = inscritosData
         .filter((i) => i.ativo && i.permissao === 'granted')
+        .filter((i) => {
+          const fone9 = (i.telefone || '').replace(/\D/g, '').slice(-9);
+          const chaves = [
+            i.eleitor_uid ? `e:${i.eleitor_uid}` : null,
+            fone9.length >= 8 ? `t:${fone9}` : null,
+            i.token ? `k:${i.token}` : null
+          ].filter(Boolean) as string[];
+          if (chaves.length > 0 && chaves.some((c) => chavesVistas.has(c))) return false;
+          chaves.forEach((c) => chavesVistas.add(c));
+          return true;
+        })
         .map((i) => ({
           key: `i:${i.uid}`,
           tipo: 'inscrito',

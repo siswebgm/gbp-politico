@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/generate-version.js && vite --port 3000",
-    "dev:all": "concurrently \"npm run dev\" \"cd server && node server.js\" \"cd push-api && node server.js\"",
+    "dev": "node scripts/generate-version.js && concurrently -n vite,push -c blue,magenta \"vite --port 3000\" \"npm run push-api\"",
+    "dev:vite": "node scripts/generate-version.js && vite --port 3000",
+    "dev:all": "node scripts/generate-version.js && concurrently -n vite,server,push -c blue,green,magenta \"vite --port 3000\" \"cd server && node server.js\" \"npm run push-api\"",
     "push-api": "cd push-api && set FIREBASE_SERVICE_ACCOUNT_FILE=sistema-para-vereador-firebase-adminsdk-fbsvc-81863ed918.json&& node server.js",
     "build": "node scripts/generate-version.js && vite build",
     "build:memory": "cross-env NODE_OPTIONS=--max_old_space_size=6144 node scripts/generate-version.js && vite build --mode production",

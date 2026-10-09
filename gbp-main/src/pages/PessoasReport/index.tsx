@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { eleitorStatsService, EleitorStats, CidadeCrescimento, IndicadoCrescimento, CategoriaCrescimento, BairroCrescimento, ZonaSecaoCrescimento, ConfiabilidadeCrescimento, UsuarioCrescimento } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag, TrendingUp, TrendingDown, Calendar, Search, ArrowUp, ClipboardCheck, Route, BarChart3, Table2 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, Legend } from 'recharts';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
@@ -12,6 +13,32 @@ import { hasRestrictedAccess } from '../../constants/accessLevels';
 import { supabaseClient } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+
+// Persiste a visualização (tabela/gráfico) de cada seção entre recarregamentos
+const useViewState = (key: string) => {
+  const storageKey = `report-view-${key}`;
+  const [view, setView] = useState<'tabela' | 'grafico'>(() =>
+    (localStorage.getItem(storageKey) as 'tabela' | 'grafico') || 'tabela'
+  );
+  const update = (v: 'tabela' | 'grafico') => {
+    setView(v);
+    localStorage.setItem(storageKey, v);
+  };
+  return [view, update] as const;
+};
+
+// Detecta mudanças de tema (classe .dark no <html>) para adaptar os gráficos
+const useIsDark = () => {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const observer = new MutationObserver(() =>
+      setIsDark(document.documentElement.classList.contains('dark'))
+    );
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return isDark;
+};
 
 // Helper para adicionar scroll horizontal com touch
 const setupHorizontalScroll = (el: HTMLDivElement | null) => {
@@ -53,6 +80,42 @@ const setupHorizontalScroll = (el: HTMLDivElement | null) => {
   }, { passive: false });
 };
 
+// Seções exibidas na barra de navegação rápida do relatório
+const secoesNavegacao = [
+  { id: 'secao-faixa-etaria', label: 'Faixa Etária' },
+  { id: 'secao-cidades', label: 'Cidades' },
+  { id: 'secao-indicados', label: 'Indicados' },
+  { id: 'secao-categorias', label: 'Categorias' },
+  { id: 'secao-bairros', label: 'Bairros' },
+  { id: 'secao-logradouros', label: 'Logradouros' },
+  { id: 'secao-zonas', label: 'Zonas/Seções' },
+  { id: 'secao-atendimentos', label: 'Atendimentos' },
+  { id: 'secao-confiabilidade', label: 'Confiabilidade' },
+  { id: 'secao-aniversariantes', label: 'Aniversariantes' },
+  { id: 'secao-usuarios', label: 'Usuários' },
+];
+
+// Retorna o elemento que de fato rola o conteúdo da página
+// (no Layout, é o <main> com overflow-y: auto — não a window)
+const getPageScroller = (): HTMLElement =>
+  (document.querySelector('main') as HTMLElement) ?? document.documentElement;
+
+// Normaliza texto para busca: remove acentos, ignora maiúsculas e colapsa espaços
+const normalizarBusca = (texto: string): string =>
+  texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// Filtra uma lista pelo texto digitado (ignora acentos, maiúsculas e espaços extras)
+const filtrarLista = <T,>(lista: T[], busca: string, campo: (item: T) => string): T[] => {
+  const termo = normalizarBusca(busca);
+  if (!termo) return lista;
+  return lista.filter(item => normalizarBusca(campo(item) || '').includes(termo));
+};
+
 export function PessoasReport() {
   const navigate = useNavigate();
   const { company } = useCompanyStore();
@@ -85,6 +148,9 @@ export function PessoasReport() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [aniversariantes, setAniversariantes] = useState<any[]>([]);
+  // Cache dos eleitores carregados uma única vez e reutilizado por
+  // todas as agregações da página (stats, crescimento, aniversariantes)
+  const [eleitoresBase, setEleitoresBase] = useState<any[]>([]);
   const [loadingAniversariantes, setLoadingAniversariantes] = useState(false);
   const [openMenuAniversariante, setOpenMenuAniversariante] = useState<boolean>(false);
   const [aniversariantesPage, setAniversariantesPage] = useState(1);
@@ -98,8 +164,183 @@ export function PessoasReport() {
   const [loadingCategorias, setLoadingCategorias] = useState(false);
   const [openMenuCategoria, setOpenMenuCategoria] = useState<string | null>(null);
   const [categoriaPage, setCategoriaPage] = useState(1);
+  // Menu de exportação dos cards de faixa etária
+  const [openMenuFaixa, setOpenMenuFaixa] = useState<string | null>(null);
+  // Buscas rápidas dentro das tabelas do relatório
+  const [buscaCidade, setBuscaCidade] = useState('');
+  const [cidadeView, setCidadeView] = useViewState('cidades');
+  const [buscaBairro, setBuscaBairro] = useState('');
+  const [bairroView, setBairroView] = useViewState('bairros');
+  const [buscaLogradouro, setBuscaLogradouro] = useState('');
+  const [logradouroView, setLogradouroView] = useViewState('logradouros');
+  const [logradouroPage, setLogradouroPage] = useState(1);
+  const [logradouroExpandido, setLogradouroExpandido] = useState<string | null>(null);
+  const [openMenuLogradouro, setOpenMenuLogradouro] = useState<string | null>(null);
+  const [atendimentosVisiveis, setAtendimentosVisiveis] = useState<Record<string, boolean>>({});
+  const [topEleitoresView, setTopEleitoresView] = useViewState('top-eleitores');
+  const [confiabilidadeView, setConfiabilidadeView] = useViewState('confiabilidade');
+  const [buscaIndicado, setBuscaIndicado] = useState('');
+  const [indicadoView, setIndicadoView] = useViewState('indicados');
+  const [buscaCategoria, setBuscaCategoria] = useState('');
+  const [categoriaView, setCategoriaView] = useViewState('categorias');
+  const [buscaZona, setBuscaZona] = useState('');
+  const [zonaView, setZonaView] = useViewState('zonas');
+  const [buscaUsuario, setBuscaUsuario] = useState('');
+  const [usuarioView, setUsuarioView] = useViewState('usuarios');
+  const [faixaEtariaView, setFaixaEtariaView] = useViewState('faixa-etaria');
+  const [qualidadeView, setQualidadeView] = useViewState('qualidade');
+  const [mostrarTopo, setMostrarTopo] = useState(false);
   
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
+
+  // Cores dos gráficos adaptadas ao tema claro/escuro
+  const isDark = useIsDark();
+  const chartGrid = isDark ? '#374151' : '#e5e7eb';
+  const chartTick = isDark ? '#d1d5db' : '#374151';
+  const chartLabel = isDark ? '#e5e7eb' : '#4b5563';
+  const tooltipStyle = {
+    borderRadius: 8,
+    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+    fontSize: 13,
+    backgroundColor: isDark ? '#1f2937' : '#ffffff',
+    color: isDark ? '#e5e7eb' : '#374151'
+  };
+
+  // Calcula a idade a partir da data de nascimento (formato yyyy-mm-dd)
+  const calcularIdade = (nascimento?: string | null): number | null => {
+    if (!nascimento) return null;
+    const [ano, mes, dia] = String(nascimento).split('-').map(Number);
+    if (!ano) return null;
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - ano;
+    const jaFezAniversario =
+      hoje.getMonth() + 1 > mes ||
+      (hoje.getMonth() + 1 === mes && hoje.getDate() >= dia);
+    if (!jaFezAniversario) idade--;
+    return idade;
+  };
+
+  // Filtra os eleitores de uma faixa etária usando o cache em memória
+  const filtrarPorFaixaEtaria = (faixa: string) =>
+    eleitoresBase.filter((e: any) => {
+      const idade = calcularIdade(e.nascimento);
+      if (idade === null) return false;
+      if (faixa === 'ate17') return idade <= 17;
+      if (faixa === 'de18a45') return idade >= 18 && idade <= 45;
+      if (faixa === 'mais46') return idade >= 46;
+      return false;
+    });
+
+  // Distribuição por faixa etária calculada do cache de eleitores
+  // (0-17, 18-45 e 46+, além dos sem data de nascimento)
+  const faixasEtarias = useMemo(() => {
+    const grupos = { ate17: 0, de18a45: 0, mais46: 0, semInfo: 0 };
+
+    eleitoresBase.forEach((e: any) => {
+      const idade = calcularIdade(e.nascimento);
+      if (idade === null) {
+        grupos.semInfo++;
+        return;
+      }
+      if (idade <= 17) grupos.ate17++;
+      else if (idade <= 45) grupos.de18a45++;
+      else grupos.mais46++;
+    });
+
+    return grupos;
+  }, [eleitoresBase]);
+
+  // Percentual de preenchimento dos campos — mostra onde faltam dados para a estratégia
+  const coberturaCadastro = useMemo(() => {
+    const total = eleitoresBase.length || 1;
+    const pct = (condicao: (e: any) => boolean) =>
+      Math.round((eleitoresBase.filter(condicao).length / total) * 100);
+    return {
+      whatsapp: pct(e => !!e.whatsapp),
+      nascimento: pct(e => !!e.nascimento),
+      zonaSecao: pct(e => !!e.zona && !!e.secao),
+      indicado: pct(e => !!e.indicado_uid),
+      genero: pct(e => !!e.genero),
+      bairro: pct(e => !!e.bairro),
+    };
+  }, [eleitoresBase]);
+
+  // Listas filtradas pela busca rápida de cada tabela
+  const cidadesFiltradas = useMemo(
+    () => filtrarLista(stats?.porCidade ?? [], buscaCidade, c => c.cidade),
+    [stats, buscaCidade]
+  );
+  const logradourosFiltrados = useMemo(
+    () => filtrarLista(
+      stats?.porLogradouro ?? [],
+      buscaLogradouro,
+      l => `${l.logradouro} ${l.bairro} ${l.cidade}`
+    ),
+    [stats, buscaLogradouro]
+  );
+
+  const bairrosFiltrados = useMemo(
+    () => filtrarLista(stats?.porBairro ?? [], buscaBairro, b => `${b.bairro} ${b.cidade}`),
+    [stats, buscaBairro]
+  );
+  const indicadosFiltrados = useMemo(
+    () => filtrarLista(stats?.porIndicado ?? [], buscaIndicado, i => i.indicado_nome),
+    [stats, buscaIndicado]
+  );
+  const categoriasFiltradas = useMemo(
+    () => filtrarLista(categorias, buscaCategoria, c => c.nome),
+    [categorias, buscaCategoria]
+  );
+  const zonasFiltradas = useMemo(
+    () => filtrarLista(stats?.porZonaSecao ?? [], buscaZona, z => `${z.zona} ${z.secao}`),
+    [stats, buscaZona]
+  );
+  const usuariosFiltrados = useMemo(
+    () => filtrarLista(stats?.porUsuario ?? [], buscaUsuario, u => u.usuario_nome),
+    [stats, buscaUsuario]
+  );
+  // Quantidade de aniversariantes por dia do mês selecionado (mini gráfico)
+  const aniversariantesPorDia = useMemo(() => {
+    const porDia = aniversariantes.reduce((acc, e) => {
+      const dia = Number(String(e.nascimento || '').split('-')[2]) || 0;
+      if (dia > 0) acc[dia] = (acc[dia] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
+    return Object.entries(porDia)
+      .map(([dia, total]) => ({ dia, total }))
+      .sort((a, b) => Number(a.dia) - Number(b.dia));
+  }, [aniversariantes]);
+  // Dados do gráfico de Qualidade do Cadastro (% preenchido por campo)
+  const camposQualidade = useMemo(() => [
+    { campo: 'WhatsApp', pct: coberturaCadastro.whatsapp },
+    { campo: 'Nascimento', pct: coberturaCadastro.nascimento },
+    { campo: 'Zona + Seção', pct: coberturaCadastro.zonaSecao },
+    { campo: 'Indicado', pct: coberturaCadastro.indicado },
+    { campo: 'Gênero', pct: coberturaCadastro.genero },
+    { campo: 'Bairro', pct: coberturaCadastro.bairro }
+  ], [coberturaCadastro]);
+
+  // Exibe o botão "voltar ao topo" após rolar a página
+  useEffect(() => {
+    const scroller = getPageScroller();
+    const onScroll = () => setMostrarTopo(scroller.scrollTop > 400);
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Rolagem suave até uma seção da barra de navegação rápida
+  // (desconta a altura da barra fixa para a seção não ficar por baixo dela)
+  const scrollParaSecao = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const scroller = getPageScroller();
+    const topo =
+      el.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop - 90;
+    scroller.scrollTo({ top: topo, behavior: 'smooth' });
+  };
 
   // Estados para paginação
   const [cidadePage, setCidadePage] = useState(1);
@@ -128,25 +369,70 @@ export function PessoasReport() {
       navigate('/app');
       return;
     }
-    loadStats();
-    loadCategorias();
-    loadCrescimento();
-    loadCrescimentoIndicados();
-    loadCrescimentoCategorias();
-    loadCrescimentoBairros();
-    loadCrescimentoZonasSecoes();
-    loadCrescimentoConfiabilidade();
-    loadCrescimentoUsuarios();
+    if (!company?.uid) return;
+
+    // Uma única consulta traz todos os campos necessários de
+    // gbp_eleitores; cada agregação reutiliza esse array em memória.
+    // Antes a página baixava a tabela inteira ~8 vezes em paralelo.
+    const loadAll = async () => {
+      const { data: rows, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select(`
+          uid,
+          nome,
+          nascimento,
+          whatsapp,
+          telefone,
+          cidade,
+          bairro,
+          logradouro,
+          numero,
+          genero,
+          zona,
+          secao,
+          confiabilidade_do_voto,
+          usuario_uid,
+          indicado_uid,
+          categoria_uid,
+          created_at,
+          usuario:usuario_uid (uid, nome),
+          indicado:indicado_uid (uid, nome),
+          categoria:categoria_uid (uid, nome)
+        `)
+        .eq('empresa_uid', company.uid);
+
+      if (error) {
+        console.error('Erro ao carregar eleitores:', error);
+        setLoading(false);
+        return;
+      }
+
+      const eleitores = rows || [];
+      setEleitoresBase(eleitores);
+
+      loadStats(eleitores);
+      loadCategorias(eleitores);
+      loadCrescimento(eleitores);
+      loadCrescimentoIndicados(eleitores);
+      loadCrescimentoCategorias(eleitores);
+      loadCrescimentoBairros(eleitores);
+      loadCrescimentoZonasSecoes(eleitores);
+      loadCrescimentoConfiabilidade(eleitores);
+      loadCrescimentoUsuarios(eleitores);
+    };
+
+    loadAll();
   }, [company?.uid, canAccess]);
 
-  // Carregar aniversariantes quando o mês mudar
+  // Carregar aniversariantes quando o mês mudar (usa o cache em memória,
+  // sem nova consulta ao banco)
   useEffect(() => {
-    if (company?.uid && selectedMonth) {
-      loadAniversariantes();
+    if (company?.uid && selectedMonth && eleitoresBase.length > 0) {
+      loadAniversariantes(eleitoresBase);
       setGeneroFilter('all'); // Resetar filtro ao mudar o mês
       setAniversariantesPage(1);
     }
-  }, [company?.uid, selectedMonth]);
+  }, [company?.uid, selectedMonth, eleitoresBase]);
 
   // Fechar menu ao clicar fora
   useEffect(() => {
@@ -161,18 +447,20 @@ export function PessoasReport() {
         setOpenMenuZona(null);
         setOpenMenuAniversariante(false);
         setOpenMenuCategoria(null);
+        setOpenMenuFaixa(null);
+        setOpenMenuLogradouro(null);
       }
     };
     
-    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante || openMenuCategoria) {
+    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante || openMenuCategoria || openMenuFaixa || openMenuLogradouro) {
       setTimeout(() => {
         document.addEventListener('click', handleClickOutside);
       }, 0);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante, openMenuCategoria]);
+  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante, openMenuCategoria, openMenuFaixa, openMenuLogradouro]);
 
-  const loadStats = async () => {
+  const loadStats = async (rows?: any[]) => {
     if (!company?.uid) {
       // toast.error('Empresa não identificada');
       return;
@@ -180,7 +468,7 @@ export function PessoasReport() {
 
     try {
       setLoading(true);
-      const data = await eleitorStatsService.getStats(company.uid);
+      const data = await eleitorStatsService.getStats(company.uid, rows);
       setStats(data);
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
@@ -190,12 +478,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimento = async () => {
+  const loadCrescimento = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimento(true);
-      const data = await eleitorStatsService.getCrescimentoPorCidade(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorCidade(company.uid, rows);
       setCrescimentoCidades(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento:', error);
@@ -204,12 +492,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoIndicados = async () => {
+  const loadCrescimentoIndicados = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoIndicados(true);
-      const data = await eleitorStatsService.getCrescimentoPorIndicado(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorIndicado(company.uid, rows);
       setCrescimentoIndicados(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de indicados:', error);
@@ -218,12 +506,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoCategorias = async () => {
+  const loadCrescimentoCategorias = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoCategorias(true);
-      const data = await eleitorStatsService.getCrescimentoPorCategoria(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorCategoria(company.uid, rows);
       setCrescimentoCategorias(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de categorias:', error);
@@ -232,12 +520,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoBairros = async () => {
+  const loadCrescimentoBairros = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoBairros(true);
-      const data = await eleitorStatsService.getCrescimentoPorBairro(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorBairro(company.uid, rows);
       setCrescimentoBairros(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de bairros:', error);
@@ -246,12 +534,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoZonasSecoes = async () => {
+  const loadCrescimentoZonasSecoes = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoZonasSecoes(true);
-      const data = await eleitorStatsService.getCrescimentoPorZonaSecao(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorZonaSecao(company.uid, rows);
       setCrescimentoZonasSecoes(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de zonas e seções:', error);
@@ -260,12 +548,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoConfiabilidade = async () => {
+  const loadCrescimentoConfiabilidade = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoConfiabilidade(true);
-      const data = await eleitorStatsService.getCrescimentoPorConfiabilidade(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorConfiabilidade(company.uid, rows);
       setCrescimentoConfiabilidade(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de confiabilidade:', error);
@@ -274,12 +562,12 @@ export function PessoasReport() {
     }
   };
 
-  const loadCrescimentoUsuarios = async () => {
+  const loadCrescimentoUsuarios = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCrescimentoUsuarios(true);
-      const data = await eleitorStatsService.getCrescimentoPorUsuario(company.uid);
+      const data = await eleitorStatsService.getCrescimentoPorUsuario(company.uid, rows);
       setCrescimentoUsuarios(data);
     } catch (error) {
       console.error('Erro ao carregar crescimento de usuários:', error);
@@ -288,24 +576,30 @@ export function PessoasReport() {
     }
   };
 
-  const loadAniversariantes = async () => {
+  const loadAniversariantes = async (rows?: any[]) => {
     if (!company?.uid || !selectedMonth) return;
 
     try {
       setLoadingAniversariantes(true);
       const [year, month] = selectedMonth.split('-');
-      
-      const { data, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('uid, nome, nascimento, whatsapp, telefone, cidade, bairro, genero')
-        .eq('empresa_uid', company.uid)
-        .not('nascimento', 'is', null)
-        .order('nascimento');
 
-      if (error) throw error;
+      // Reutiliza os eleitores já carregados; só consulta o banco se
+      // a lista ainda não estiver em memória
+      let data = rows;
+      if (!data) {
+        const { data: fetched, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('uid, nome, nascimento, whatsapp, telefone, cidade, bairro, genero')
+          .eq('empresa_uid', company.uid)
+          .not('nascimento', 'is', null)
+          .order('nascimento');
+
+        if (error) throw error;
+        data = fetched;
+      }
 
       // Filtrar por mês de nascimento (tratando timezone corretamente)
-      const filtered = data?.filter(eleitor => {
+      const filtered = data?.filter((eleitor: any) => {
         if (!eleitor.nascimento) return false;
         // Criar data local sem conversão de timezone
         const [y, m, d] = eleitor.nascimento.split('-').map(Number);
@@ -329,13 +623,13 @@ export function PessoasReport() {
     }
   };
 
-  const loadCategorias = async () => {
+  const loadCategorias = async (rows?: any[]) => {
     if (!company?.uid) return;
 
     try {
       setLoadingCategorias(true);
       
-      // Buscar todas as categorias com seus tipos e contar eleitores
+      // Buscar todas as categorias com seus tipos
       const { data, error } = await supabaseClient
         .from('gbp_categorias')
         .select(`
@@ -348,23 +642,30 @@ export function PessoasReport() {
 
       if (error) throw error;
 
-      // Para cada categoria, contar quantos eleitores tem
-      const categoriasComContagem = await Promise.all(
-        (data || []).map(async (cat: any) => {
-          const { count } = await supabaseClient
-            .from('gbp_eleitores')
-            .select('*', { count: 'exact', head: true })
-            .eq('categoria_uid', cat.uid)
-            .eq('empresa_uid', company.uid);
+      // Contagem de eleitores por categoria feita em memória a partir
+      // dos dados já carregados (evita 1 query COUNT por categoria)
+      let fonte = rows;
+      if (!fonte) {
+        const { data: eleitoresCategoria } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('categoria_uid')
+          .eq('empresa_uid', company.uid);
+        fonte = eleitoresCategoria || [];
+      }
 
-          return {
-            categoria_uid: cat.uid,
-            nome: cat.nome,
-            tipo: cat.tipo?.nome || null,
-            total: count || 0
-          };
-        })
-      );
+      const contagem = new Map<string, number>();
+      fonte.forEach((e: any) => {
+        if (e.categoria_uid) {
+          contagem.set(e.categoria_uid, (contagem.get(e.categoria_uid) || 0) + 1);
+        }
+      });
+
+      const categoriasComContagem = (data || []).map((cat: any) => ({
+        categoria_uid: cat.uid,
+        nome: cat.nome,
+        tipo: cat.tipo?.nome || null,
+        total: contagem.get(cat.uid) || 0
+      }));
 
       // Ordenar por quantidade (maior para menor)
       categoriasComContagem.sort((a, b) => b.total - a.total);
@@ -669,6 +970,32 @@ export function PessoasReport() {
         bairrosSheet.addRow({}); // Linha em branco entre cidades
       });
 
+      // 3b. Aba de Logradouros
+      console.log('Criando aba de Logradouros...');
+      const logradourosSheet = workbook.addWorksheet('Logradouros');
+      logradourosSheet.columns = [
+        { header: 'Logradouro', key: 'logradouro', width: 35 },
+        { header: 'Bairro', key: 'bairro', width: 25 },
+        { header: 'Cidade', key: 'cidade', width: 25 },
+        { header: 'Eleitores', key: 'total', width: 12 },
+        { header: 'Atendimentos', key: 'atendimentos', width: 15 },
+        { header: '% do Total', key: 'porcentagemTotal', width: 15 }
+      ];
+
+      stats.porLogradouro?.forEach(grupo => {
+        const totalAtendimentos = grupo.eleitores.reduce(
+          (sum, e) => sum + (stats.atendimentosPorEleitor?.[e.uid]?.length || 0), 0
+        );
+        logradourosSheet.addRow({
+          logradouro: grupo.logradouro,
+          bairro: grupo.bairro,
+          cidade: grupo.cidade,
+          total: grupo.total,
+          atendimentos: totalAtendimentos,
+          porcentagemTotal: `${((grupo.total / stats.totalEleitores) * 100).toFixed(1)}%`
+        });
+      });
+
       // 4. Aba de Zonas e Seções
       console.log('Criando aba de Zonas e Seções...');
       const zonasSheet = workbook.addWorksheet('Zonas e Seções');
@@ -745,8 +1072,104 @@ export function PessoasReport() {
         });
       });
 
+      // Aba de Categorias
+      const categoriasSheet = workbook.addWorksheet('Categorias');
+      categoriasSheet.columns = [
+        { header: 'Categoria', key: 'nome', width: 30 },
+        { header: 'Tipo', key: 'tipo', width: 20 },
+        { header: 'Quantidade', key: 'total', width: 15 },
+        { header: 'Porcentagem', key: 'porcentagem', width: 15 },
+      ];
+
+      categorias.forEach((categoria) => {
+        categoriasSheet.addRow({
+          nome: categoria.nome,
+          tipo: categoria.tipo || 'Não informado',
+          total: categoria.total,
+          porcentagem: `${((categoria.total / stats.totalEleitores) * 100).toFixed(1)}%`,
+        });
+      });
+
+      // Aba de Faixa Etária
+      const faixaEtariaSheet = workbook.addWorksheet('Faixa Etária');
+      faixaEtariaSheet.columns = [
+        { header: 'Faixa Etária', key: 'faixa', width: 25 },
+        { header: 'Quantidade', key: 'total', width: 15 },
+        { header: 'Porcentagem', key: 'porcentagem', width: 15 },
+      ];
+
+      const totalComNascimento = stats.totalEleitores - faixasEtarias.semInfo;
+      [
+        { faixa: '0 a 17 anos', total: faixasEtarias.ate17 },
+        { faixa: '18 a 45 anos', total: faixasEtarias.de18a45 },
+        { faixa: '46 anos ou mais', total: faixasEtarias.mais46 },
+      ].forEach((item) => {
+        faixaEtariaSheet.addRow({
+          faixa: item.faixa,
+          total: item.total,
+          porcentagem: totalComNascimento > 0
+            ? `${((item.total / totalComNascimento) * 100).toFixed(1)}%`
+            : '0%',
+        });
+      });
+
+      if (faixasEtarias.semInfo > 0) {
+        faixaEtariaSheet.addRow({
+          faixa: 'Sem data de nascimento',
+          total: faixasEtarias.semInfo,
+          porcentagem: `${((faixasEtarias.semInfo / stats.totalEleitores) * 100).toFixed(1)}%`,
+        });
+      }
+
+      // Aba de Qualidade do Cadastro (percentual de campos preenchidos)
+      const qualidadeSheet = workbook.addWorksheet('Qualidade do Cadastro');
+      qualidadeSheet.columns = [
+        { header: 'Campo', key: 'campo', width: 25 },
+        { header: 'Preenchidos', key: 'preenchidos', width: 15 },
+        { header: 'Faltando', key: 'faltando', width: 15 },
+        { header: '% Preenchido', key: 'porcentagem', width: 15 },
+      ];
+
+      [
+        { campo: 'WhatsApp', pct: coberturaCadastro.whatsapp },
+        { campo: 'Nascimento', pct: coberturaCadastro.nascimento },
+        { campo: 'Zona + Seção', pct: coberturaCadastro.zonaSecao },
+        { campo: 'Indicado', pct: coberturaCadastro.indicado },
+        { campo: 'Gênero', pct: coberturaCadastro.genero },
+        { campo: 'Bairro', pct: coberturaCadastro.bairro },
+      ].forEach((item) => {
+        const preenchidos = Math.round((item.pct / 100) * stats.totalEleitores);
+        qualidadeSheet.addRow({
+          campo: item.campo,
+          preenchidos,
+          faltando: stats.totalEleitores - preenchidos,
+          porcentagem: `${item.pct}%`,
+        });
+      });
+
+      // Aba de Aniversariantes (mês selecionado na seção)
+      const aniversariantesSheet = workbook.addWorksheet('Aniversariantes');
+      aniversariantesSheet.columns = [
+        { header: 'Nome', key: 'nome', width: 35 },
+        { header: 'Dia', key: 'dia', width: 10 },
+        { header: 'WhatsApp', key: 'whatsapp', width: 20 },
+        { header: 'Cidade', key: 'cidade', width: 25 },
+        { header: 'Bairro', key: 'bairro', width: 25 },
+      ];
+
+      aniversariantes.forEach((eleitor: any) => {
+        const [, , dia] = String(eleitor.nascimento || '').split('-').map(Number);
+        aniversariantesSheet.addRow({
+          nome: eleitor.nome || '',
+          dia: dia || '',
+          whatsapp: eleitor.whatsapp || eleitor.telefone || '',
+          cidade: eleitor.cidade || '',
+          bairro: eleitor.bairro || '',
+        });
+      });
+
       // Aplicar estilos a todas as abas
-      [cidadesSheet, indicadosSheet, bairrosSheet, zonasSheet, usuariosSheet, confiabilidadeSheet, topEleitoresSheet].forEach(sheet => {
+      [cidadesSheet, indicadosSheet, bairrosSheet, zonasSheet, usuariosSheet, confiabilidadeSheet, topEleitoresSheet, categoriasSheet, faixaEtariaSheet, qualidadeSheet, aniversariantesSheet].forEach(sheet => {
         // Estilo para o cabeçalho
         const headerRow = sheet.getRow(1);
         headerRow.font = { bold: true };
@@ -813,9 +1236,9 @@ export function PessoasReport() {
   };
 
   // Funções auxiliares para paginação
-  const getPaginatedData = <T extends any>(data: T[], page: number): T[] => {
-    const start = (page - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
+  const getPaginatedData = <T extends any>(data: T[], page: number, perPage: number = itemsPerPage): T[] => {
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
     return data.slice(start, end);
   };
 
@@ -884,28 +1307,148 @@ export function PessoasReport() {
     quantidade_adultos_residencia: eleitor.quantidade_adultos_residencia || ''
   });
 
+  // Exportar eleitores de uma faixa etária para Excel
+  const handleExportFaixaExcel = async (faixa: string, faixaLabel: string) => {
+    if (!company?.uid) return;
+
+    try {
+      // UIDs dos eleitores da faixa (calculados a partir do cache)
+      const uids = new Set(filtrarPorFaixaEtaria(faixa).map((e: any) => e.uid));
+      if (uids.size === 0) {
+        alert('Nenhuma pessoa cadastrada nesta faixa etária.');
+        return;
+      }
+
+      // Buscar dados completos e filtrar pela faixa
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .order('nome');
+
+      if (error) throw error;
+
+      const filtrados = (eleitores || []).filter((e: any) => uids.has(e.uid));
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(faixaLabel);
+      sheet.columns = getExcelColumns();
+
+      filtrados.forEach((eleitor: any) => {
+        sheet.addRow(formatEleitorForExcel(eleitor));
+      });
+
+      // Estilizar cabeçalho
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF3B82F6' }
+      };
+      sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `faixa_etaria_${faixaLabel.replace(/\s+/g, '_')}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar faixa etária:', error);
+      alert('Erro ao gerar o arquivo Excel.');
+    }
+  };
+
+  // Exportar eleitores de uma faixa etária para PDF
+  const handleExportFaixaPDF = async (faixa: string, faixaLabel: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const filtrados = filtrarPorFaixaEtaria(faixa)
+        .slice()
+        .sort((a: any, b: any) => (a.nome || '').localeCompare(b.nome || ''));
+
+      if (filtrados.length === 0) {
+        alert('Nenhuma pessoa cadastrada nesta faixa etária.');
+        return;
+      }
+
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Faixa Etária: ${faixaLabel}`, 14, 15);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 100, 100);
+      doc.text('GBP Politico', 196, 15, { align: 'right' });
+
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.5);
+      doc.line(14, 18, 196, 18);
+
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Total: ${filtrados.length} eleitores`, 14, 26);
+
+      (doc as any).autoTable({
+        head: [['Nome', 'Idade', 'WhatsApp', 'Cidade', 'Bairro']],
+        body: filtrados.map((eleitor: any) => [
+          eleitor.nome || '',
+          String(calcularIdade(eleitor.nascimento) ?? ''),
+          eleitor.whatsapp || '',
+          eleitor.cidade || '',
+          eleitor.bairro || ''
+        ]),
+        startY: 32,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { cellWidth: 55 },
+          1: { cellWidth: 15 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 40 },
+          4: { cellWidth: 42 }
+        }
+      });
+
+      doc.save(`faixa_etaria_${faixaLabel.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar faixa etária PDF:', error);
+      alert('Erro ao gerar o arquivo PDF.');
+    }
+  };
+
   // Função para exportar eleitores de um bairro específico para Excel
   const handleExportBairroExcel = async (cidade: string, bairro: string) => {
     if (!company?.uid) return;
 
     try {
-      // Buscar eleitores do bairro específico
+      // Buscar eleitores e filtrar em memória com normalização
+      // (une variações de acento, maiúsculas e espaços — mesmo critério da tela)
       const { data: eleitores, error } = await supabaseClient
         .from('gbp_eleitores')
         .select('*')
         .eq('empresa_uid', company.uid)
-        .eq('cidade', cidade)
-        .eq('bairro', bairro)
         .order('nome');
 
       if (error) throw error;
+
+      const cidadeNorm = normalizarBusca(cidade);
+      const bairroNorm = normalizarBusca(bairro);
+      const filtrados = (eleitores || []).filter(e =>
+        normalizarBusca(e.cidade || '') === cidadeNorm &&
+        normalizarBusca(e.bairro || '') === bairroNorm
+      );
 
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet(`${bairro} - ${cidade}`);
 
       sheet.columns = getExcelColumns();
 
-      eleitores?.forEach(eleitor => {
+      filtrados.forEach(eleitor => {
         sheet.addRow(formatEleitorForExcel(eleitor));
       });
 
@@ -923,6 +1466,159 @@ export function PessoasReport() {
     }
   };
 
+  // Função para exportar eleitores de um logradouro específico para Excel
+  const handleExportLogradouroExcel = async (logradouro: string, bairro: string, cidade: string) => {
+    if (!company?.uid) return;
+
+    try {
+      const { data: eleitores, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('*')
+        .eq('empresa_uid', company.uid)
+        .order('nome');
+
+      if (error) throw error;
+
+      // Filtra por logradouro+bairro+cidade ignorando acentos, maiúsculas e espaços
+      const logradouroNorm = normalizarBusca(logradouro);
+      const bairroNorm = normalizarBusca(bairro);
+      const cidadeNorm = normalizarBusca(cidade);
+      const filtrados = (eleitores || []).filter(e =>
+        normalizarBusca(e.logradouro || '') === logradouroNorm &&
+        normalizarBusca(e.bairro || '') === bairroNorm &&
+        normalizarBusca(e.cidade || '') === cidadeNorm
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(
+        `${logradouro} - ${bairro}`.replace(/[\\/*?:[\]]/g, '').slice(0, 31)
+      );
+
+      sheet.columns = [
+        ...getExcelColumns(),
+        { header: 'Qtd Atendimentos', key: 'atendimentos', width: 16 }
+      ];
+      sheet.autoFilter = 'A1:W1';
+
+      // Segunda aba: detalhes dos atendimentos de cada eleitor
+      // (criada primeiro para mapear a linha inicial de cada eleitor e
+      //  permitir link na coluna "Qtd Atendimentos" da aba principal)
+      const atendimentosSheet = workbook.addWorksheet('Atendimentos');
+      atendimentosSheet.columns = [
+        { header: 'Eleitor', key: 'eleitor', width: 35 },
+        { header: 'Data', key: 'data', width: 12 },
+        { header: 'Tipo', key: 'tipo', width: 22 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Descrição', key: 'descricao', width: 55 }
+      ];
+      atendimentosSheet.autoFilter = 'A1:E1';
+
+      const linhaInicialAtendimento: Record<string, number> = {};
+      filtrados.forEach(eleitor => {
+        const atendimentos = stats?.atendimentosPorEleitor?.[eleitor.uid] || [];
+        if (atendimentos.length > 0) {
+          linhaInicialAtendimento[eleitor.uid] = atendimentosSheet.rowCount + 1;
+        }
+        atendimentos.forEach(at => {
+          atendimentosSheet.addRow({
+            eleitor: eleitor.nome || '',
+            data: at.data_atendimento ? new Date(at.data_atendimento).toLocaleDateString('pt-BR') : '',
+            tipo: at.tipo_de_atendimento || '',
+            status: at.status || '',
+            descricao: at.descricao || ''
+          });
+        });
+      });
+
+      filtrados.forEach(eleitor => {
+        const qtdAtendimentos = stats?.atendimentosPorEleitor?.[eleitor.uid]?.length || 0;
+        const linha = linhaInicialAtendimento[eleitor.uid];
+        const row = sheet.addRow({
+          ...formatEleitorForExcel(eleitor),
+          atendimentos: qtdAtendimentos
+        });
+        // Link interno: clicar na quantidade leva direto aos atendimentos do eleitor
+        if (qtdAtendimentos > 0 && linha) {
+          const cell = row.getCell('atendimentos');
+          cell.value = {
+            text: String(qtdAtendimentos),
+            hyperlink: `#'Atendimentos'!A${linha}`
+          } as any;
+          cell.font = { color: { argb: 'FF0563C1' }, underline: true };
+        }
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eleitores_${logradouro}_${bairro}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar logradouro:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  // Função para exportar eleitores de um logradouro específico para PDF
+  const handleExportLogradouroPDF = (grupo: { logradouro: string; bairro: string; cidade: string; total: number; eleitores: { uid: string; nome: string; numero: string | null; whatsapp: string | null }[] }) => {
+    try {
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text(`Eleitores - ${grupo.logradouro}`, 14, 15);
+      doc.setFontSize(12);
+      doc.text(`${grupo.bairro} - ${grupo.cidade}`, 14, 22);
+      doc.setFontSize(10);
+      doc.text(`Total: ${grupo.total} eleitores`, 14, 28);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 33);
+
+      (doc as any).autoTable({
+        startY: 38,
+        head: [['Nome', 'Nº', 'Telefone', 'Atendimentos']],
+        body: grupo.eleitores.map(e => [
+          e.nome || '',
+          e.numero || '',
+          e.whatsapp || '',
+          String(stats?.atendimentosPorEleitor?.[e.uid]?.length || 0)
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      // Segunda tabela: detalhes dos atendimentos de cada eleitor
+      const linhasAtendimentos = grupo.eleitores.flatMap(e =>
+        (stats?.atendimentosPorEleitor?.[e.uid] || []).map(at => [
+          e.nome || '',
+          at.data_atendimento ? new Date(at.data_atendimento).toLocaleDateString('pt-BR') : '',
+          at.tipo_de_atendimento || '',
+          at.status || '',
+          at.descricao || ''
+        ])
+      );
+
+      if (linhasAtendimentos.length > 0) {
+        const y = (doc as any).lastAutoTable.finalY + 8;
+        doc.setFontSize(12);
+        doc.text('Atendimentos realizados', 14, y);
+        (doc as any).autoTable({
+          startY: y + 3,
+          head: [['Eleitor', 'Data', 'Tipo', 'Status', 'Descrição']],
+          body: linhasAtendimentos,
+          styles: { fontSize: 7 },
+          headStyles: { fillColor: [139, 92, 246] }
+        });
+      }
+
+      doc.save(`eleitores_${grupo.logradouro}_${grupo.bairro}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar logradouro PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
   // Função para exportar eleitores de uma cidade específica para Excel
   const handleExportCidadeExcel = async (cidade: string) => {
     if (!company?.uid) return;
@@ -932,18 +1628,25 @@ export function PessoasReport() {
         .from('gbp_eleitores')
         .select('*')
         .eq('empresa_uid', company.uid)
-        .eq('cidade', cidade)
-        .order('bairro')
         .order('nome');
 
       if (error) throw error;
+
+      // Filtra por cidade ignorando acentos, maiúsculas e espaços (mesmo critério da tela)
+      const cidadeNorm = normalizarBusca(cidade);
+      const filtrados = (eleitores || [])
+        .filter(e => normalizarBusca(e.cidade || '') === cidadeNorm)
+        .sort((a, b) =>
+          (a.bairro || '').localeCompare(b.bairro || '') ||
+          (a.nome || '').localeCompare(b.nome || '')
+        );
 
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet(cidade);
 
       sheet.columns = getExcelColumns();
 
-      eleitores?.forEach(eleitor => {
+      filtrados.forEach(eleitor => {
         sheet.addRow(formatEleitorForExcel(eleitor));
       });
 
@@ -970,24 +1673,31 @@ export function PessoasReport() {
         .from('gbp_eleitores')
         .select('*')
         .eq('empresa_uid', company.uid)
-        .eq('cidade', cidade)
-        .order('bairro')
         .order('nome');
 
       if (error) throw error;
+
+      // Filtra por cidade ignorando acentos, maiúsculas e espaços (mesmo critério da tela)
+      const cidadeNorm = normalizarBusca(cidade);
+      const filtrados = (eleitores || [])
+        .filter(e => normalizarBusca(e.cidade || '') === cidadeNorm)
+        .sort((a, b) =>
+          (a.bairro || '').localeCompare(b.bairro || '') ||
+          (a.nome || '').localeCompare(b.nome || '')
+        );
 
       const doc = new jsPDF();
       
       doc.setFontSize(16);
       doc.text(`Eleitores - ${cidade}`, 14, 15);
       doc.setFontSize(10);
-      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 22);
+      doc.text(`Total: ${filtrados.length} eleitores`, 14, 22);
       doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
 
       (doc as any).autoTable({
         startY: 32,
         head: [['Nome', 'Bairro', 'Telefone', 'Zona/Seção']],
-        body: eleitores?.map(e => [
+        body: filtrados.map(e => [
           e.nome || '',
           e.bairro || '',
           e.whatsapp || e.telefone || '',
@@ -1585,16 +2295,22 @@ export function PessoasReport() {
     if (!company?.uid) return;
 
     try {
-      // Buscar eleitores do bairro específico
+      // Buscar eleitores e filtrar em memória com normalização
+      // (une variações de acento, maiúsculas e espaços — mesmo critério da tela)
       const { data: eleitores, error } = await supabaseClient
         .from('gbp_eleitores')
         .select('*')
         .eq('empresa_uid', company.uid)
-        .eq('cidade', cidade)
-        .eq('bairro', bairro)
         .order('nome');
 
       if (error) throw error;
+
+      const cidadeNorm = normalizarBusca(cidade);
+      const bairroNorm = normalizarBusca(bairro);
+      const filtrados = (eleitores || []).filter(e =>
+        normalizarBusca(e.cidade || '') === cidadeNorm &&
+        normalizarBusca(e.bairro || '') === bairroNorm
+      );
 
       const doc = new jsPDF();
       
@@ -1604,14 +2320,14 @@ export function PessoasReport() {
       doc.setFontSize(12);
       doc.text(`${cidade}`, 14, 22);
       doc.setFontSize(10);
-      doc.text(`Total: ${eleitores?.length || 0} eleitores`, 14, 28);
+      doc.text(`Total: ${filtrados.length} eleitores`, 14, 28);
       doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 33);
 
       // Tabela
       (doc as any).autoTable({
         startY: 38,
         head: [['Nome', 'Telefone', 'Endereço', 'Zona/Seção']],
-        body: eleitores?.map(e => [
+        body: filtrados.map(e => [
           e.nome || '',
           e.whatsapp || e.telefone || '',
           `${e.logradouro || ''} ${e.numero || ''}`.trim(),
@@ -1628,52 +2344,126 @@ export function PessoasReport() {
     }
   };
 
+  // Cabeçalho da página — sempre visível, inclusive durante o carregamento
+  const headerContent = (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-4">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-gray-100 rounded-full shrink-0"
+            title="Voltar"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </Button>
+          <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
+            Relatório de Cadastros
+          </h1>
+        </div>
+
+        <Button
+          onClick={handleExportExcel}
+          disabled={!stats}
+          title="Exporta o relatório completo com todas as seções da página"
+          className="flex shrink-0 items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-sm sm:text-base"
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">Exportar Relatório</span>
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Carregamento exibido com os próprios elementos da página:
+  // esqueletos no formato dos cards e das seções de tabela
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="p-0 sm:p-0" style={{ zoom: 0.9 }}>
+        <div className="bg-gray-50 dark:bg-gray-950 rounded-lg p-0 sm:p-4">
+          {headerContent}
+
+          {/* Esqueleto dos 4 cards de estatísticas do topo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 animate-pulse">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="p-4 sm:p-6 shadow-lg">
+                <div className="flex flex-col space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
+                    <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                  </div>
+                  <div className="h-9 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-3 w-32 bg-gray-100 dark:bg-gray-800 rounded" />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Esqueleto das seções de tabela */}
+          {[1, 2, 3].map((section) => (
+            <Card key={section} className="mt-4 mx-4 sm:mx-0 p-4 sm:p-6 shadow-lg animate-pulse">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-6 w-6 bg-gray-200 dark:bg-gray-700 rounded" />
+                <div className="flex-1">
+                  <div className="h-5 w-56 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                  <div className="h-3 w-40 bg-gray-100 dark:bg-gray-800 rounded" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-9 w-full bg-gray-200 dark:bg-gray-700 rounded" />
+                {[1, 2, 3, 4].map((row) => (
+                  <div key={row} className="h-8 w-full bg-gray-100 dark:bg-gray-800 rounded" />
+                ))}
+              </div>
+            </Card>
+          ))}
+
+          <div className="flex items-center justify-center py-6 gap-2 text-gray-400 dark:text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Carregando relatório...</span>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!stats) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <p className="text-gray-500">Nenhuma estatística disponível</p>
+      <div className="p-0 sm:p-0" style={{ zoom: 0.9 }}>
+        <div className="bg-gray-50 dark:bg-gray-950 rounded-lg p-0 sm:p-4">
+          {headerContent}
+          <div className="flex flex-col items-center justify-center py-16">
+            <p className="text-gray-500">Nenhuma estatística disponível</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-0 sm:p-0">
+    <div className="p-0 sm:p-0" style={{ zoom: 0.9 }}>
       <div className="bg-gray-50 dark:bg-gray-950 rounded-lg p-0 sm:p-4">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                onClick={() => navigate(-1)}
-                className="p-2 hover:bg-gray-100 rounded-full"
-                title="Voltar"
-              >
-                <ChevronLeft className="h-6 w-6" />
-              </Button>
-              <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">
-                Relatório de Cadastros
-              </h1>
-            </div>
+        {headerContent}
 
-            <div className="flex justify-end">
-              <Button
-                onClick={handleExportExcel}
-                className="hidden sm:flex w-full sm:w-auto items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-sm sm:text-base"
+        {/* Navegação rápida entre as seções do relatório */}
+        <div className="sticky top-0 z-30 mb-4 px-4 sm:px-0 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-sm">
+          <div
+            ref={setupHorizontalScroll}
+            className="flex gap-2 overflow-x-auto py-2 hide-scrollbar"
+          >
+            {secoesNavegacao.map((secao) => (
+              <button
+                key={secao.id}
+                onClick={() => scrollParaSecao(secao.id)}
+                className="whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 dark:hover:bg-blue-600 dark:hover:text-white transition-colors shadow-sm"
               >
-                <Download className="h-4 w-4" />
-                Exportar Excel
-              </Button>
-            </div>
+                {secao.label}
+              </button>
+            ))}
           </div>
+          {/* Fade na borda direita (mobile): indica que há mais botões para rolar */}
+          <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-50 dark:from-gray-950 to-transparent pointer-events-none sm:hidden" />
         </div>
 
         {/* Stats Grid */}
@@ -1790,8 +2580,247 @@ export function PessoasReport() {
             </Card>
           </div>
 
-          {/* Distribuição por Cidade com Análise de Crescimento */}
+          {/* Distribuição por Faixa Etária */}
+          <Card id="secao-faixa-etaria" className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Users2 className="w-5 h-5 text-blue-600" />
+                  Distribuição por Faixa Etária
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Baseado na data de nascimento cadastrada
+                  {faixasEtarias.semInfo > 0 && ` • ${faixasEtarias.semInfo} sem informação`}
+                </p>
+              </div>
+              <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                <button
+                  onClick={() => setFaixaEtariaView('tabela')}
+                  className={`p-1.5 transition-colors ${faixaEtariaView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar cards"
+                >
+                  <Table2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setFaixaEtariaView('grafico')}
+                  className={`p-1.5 transition-colors ${faixaEtariaView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar gráfico"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {faixaEtariaView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[340px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        { faixa: '0 a 17 anos', total: faixasEtarias.ate17, cor: '#06b6d4' },
+                        { faixa: '18 a 45 anos', total: faixasEtarias.de18a45, cor: '#2563eb' },
+                        { faixa: '46 anos ou mais', total: faixasEtarias.mais46, cor: '#7c3aed' },
+                        { faixa: 'Sem informação', total: faixasEtarias.semInfo, cor: '#9ca3af' }
+                      ]}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                      barCategoryGap="40%"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                      <XAxis dataKey="faixa" tickLine={false} axisLine={false} tick={{ fontSize: 13, fill: chartTick }} />
+                      <YAxis hide />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(59,130,246,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" radius={[8, 8, 0, 0]} barSize={90}>
+                        {['#06b6d4', '#2563eb', '#7c3aed', '#9ca3af'].map((cor, i) => (
+                          <Cell key={i} fill={cor} />
+                        ))}
+                        <LabelList
+                          dataKey="total"
+                          position="top"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 14, fontWeight: 700, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Distribuição de eleitores por faixa etária (baseado na data de nascimento)
+                </p>
+              </div>
+            ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { id: 'ate17', label: '0 a 17 anos', total: faixasEtarias.ate17, cor: 'bg-cyan-500', corFundo: 'bg-cyan-50 dark:bg-cyan-900/20', corTexto: 'text-cyan-700 dark:text-cyan-300' },
+                { id: 'de18a45', label: '18 a 45 anos', total: faixasEtarias.de18a45, cor: 'bg-blue-600', corFundo: 'bg-blue-50 dark:bg-blue-900/20', corTexto: 'text-blue-700 dark:text-blue-300' },
+                { id: 'mais46', label: '46 anos ou mais', total: faixasEtarias.mais46, cor: 'bg-violet-600', corFundo: 'bg-violet-50 dark:bg-violet-900/20', corTexto: 'text-violet-700 dark:text-violet-300' },
+              ].map((faixa) => {
+                const totalComInfo = stats.totalEleitores - faixasEtarias.semInfo;
+                const porcentagem = totalComInfo > 0 ? (faixa.total / totalComInfo) * 100 : 0;
+                return (
+                  <div key={faixa.id} className={`relative rounded-lg p-4 ${faixa.corFundo}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-sm font-medium ${faixa.corTexto}`}>{faixa.label}</span>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-xl font-bold ${faixa.corTexto}`}>{faixa.total.toLocaleString()}</span>
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuFaixa(openMenuFaixa === faixa.id ? null : faixa.id);
+                            }}
+                            className="p-1 hover:bg-white/60 dark:hover:bg-gray-700 rounded transition-colors"
+                            title="Exportar lista desta faixa"
+                          >
+                            <MoreVertical className="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                          </button>
+
+                          {openMenuFaixa === faixa.id && (
+                            <div
+                              className="absolute right-0 top-7 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExportFaixaExcel(faixa.id, faixa.label);
+                                  setOpenMenuFaixa(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                              >
+                                <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                <span>Excel</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExportFaixaPDF(faixa.id, faixa.label);
+                                  setOpenMenuFaixa(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                              >
+                                <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                <span>PDF</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`${faixa.cor} h-2 rounded-full transition-all`}
+                        style={{ width: `${porcentagem}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                      {porcentagem.toFixed(1)}% dos cadastros com data de nascimento
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            )}
+          </Card>
+
+          {/* Qualidade do Cadastro — percentual de campos preenchidos */}
           <Card className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-emerald-600" />
+                  Qualidade do Cadastro
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Percentual de preenchimento dos campos — útil para saber quais dados faltam para a estratégia
+                </p>
+              </div>
+              <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                <button
+                  onClick={() => setQualidadeView('tabela')}
+                  className={`p-1.5 transition-colors ${qualidadeView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar cards"
+                >
+                  <Table2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setQualidadeView('grafico')}
+                  className={`p-1.5 transition-colors ${qualidadeView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar gráfico"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {qualidadeView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[340px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={camposQualidade}
+                        dataKey="pct"
+                        nameKey="campo"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius="52%"
+                        outerRadius="78%"
+                        paddingAngle={3}
+                        strokeWidth={0}
+                        label={({ payload }: any) => `${payload.pct}%`}
+                        labelLine={false}
+                        fontSize={13}
+                      >
+                        {camposQualidade.map((c, i) => (
+                          <Cell key={i} fill={c.pct >= 70 ? '#10b981' : c.pct >= 40 ? '#f59e0b' : '#ef4444'} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, name: string) => [`${value}% preenchido`, name]}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Legend formatter={(v: string) => <span className="text-sm text-gray-700 dark:text-gray-300">{v}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Verde: ≥70% preenchido • Amarelo: 40–69% • Vermelho: &lt;40%
+                </p>
+              </div>
+            ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'WhatsApp', pct: coberturaCadastro.whatsapp },
+                { label: 'Nascimento', pct: coberturaCadastro.nascimento },
+                { label: 'Zona + Seção', pct: coberturaCadastro.zonaSecao },
+                { label: 'Indicado', pct: coberturaCadastro.indicado },
+                { label: 'Gênero', pct: coberturaCadastro.genero },
+                { label: 'Bairro', pct: coberturaCadastro.bairro },
+              ].map((item) => {
+                const cor = item.pct >= 70 ? 'bg-emerald-500' : item.pct >= 40 ? 'bg-amber-400' : 'bg-red-400';
+                const corTexto = item.pct >= 70 ? 'text-emerald-600 dark:text-emerald-400' : item.pct >= 40 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400';
+                return (
+                  <div key={item.label} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                    <div className="flex items-baseline justify-between gap-1">
+                      <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{item.label}</span>
+                      <span className={`text-sm font-bold ${corTexto}`}>{item.pct}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+                      <div className={`${cor} h-1.5 rounded-full transition-all`} style={{ width: `${item.pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            )}
+          </Card>
+
+          {/* Distribuição por Cidade com Análise de Crescimento */}
+          <Card id="secao-cidades" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -1801,6 +2830,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porCidade.length} cidades • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setCidadeView('tabela')}
+                    className={`p-1.5 transition-colors ${cidadeView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCidadeView('grafico')}
+                    className={`p-1.5 transition-colors ${cidadeView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaCidade}
+                    onChange={(e) => { setBuscaCidade(e.target.value); setCidadePage(1); }}
+                    placeholder="Buscar cidade..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1855,6 +2912,55 @@ export function PessoasReport() {
                 </div>
               </div>
             )}
+            {cidadeView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={cidadesFiltradas.slice(0, 10)}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradCidade" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#3b82f6" />
+                          <stop offset="100%" stopColor="#8b5cf6" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="cidade"
+                        width={170}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 13, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 24 ? v.slice(0, 24) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(59,130,246,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradCidade)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo as {Math.min(10, cidadesFiltradas.length)} cidades com mais eleitores{buscaCidade ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
               <table style={{ minWidth: '900px', width: '100%' }}>
                   <thead>
@@ -1870,9 +2976,11 @@ export function PessoasReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {getPaginatedData(stats.porCidade, cidadePage).map(({ cidade, total }, index) => {
+                    {getPaginatedData(cidadesFiltradas, cidadePage).map(({ cidade, total }, index, arr) => {
                       const percentage = (total / stats.totalEleitores) * 100;
                       const crescimento = crescimentoCidades.find(c => c.cidade === cidade);
+                      // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                      const abreParaCima = index >= arr.length - 2;
                       return (
                         <tr key={cidade} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                           <td className="py-2 text-gray-900 dark:text-white font-medium">{cidade}</td>
@@ -1971,7 +3079,7 @@ export function PessoasReport() {
                               
                               {openMenuCidade === cidade && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -2006,12 +3114,15 @@ export function PessoasReport() {
                   </tbody>
                 </table>
             </div>
-            <TablePagination
-              currentPage={cidadePage}
-              totalItems={stats.porCidade.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCidadePage}
-            />
+            )}
+            {cidadeView === 'tabela' && (
+              <TablePagination
+                currentPage={cidadePage}
+                totalItems={cidadesFiltradas.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCidadePage}
+              />
+            )}
           </Card>
 
           {/* REMOVIDO: Seção duplicada - Integrada em "Distribuição por Cidade" */}
@@ -2179,7 +3290,7 @@ export function PessoasReport() {
           </Card>}
 
           {/* Distribuição por Indicado com Análise de Crescimento */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-indicados" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -2189,6 +3300,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porIndicado.length} indicados • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setIndicadoView('tabela')}
+                    className={`p-1.5 transition-colors ${indicadoView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIndicadoView('grafico')}
+                    className={`p-1.5 transition-colors ${indicadoView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaIndicado}
+                    onChange={(e) => { setBuscaIndicado(e.target.value); setIndicadoPage(1); }}
+                    placeholder="Buscar indicado..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2244,6 +3383,55 @@ export function PessoasReport() {
               </div>
             )}
 
+            {indicadoView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={indicadosFiltrados.slice(0, 10)}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradIndicado" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#10b981" />
+                          <stop offset="100%" stopColor="#3b82f6" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="indicado_nome"
+                        width={170}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 13, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 24 ? v.slice(0, 24) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(16,185,129,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradIndicado)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo os {Math.min(10, indicadosFiltrados.length)} indicados com mais eleitores{buscaIndicado ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
               <table style={{ minWidth: '900px', width: '100%' }}>
                 <thead>
@@ -2259,9 +3447,11 @@ export function PessoasReport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {getPaginatedData(stats.porIndicado, indicadoPage).map((item, index) => {
+                  {getPaginatedData(indicadosFiltrados, indicadoPage).map((item, index, arr) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
                     const crescimento = crescimentoIndicados.find(c => c.indicado_nome === item.indicado_nome);
+                    // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                    const abreParaCima = index >= arr.length - 2;
                     return (
                       <tr key={item.indicado_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                         <td className="py-2 text-gray-900 dark:text-white font-medium">{item.indicado_nome}</td>
@@ -2360,7 +3550,7 @@ export function PessoasReport() {
                             
                             {openMenuIndicado === item.indicado_nome && (
                               <div 
-                                className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <button
@@ -2395,16 +3585,19 @@ export function PessoasReport() {
                 </tbody>
               </table>
             </div>
-            <TablePagination
-              currentPage={indicadoPage}
-              totalItems={stats.porIndicado.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setIndicadoPage}
-            />
+            )}
+            {indicadoView === 'tabela' && (
+              <TablePagination
+                currentPage={indicadoPage}
+                totalItems={indicadosFiltrados.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setIndicadoPage}
+              />
+            )}
           </Card>
 
           {/* Distribuição por Categoria com Análise de Crescimento */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-categorias" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -2414,6 +3607,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {categorias.length} categorias • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setCategoriaView('tabela')}
+                    className={`p-1.5 transition-colors ${categoriaView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCategoriaView('grafico')}
+                    className={`p-1.5 transition-colors ${categoriaView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaCategoria}
+                    onChange={(e) => { setBuscaCategoria(e.target.value); setCategoriaPage(1); }}
+                    placeholder="Buscar categoria..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2475,6 +3696,55 @@ export function PessoasReport() {
               </div>
             ) : (
               <>
+                {categoriaView === 'grafico' ? (
+                  <div className="w-full">
+                    <div className="h-[420px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={categoriasFiltradas.slice(0, 10)}
+                          layout="vertical"
+                          margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                          barCategoryGap="30%"
+                        >
+                          <defs>
+                            <linearGradient id="gradCategoria" x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#f59e0b" />
+                              <stop offset="100%" stopColor="#ef4444" />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                          <XAxis type="number" hide />
+                          <YAxis
+                            type="category"
+                            dataKey="nome"
+                            width={170}
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 13, fill: chartTick }}
+                            tickFormatter={(v: string) => v.length > 24 ? v.slice(0, 24) + '…' : v}
+                          />
+                          <Tooltip
+                            cursor={{ fill: 'rgba(245,158,11,0.08)' }}
+                            formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                            contentStyle={tooltipStyle}
+                          />
+                          <Bar dataKey="total" fill="url(#gradCategoria)" radius={[0, 8, 8, 0]} barSize={26}>
+                            <LabelList
+                              dataKey="total"
+                              position="right"
+                              offset={8}
+                              formatter={(v: number) => v.toLocaleString('pt-BR')}
+                              style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                      Exibindo as {Math.min(10, categoriasFiltradas.length)} categorias com mais eleitores{buscaCategoria ? ' (busca aplicada)' : ''}
+                    </p>
+                  </div>
+                ) : (
                 <div ref={setupHorizontalScroll} className="overflow-x-auto pr-6">
                   <table style={{ minWidth: '1200px', width: '100%' }}>
                     <thead>
@@ -2492,9 +3762,11 @@ export function PessoasReport() {
                       </tr>
                     </thead>
                     <tbody>
-                      {getPaginatedData(categorias, categoriaPage).map((categoria, index) => {
+                      {getPaginatedData(categoriasFiltradas, categoriaPage).map((categoria, index, arr) => {
                         const percentage = stats ? (categoria.total / stats.totalEleitores) * 100 : 0;
                         const crescimento = crescimentoCategorias.find(c => c.categoria_nome === categoria.nome);
+                        // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                        const abreParaCima = index >= arr.length - 2;
                         return (
                           <tr key={categoria.categoria_uid} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                             <td className="py-2 text-gray-900 dark:text-white font-medium">
@@ -2607,7 +3879,7 @@ export function PessoasReport() {
                                 </button>
                                 
                                 {openMenuCategoria === categoria.categoria_uid && (
-                                  <div className="absolute right-0 top-8 z-10 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700">
+                                  <div className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700`}>
                                     <button
                                       onClick={() => {
                                         exportarCategoriaExcel(categoria.categoria_uid, categoria.nome);
@@ -2638,18 +3910,21 @@ export function PessoasReport() {
                     </tbody>
                   </table>
                 </div>
-                <TablePagination
-                  currentPage={categoriaPage}
-                  totalItems={categorias.length}
-                  itemsPerPage={itemsPerPage}
-                  onPageChange={setCategoriaPage}
-                />
+                )}
+                {categoriaView === 'tabela' && (
+                  <TablePagination
+                    currentPage={categoriaPage}
+                    totalItems={categoriasFiltradas.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCategoriaPage}
+                  />
+                )}
               </>
             )}
           </Card>
 
           {/* Distribuição por Bairro com Análise de Crescimento */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-bairros" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -2659,6 +3934,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porBairro.length} bairros em {new Set(stats.porBairro.map(b => b.cidade)).size} cidades • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setBairroView('tabela')}
+                    className={`p-1.5 transition-colors ${bairroView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setBairroView('grafico')}
+                    className={`p-1.5 transition-colors ${bairroView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaBairro}
+                    onChange={(e) => { setBuscaBairro(e.target.value); setBairroPage(1); }}
+                    placeholder="Buscar bairro ou cidade..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2714,10 +4017,59 @@ export function PessoasReport() {
               </div>
             )}
 
+            {bairroView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={bairrosFiltrados.slice(0, 10).map(b => ({ ...b, rotulo: `${b.bairro} · ${b.cidade}` }))}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradBairro" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#06b6d4" />
+                          <stop offset="100%" stopColor="#0ea5e9" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="rotulo"
+                        width={170}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 26 ? v.slice(0, 26) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(6,182,212,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradBairro)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo os {Math.min(10, bairrosFiltrados.length)} bairros com mais eleitores{buscaBairro ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
             <div className="space-y-6">
               {getPaginatedData(
                 Object.entries(
-                  stats.porBairro.reduce((acc, curr) => {
+                  bairrosFiltrados.reduce((acc, curr) => {
                     if (!acc[curr.cidade]) {
                       acc[curr.cidade] = [];
                     }
@@ -2726,7 +4078,8 @@ export function PessoasReport() {
                   }, {} as Record<string, typeof stats.porBairro>)
                 )
                   .sort(([, a], [, b]) => b[0].total - a[0].total),
-                bairroPage
+                bairroPage,
+                bairrosPerPage
               ).map(([cidade, bairros]) => {
                 const cidadeTotal = bairros.reduce((sum, b) => sum + b.total, 0);
                 const cidadePercentage = (cidadeTotal / stats.totalEleitores) * 100;
@@ -2767,10 +4120,12 @@ export function PessoasReport() {
                             </tr>
                           </thead>
                           <tbody>
-                            {paginatedBairros.map((bairro, index) => {
+                            {paginatedBairros.map((bairro, index, arr) => {
                               const percentageTotal = (bairro.total / stats.totalEleitores) * 100;
                               const percentageCidade = (bairro.total / cidadeTotal) * 100;
                               const crescimento = crescimentoBairros.find(c => c.cidade === bairro.cidade && c.bairro === bairro.bairro);
+                              // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                              const abreParaCima = index >= arr.length - 2;
 
                               return (
                                 <tr
@@ -2885,7 +4240,7 @@ export function PessoasReport() {
                                       
                                       {openMenuBairro === `${bairro.cidade}-${bairro.bairro}` && (
                                         <div 
-                                          className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                          className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <button
@@ -2933,7 +4288,7 @@ export function PessoasReport() {
               <TablePagination
                 currentPage={bairroPage}
                 totalItems={Object.keys(
-                  stats.porBairro.reduce((acc, curr) => {
+                  bairrosFiltrados.reduce((acc, curr) => {
                     if (!acc[curr.cidade]) {
                       acc[curr.cidade] = [];
                     }
@@ -2941,14 +4296,282 @@ export function PessoasReport() {
                     return acc;
                   }, {} as Record<string, typeof stats.porBairro>)
                 ).length}
-                itemsPerPage={itemsPerPage}
+                itemsPerPage={bairrosPerPage}
                 onPageChange={setBairroPage}
               />
             </div>
+            )}
+          </Card>
+
+          {/* Distribuição por Logradouro */}
+          <Card id="secao-logradouros" className="p-4 dark:bg-gray-900">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Route className="h-5 w-5 text-blue-500" />
+                  Distribuição por Logradouro
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Ruas agrupadas por bairro e cidade — clique na linha para ver os eleitores cadastrados e seus atendimentos
+                </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setLogradouroView('tabela')}
+                    className={`p-1.5 transition-colors ${logradouroView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setLogradouroView('grafico')}
+                    className={`p-1.5 transition-colors ${logradouroView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-72">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={buscaLogradouro}
+                    onChange={(e) => { setBuscaLogradouro(e.target.value); setLogradouroPage(1); }}
+                    placeholder="Buscar rua, bairro ou cidade..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {logradouroView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={logradourosFiltrados.slice(0, 10).map(l => ({ ...l, rotulo: `${l.logradouro} · ${l.bairro}` }))}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradLogradouro" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#6366f1" />
+                          <stop offset="100%" stopColor="#3b82f6" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="rotulo"
+                        width={200}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 30 ? v.slice(0, 30) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(99,102,241,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradLogradouro)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo os {Math.min(10, logradourosFiltrados.length)} logradouros com mais eleitores{buscaLogradouro ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
+            <>
+            <div ref={setupHorizontalScroll} className="overflow-x-auto">
+              <table style={{ minWidth: '700px', width: '100%' }} className="text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700 text-left">
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400">Logradouro</th>
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400">Bairro</th>
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400">Cidade</th>
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400 text-center">Eleitores</th>
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400 text-center">Atendimentos</th>
+                    <th className="py-2 pr-4 font-medium text-gray-500 dark:text-gray-400 text-center">Ações</th>
+                    <th className="py-2 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getPaginatedData(logradourosFiltrados, logradouroPage).map((grupo, idx, arr) => {
+                    const chave = `${grupo.logradouro}|${grupo.bairro}|${grupo.cidade}`;
+                    const expandido = logradouroExpandido === chave;
+                    const abreParaCima = idx >= arr.length - 3;
+                    const totalAtendimentosRua = grupo.eleitores.reduce(
+                      (sum, e) => sum + (stats.atendimentosPorEleitor[e.uid]?.length || 0), 0
+                    );
+                    return [
+                      <tr
+                        key={chave}
+                        onClick={() => setLogradouroExpandido(expandido ? null : chave)}
+                        className="border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        <td className="py-2 pr-4 text-gray-900 dark:text-white font-medium">{grupo.logradouro}</td>
+                        <td className="py-2 pr-4 text-gray-700 dark:text-gray-300">{grupo.bairro}</td>
+                        <td className="py-2 pr-4 text-gray-700 dark:text-gray-300">{grupo.cidade}</td>
+                        <td className="py-2 pr-4 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                            {grupo.total}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-center">
+                          {totalAtendimentosRua > 0 ? (
+                            <span className="inline-block px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs font-medium">
+                              {totalAtendimentosRua}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <div className="relative flex items-center justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuLogradouro(openMenuLogradouro === chave ? null : chave);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                              title="Opções de exportação"
+                            >
+                              <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                            </button>
+
+                            {openMenuLogradouro === chave && (
+                              <div
+                                className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportLogradouroExcel(grupo.logradouro, grupo.bairro, grupo.cidade);
+                                    setOpenMenuLogradouro(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                  <span>Excel</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleExportLogradouroPDF(grupo);
+                                    setOpenMenuLogradouro(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                >
+                                  <FileText className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                  <span>PDF</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 text-gray-400">
+                          <ChevronDown className={`h-4 w-4 transition-transform ${expandido ? 'rotate-180' : ''}`} />
+                        </td>
+                      </tr>,
+                      expandido && (
+                        <tr key={`${chave}-detalhe`} className="border-b border-gray-100 dark:border-gray-800">
+                          <td colSpan={7} className="py-3 px-4 bg-gray-50 dark:bg-gray-800/60">
+                            <div className="space-y-2">
+                              {grupo.eleitores.map((eleitor) => {
+                                const atendimentos = stats.atendimentosPorEleitor[eleitor.uid] || [];
+                                const mostrarAtendimentos = !!atendimentosVisiveis[eleitor.uid];
+                                return (
+                                  <div key={eleitor.uid} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                      <div className="text-sm text-gray-900 dark:text-white font-medium">
+                                        {eleitor.nome}
+                                        {eleitor.numero && (
+                                          <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">Nº {eleitor.numero}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-3 text-xs">
+                                        {eleitor.whatsapp && (
+                                          <span className="text-gray-500 dark:text-gray-400">{eleitor.whatsapp}</span>
+                                        )}
+                                        {atendimentos.length > 0 ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setAtendimentosVisiveis(prev => ({ ...prev, [eleitor.uid]: !prev[eleitor.uid] }));
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 font-medium hover:opacity-80"
+                                          >
+                                            {atendimentos.length} atendimento{atendimentos.length > 1 ? 's' : ''}
+                                            <ChevronDown className={`h-3 w-3 transition-transform ${mostrarAtendimentos ? 'rotate-180' : ''}`} />
+                                          </button>
+                                        ) : (
+                                          <span className="text-gray-400 dark:text-gray-500">Sem atendimentos</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {mostrarAtendimentos && atendimentos.length > 0 && (
+                                      <div className="mt-2 pl-2 border-l-2 border-purple-200 dark:border-purple-800 space-y-1.5">
+                                        {atendimentos.map((at, idx) => (
+                                          <div key={idx} className="text-xs text-gray-600 dark:text-gray-300">
+                                            <span className="font-medium">
+                                              {at.data_atendimento ? new Date(at.data_atendimento).toLocaleDateString('pt-BR') : 'Sem data'}
+                                            </span>
+                                            {at.tipo_de_atendimento && <span className="ml-2">{at.tipo_de_atendimento}</span>}
+                                            {at.status && (
+                                              <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                                {at.status}
+                                              </span>
+                                            )}
+                                            {at.descricao && <div className="mt-0.5 text-gray-500 dark:text-gray-400">{at.descricao}</div>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {logradourosFiltrados.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                Nenhum logradouro encontrado.
+              </p>
+            )}
+
+            <TablePagination
+              currentPage={logradouroPage}
+              totalItems={logradourosFiltrados.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setLogradouroPage}
+            />
+            </>
+            )}
           </Card>
 
           {/* Distribuição por Zona e Seção com Análise de Crescimento */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-zonas" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -2958,6 +4581,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porZonaSecao.length} zonas/seções • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setZonaView('tabela')}
+                    className={`p-1.5 transition-colors ${zonaView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setZonaView('grafico')}
+                    className={`p-1.5 transition-colors ${zonaView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaZona}
+                    onChange={(e) => { setBuscaZona(e.target.value); setZonaPage(1); }}
+                    placeholder="Buscar zona/seção..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -3013,6 +4664,55 @@ export function PessoasReport() {
               </div>
             )}
 
+            {zonaView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={zonasFiltradas.slice(0, 10).map(z => ({ ...z, rotulo: `Zona ${z.zona} · Seção ${z.secao}` }))}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradZona" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#ec4899" />
+                          <stop offset="100%" stopColor="#f43f5e" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="rotulo"
+                        width={150}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 22 ? v.slice(0, 22) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(236,72,153,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} eleitores`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradZona)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo as {Math.min(10, zonasFiltradas.length)} zonas/seções com mais eleitores{buscaZona ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
               <table style={{ minWidth: '1200px', width: '100%' }}>
                 <thead>
@@ -3030,10 +4730,12 @@ export function PessoasReport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {getPaginatedData(stats.porZonaSecao, zonaPage).map((item, index) => {
+                  {getPaginatedData(zonasFiltradas, zonaPage).map((item, index, arr) => {
                     const percentage = (item.total / stats.totalEleitores) * 100;
                     const zonaSecaoKey = `${item.zona}-${item.secao}`;
                     const crescimento = crescimentoZonasSecoes.find(c => c.zona === item.zona && c.secao === item.secao);
+                    // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                    const abreParaCima = index >= arr.length - 2;
                     return (
                       <tr key={zonaSecaoKey} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                         <td className="py-2 text-gray-900 dark:text-white font-medium">{item.zona}</td>
@@ -3141,7 +4843,7 @@ export function PessoasReport() {
                             
                             {openMenuZona === zonaSecaoKey && (
                               <div 
-                                className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <button
@@ -3176,16 +4878,19 @@ export function PessoasReport() {
                 </tbody>
               </table>
             </div>
-            <TablePagination
-              currentPage={zonaPage}
-              totalItems={stats.porZonaSecao.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setZonaPage}
-            />
+            )}
+            {zonaView === 'tabela' && (
+              <TablePagination
+                currentPage={zonaPage}
+                totalItems={zonasFiltradas.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setZonaPage}
+              />
+            )}
           </Card>
 
           {/* Top 5 Eleitores com Mais Atendimentos */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-atendimentos" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
@@ -3194,7 +4899,72 @@ export function PessoasReport() {
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Eleitores com maior número de atendimentos registrados</p>
               </div>
+              <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                <button
+                  onClick={() => setTopEleitoresView('tabela')}
+                  className={`p-1.5 transition-colors ${topEleitoresView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar tabela"
+                >
+                  <Table2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setTopEleitoresView('grafico')}
+                  className={`p-1.5 transition-colors ${topEleitoresView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar gráfico"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+            {topEleitoresView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={(stats.topEleitoresAtendimentos || []).slice(0, 10)}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradTopEleitores" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#8b5cf6" />
+                          <stop offset="100%" stopColor="#d946ef" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="eleitor_nome"
+                        width={170}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 24 ? v.slice(0, 24) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(139,92,246,0.08)' }}
+                        formatter={(value: number) => [`${value} atendimentos`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total_atendimentos" fill="url(#gradTopEleitores)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total_atendimentos"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo os {Math.min(10, stats.topEleitoresAtendimentos?.length || 0)} eleitores com mais atendimentos
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
                 <table style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
@@ -3206,11 +4976,11 @@ export function PessoasReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {getPaginatedData(stats.topEleitoresAtendimentos, topEleitoresPage).map((eleitor) => {
+                    {getPaginatedData(stats.topEleitoresAtendimentos, topEleitoresPage).map((eleitor, index) => {
                       const maxAtendimentos = stats.topEleitoresAtendimentos[0]?.total_atendimentos || 1;
 
                       return (
-                        <tr key={eleitor.eleitor_nome} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <tr key={`${eleitor.uid || eleitor.eleitor_nome}-${index}`} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                           <td className="py-2 truncate">
                             <div className="flex items-center gap-2">
                               <Link 
@@ -3241,16 +5011,19 @@ export function PessoasReport() {
                   </tbody>
                 </table>
             </div>
-            <TablePagination
-              currentPage={topEleitoresPage}
-              totalItems={stats.topEleitoresAtendimentos?.length || 0}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setTopEleitoresPage}
-            />
+            )}
+            {topEleitoresView === 'tabela' && (
+              <TablePagination
+                currentPage={topEleitoresPage}
+                totalItems={stats.topEleitoresAtendimentos?.length || 0}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setTopEleitoresPage}
+              />
+            )}
           </Card>
 
           {/* Tabela de Confiabilidade */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-confiabilidade" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
@@ -3260,6 +5033,22 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porConfiabilidade.length} níveis • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                <button
+                  onClick={() => setConfiabilidadeView('tabela')}
+                  className={`p-1.5 transition-colors ${confiabilidadeView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar tabela"
+                >
+                  <Table2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setConfiabilidadeView('grafico')}
+                  className={`p-1.5 transition-colors ${confiabilidadeView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  title="Visualizar gráfico"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
@@ -3314,6 +5103,45 @@ export function PessoasReport() {
                 </div>
               </div>
             )}
+            {confiabilidadeView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats.porConfiabilidade || []}
+                        dataKey="total"
+                        nameKey="confiabilidade"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius="52%"
+                        outerRadius="80%"
+                        paddingAngle={3}
+                        strokeWidth={0}
+                        label={({ percent }: any) => `${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                        fontSize={13}
+                      >
+                        {(stats.porConfiabilidade || []).map((_, i) => (
+                          <Cell
+                            key={i}
+                            fill={['#10b981', '#84cc16', '#eab308', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#9ca3af'][i % 8]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, name: string) => [`${value.toLocaleString('pt-BR')} eleitores`, name]}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Legend formatter={(v: string) => <span className="text-sm text-gray-700 dark:text-gray-300">{v}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Participação de cada nível de confiabilidade no total de eleitores
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
                 <table style={{ minWidth: '1200px', width: '100%' }}>
                   <thead>
@@ -3330,8 +5158,10 @@ export function PessoasReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {getPaginatedData(stats.porConfiabilidade, confiabilidadePage).map(({ confiabilidade, total }) => {
+                    {getPaginatedData(stats.porConfiabilidade, confiabilidadePage).map(({ confiabilidade, total }, index, arr) => {
                       const percentage = (total / stats.totalEleitores) * 100;
+                      // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                      const abreParaCima = index >= arr.length - 2;
                       const config = confiabilidadeConfig[confiabilidade as keyof typeof confiabilidadeConfig] || {
                         color: 'bg-gray-400',
                         icon: '❓',
@@ -3448,7 +5278,7 @@ export function PessoasReport() {
                               
                               {openMenuConfiabilidade === confiabilidade && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -3483,16 +5313,19 @@ export function PessoasReport() {
                   </tbody>
                 </table>
             </div>
-            <TablePagination
-              currentPage={confiabilidadePage}
-              totalItems={stats.porConfiabilidade?.length || 0}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setConfiabilidadePage}
-            />
+            )}
+            {confiabilidadeView === 'tabela' && (
+              <TablePagination
+                currentPage={confiabilidadePage}
+                totalItems={stats.porConfiabilidade?.length || 0}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setConfiabilidadePage}
+              />
+            )}
           </Card>
 
           {/* Aniversariantes do Mês */}
-          <Card className="p-4 dark:bg-gray-900">
+          <Card id="secao-aniversariantes" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
@@ -3566,6 +5399,36 @@ export function PessoasReport() {
               </div>
             ) : (
               <>
+                {/* Mini gráfico: distribuição de aniversariantes por dia do mês */}
+                {aniversariantesPorDia.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Distribuição por dia do mês
+                    </p>
+                    <div className="h-[160px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={aniversariantesPorDia} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                          <XAxis
+                            dataKey="dia"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 10, fill: chartTick }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: chartTick }} width={30} />
+                          <Tooltip
+                            formatter={(value: number) => [`${value} aniversariante${value > 1 ? 's' : ''}`, 'Total']}
+                            labelFormatter={(label) => `Dia ${label}`}
+                            contentStyle={tooltipStyle}
+                          />
+                          <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
                 {generoFilter !== 'all' && (
                   <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg flex flex-row items-center justify-between gap-2">
                     <p className="text-sm text-yellow-800 dark:text-yellow-300">
@@ -3904,7 +5767,7 @@ export function PessoasReport() {
           </Card>
 
           {/* Tabela de Usuários */}
-          <Card className="p-4 mb-8 dark:bg-gray-900">
+          <Card id="secao-usuarios" className="p-4 mb-8 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -3914,6 +5777,34 @@ export function PessoasReport() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Total: {stats.porUsuario.length} usuários ativos • Análise de crescimento mensal e anual
                 </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setUsuarioView('tabela')}
+                    className={`p-1.5 transition-colors ${usuarioView === 'tabela' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar tabela"
+                  >
+                    <Table2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setUsuarioView('grafico')}
+                    className={`p-1.5 transition-colors ${usuarioView === 'grafico' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    title="Visualizar gráfico"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaUsuario}
+                    onChange={(e) => { setBuscaUsuario(e.target.value); setUsuarioPage(1); }}
+                    placeholder="Buscar usuário..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -3968,6 +5859,55 @@ export function PessoasReport() {
                 </div>
               </div>
             )}
+            {usuarioView === 'grafico' ? (
+              <div className="w-full">
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={usuariosFiltrados.slice(0, 10)}
+                      layout="vertical"
+                      margin={{ top: 5, right: 70, left: 10, bottom: 5 }}
+                      barCategoryGap="30%"
+                    >
+                      <defs>
+                        <linearGradient id="gradUsuario" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#f97316" />
+                          <stop offset="100%" stopColor="#eab308" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="usuario_nome"
+                        width={170}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 13, fill: chartTick }}
+                        tickFormatter={(v: string) => v.length > 24 ? v.slice(0, 24) + '…' : v}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(249,115,22,0.08)' }}
+                        formatter={(value: number) => [`${value.toLocaleString('pt-BR')} cadastros`, 'Total']}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Bar dataKey="total" fill="url(#gradUsuario)" radius={[0, 8, 8, 0]} barSize={26}>
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          offset={8}
+                          formatter={(v: number) => v.toLocaleString('pt-BR')}
+                          style={{ fontSize: 13, fontWeight: 600, fill: chartLabel }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Exibindo os {Math.min(10, usuariosFiltrados.length)} usuários com mais cadastros{buscaUsuario ? ' (busca aplicada)' : ''}
+                </p>
+              </div>
+            ) : (
             <div ref={setupHorizontalScroll}>
                 <table style={{ minWidth: '1200px', width: '100%' }}>
                   <thead>
@@ -3984,9 +5924,11 @@ export function PessoasReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {getPaginatedData(stats.porUsuario, usuarioPage).map(({ usuario_nome, total }, index) => {
+                    {getPaginatedData(usuariosFiltrados, usuarioPage).map(({ usuario_nome, total }, index, arr) => {
                       const percentage = (total / stats.totalEleitores) * 100;
                       const crescimento = crescimentoUsuarios.find(c => c.usuario_nome === usuario_nome);
+                      // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
+                      const abreParaCima = index >= arr.length - 2;
                       return (
                         <tr key={usuario_nome} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                           <td className="py-2 text-gray-900 dark:text-white font-medium">{usuario_nome}</td>
@@ -4093,7 +6035,7 @@ export function PessoasReport() {
                               
                               {openMenuUsuario === usuario_nome && (
                                 <div 
-                                  className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]"
+                                  className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -4128,14 +6070,28 @@ export function PessoasReport() {
                   </tbody>
                 </table>
             </div>
-            <TablePagination
-              currentPage={usuarioPage}
-              totalItems={stats.porUsuario.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setUsuarioPage}
-            />
+            )}
+            {usuarioView === 'tabela' && (
+              <TablePagination
+                currentPage={usuarioPage}
+                totalItems={usuariosFiltrados.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setUsuarioPage}
+              />
+            )}
           </Card>
         </div>
+
+        {/* Botão flutuante: voltar ao topo */}
+        {mostrarTopo && (
+          <button
+            onClick={() => getPageScroller().scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+            title="Voltar ao topo"
+          >
+            <ArrowUp className="w-5 h-5" />
+          </button>
+        )}
       </div>
     </div>
   );

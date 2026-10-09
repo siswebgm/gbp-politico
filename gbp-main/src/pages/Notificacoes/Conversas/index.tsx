@@ -22,7 +22,10 @@ interface AnexoResp {
 }
 
 interface MsgTimeline extends RespostaItem {
-  de: 'destinatario' | 'admin';
+  de: 'destinatario' | 'admin' | 'notificacao';
+  titulo?: string;
+  mensagem?: string;
+  uid?: string;
 }
 
 // Etiquetas de gerenciamento do atendimento
@@ -199,15 +202,27 @@ export default function ConversasNotificacoes() {
     e.target.value = '';
   };
 
-  // Monta a linha do tempo: notificação original + respostas de ambos os lados
+  // Linha do tempo da conversa: cada notificação recebida vira uma bolha do
+  // lado do gabinete, intercalada com as respostas dos dois lados por data
   const timeline = (log: any): MsgTimeline[] => {
+    const notifsOrigem = Array.isArray(log.notificacoes) && log.notificacoes.length
+      ? log.notificacoes
+      : [{ uid: log.uid, titulo: log.titulo, mensagem: log.mensagem, midias: log.midias, data_criacao: log.data_criacao }];
+    const notifMsgs: MsgTimeline[] = notifsOrigem.map((n: any) => ({
+      uid: n.uid,
+      titulo: n.titulo,
+      mensagem: n.mensagem,
+      midias: n.midias,
+      data: n.data_criacao,
+      de: 'notificacao' as const
+    }));
     const usuarioMsgs: MsgTimeline[] = Array.isArray(log.respostas) && log.respostas.length
       ? log.respostas.map((r: RespostaItem) => ({ ...r, de: 'destinatario' as const }))
       : (log.resposta ? [{ texto: log.resposta, midias: log.resposta_midias || [], data: log.data_resposta, de: 'destinatario' as const }] : []);
     const adminMsgs: MsgTimeline[] = Array.isArray(log.respostas_admin)
       ? log.respostas_admin.map((r: RespostaItem) => ({ ...r, de: 'admin' as const }))
       : [];
-    return [...usuarioMsgs, ...adminMsgs].sort(
+    return [...notifMsgs, ...usuarioMsgs, ...adminMsgs].sort(
       (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()
     );
   };
@@ -216,8 +231,9 @@ export default function ConversasNotificacoes() {
     const t = timeline(log);
     const ultima = t[t.length - 1];
     if (!ultima) return '';
-    const prefixo = ultima.de === 'admin' ? 'Você: ' : '';
-    return prefixo + (ultima.texto || '📎 Anexo');
+    const prefixo = ultima.de === 'destinatario' ? '' : 'Você: ';
+    const conteudo = ultima.de === 'notificacao' ? ultima.mensagem : ultima.texto;
+    return prefixo + (conteudo || '📎 Anexo');
   };
 
   const tokenDestino = (log: any): string | null =>
@@ -602,32 +618,32 @@ export default function ConversasNotificacoes() {
               {/* Mensagens */}
               <div ref={msgsRef} className="flex-1 min-h-0 overflow-y-auto">
                 <div className={`${fullscreen ? 'max-w-5xl' : 'max-w-3xl'} mx-auto w-full px-3 sm:px-8 pt-6 pb-5 space-y-4`}>
-                {/* Notificação original (sempre a 1ª mensagem da conversa) */}
-                <div className="flex">
-                  <div className="max-w-[92%] sm:max-w-[560px] bg-white dark:bg-gray-800 rounded-xl rounded-tl-none px-4 py-3 shadow-[0_1px_1px_rgba(11,20,26,0.15)]">
-                    <p className="text-xs font-semibold text-[#008069] mb-0.5">{ativa.titulo}</p>
-                    <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-                      {ativa.mensagem}
-                    </p>
-                    {ativa.midias?.length > 0 && renderMidias(ativa.midias, false)}
-                    <div className="flex items-center justify-end mt-1">
-                      <span className="text-[11px] text-gray-400">{dataHora(ativa.data_criacao)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline de respostas (com separadores de data) */}
+                {/* Timeline: notificações recebidas + respostas (separadores de data) */}
                 {timeline(ativa).map((m, i, arr) => {
-                  const anterior = i === 0 ? ativa.data_criacao : arr[i - 1].data;
+                  const anterior = i === 0 ? null : arr[i - 1].data;
                   return (
-                  <div key={i}>
-                    {!mesmoDia(anterior, m.data) && (
+                  <div key={`${m.de}-${m.uid || i}-${i}`}>
+                    {(!anterior || !mesmoDia(anterior, m.data)) && (
                       <div className="flex justify-center my-1">
                         <span className="px-3 py-1 text-[11px] font-medium text-gray-500 bg-white/70 dark:bg-gray-700 rounded-full shadow-sm">
                           {rotuloDia(m.data)}
                         </span>
                       </div>
                     )}
+                  {m.de === 'notificacao' ? (
+                    <div className="flex">
+                      <div className="max-w-[92%] sm:max-w-[560px] bg-white dark:bg-gray-800 rounded-xl rounded-tl-none px-4 py-3 shadow-[0_1px_1px_rgba(11,20,26,0.15)]">
+                        <p className="text-xs font-semibold text-[#008069] mb-0.5">{m.titulo}</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                          {m.mensagem}
+                        </p>
+                        {m.midias && m.midias.length > 0 && renderMidias(m.midias, false)}
+                        <div className="flex items-center justify-end mt-1">
+                          <span className="text-[11px] text-gray-400">{dataHora(m.data)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div className={`flex ${m.de === 'destinatario' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[92%] sm:max-w-[560px] rounded-xl px-4 py-2.5 shadow-[0_1px_1px_rgba(11,20,26,0.15)] ${m.de === 'destinatario'
                       ? 'bg-[#d9fdd3] dark:bg-[#005c4b] rounded-tr-none'
@@ -649,6 +665,7 @@ export default function ConversasNotificacoes() {
                       </div>
                     </div>
                   </div>
+                  )}
                   </div>
                   );
                 })}

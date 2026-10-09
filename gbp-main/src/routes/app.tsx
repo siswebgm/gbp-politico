@@ -4,7 +4,6 @@ import { VoterRoutes, AttendanceRoutes, disparoMidiaRoutes, documentsRoutes } fr
 import { ElectoralMap } from '../pages/MapaEleitoral';
 import { Goals } from '../pages/Goals';
 import { Reports } from '../pages/Reports';
-import { Strategy } from '../pages/Strategy';
 import { Users } from '../pages/Users';
 import { PlanosPage } from '../pages/app/Planos';
 import { Settings } from '../pages/Settings/Settings';
@@ -46,10 +45,6 @@ export const appRoutes: RouteConfig[] = [
   {
     path: 'reports',
     element: <Reports />,
-  },
-  {
-    path: 'strategy',
-    element: <Strategy />,
   },
   {
     path: 'users',

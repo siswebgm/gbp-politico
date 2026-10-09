@@ -964,9 +964,9 @@ export const NovaPessoa: React.FC = () => {
   useEffect(() => {
     const cleanCEP = cepValue?.replace(/\D/g, '');
     
-    // Limpa os campos se o CEP for modificado
+    // CEP incompleto: apenas reseta o controle para permitir nova busca.
+    // NÃO limpa os campos — o usuário pode ter digitado o endereço manualmente.
     if (cleanCEP?.length !== 8) {
-      clearAddressFields();
       setLastCheckedCep('');
       return;
     }

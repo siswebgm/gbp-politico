@@ -45,6 +45,7 @@ const normalizeText = (text: string): string => {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
@@ -144,6 +145,28 @@ export interface UsuarioCrescimento {
   crescimento_anual_percentual: number;
 }
 
+export interface LogradouroEleitor {
+  uid: string;
+  nome: string;
+  numero: string | null;
+  whatsapp: string | null;
+}
+
+export interface LogradouroGrupo {
+  logradouro: string;
+  bairro: string;
+  cidade: string;
+  total: number;
+  eleitores: LogradouroEleitor[];
+}
+
+export interface AtendimentoResumo {
+  data_atendimento: string | null;
+  tipo_de_atendimento: string | null;
+  status: string | null;
+  descricao: string | null;
+}
+
 export interface EleitorStats {
   totalEleitores: number;
   porCidade: {
@@ -182,10 +205,12 @@ export interface EleitorStats {
     total_atendimentos: number;
     whatsapp?: string;
   }[];
+  porLogradouro: LogradouroGrupo[];
+  atendimentosPorEleitor: Record<string, AtendimentoResumo[]>;
 }
 
 export const eleitorStatsService = {
-  async getCrescimentoPorUsuario(empresa_uid: string): Promise<UsuarioCrescimento[]> {
+  async getCrescimentoPorUsuario(empresa_uid: string, eleitoresPreload?: any[]): Promise<UsuarioCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -199,13 +224,17 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com usuario_uid e created_at
-      const { data: eleitores, error: eleitoresError } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('usuario_uid, created_at')
-        .eq('empresa_uid', empresa_uid)
-        .not('usuario_uid', 'is', null);
-
-      if (eleitoresError) throw eleitoresError;
+      // (reutiliza dados pré-carregados quando fornecidos pela página)
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error: eleitoresError } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('usuario_uid, created_at')
+          .eq('empresa_uid', empresa_uid)
+          .not('usuario_uid', 'is', null);
+        if (eleitoresError) throw eleitoresError;
+        eleitores = data;
+      }
 
       // Buscar informações dos usuários
       const usuarioUids = [...new Set(eleitores?.map(e => e.usuario_uid).filter(Boolean))];
@@ -321,7 +350,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorConfiabilidade(empresa_uid: string): Promise<ConfiabilidadeCrescimento[]> {
+  async getCrescimentoPorConfiabilidade(empresa_uid: string, eleitoresPreload?: any[]): Promise<ConfiabilidadeCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -335,12 +364,15 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com confiabilidade_do_voto e created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('confiabilidade_do_voto, created_at')
-        .eq('empresa_uid', empresa_uid);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('confiabilidade_do_voto, created_at')
+          .eq('empresa_uid', empresa_uid);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por confiabilidade
       const confiabilidadesMap = new Map<string, {
@@ -437,7 +469,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorZonaSecao(empresa_uid: string): Promise<ZonaSecaoCrescimento[]> {
+  async getCrescimentoPorZonaSecao(empresa_uid: string, eleitoresPreload?: any[]): Promise<ZonaSecaoCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -451,12 +483,15 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com zona, seção e created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('zona, secao, created_at')
-        .eq('empresa_uid', empresa_uid);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('zona, secao, created_at')
+          .eq('empresa_uid', empresa_uid);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por zona e seção
       const zonasSecoesMap = new Map<string, {
@@ -560,7 +595,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorBairro(empresa_uid: string): Promise<BairroCrescimento[]> {
+  async getCrescimentoPorBairro(empresa_uid: string, eleitoresPreload?: any[]): Promise<BairroCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -574,12 +609,15 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com bairro e created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('cidade, bairro, created_at')
-        .eq('empresa_uid', empresa_uid);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('cidade, bairro, created_at')
+          .eq('empresa_uid', empresa_uid);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por bairro
       const bairrosMap = new Map<string, {
@@ -683,7 +721,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorCategoria(empresa_uid: string): Promise<CategoriaCrescimento[]> {
+  async getCrescimentoPorCategoria(empresa_uid: string, eleitoresPreload?: any[]): Promise<CategoriaCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -697,13 +735,16 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com categoria e created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('categoria_uid, created_at, categoria:categoria_uid(uid, nome)')
-        .eq('empresa_uid', empresa_uid)
-        .not('categoria_uid', 'is', null);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('categoria_uid, created_at, categoria:categoria_uid(uid, nome)')
+          .eq('empresa_uid', empresa_uid)
+          .not('categoria_uid', 'is', null);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por categoria
       const categoriasMap = new Map<string, {
@@ -806,7 +847,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorIndicado(empresa_uid: string): Promise<IndicadoCrescimento[]> {
+  async getCrescimentoPorIndicado(empresa_uid: string, eleitoresPreload?: any[]): Promise<IndicadoCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -820,13 +861,16 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com indicado e created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('indicado_uid, created_at, indicado:indicado_uid(uid, nome)')
-        .eq('empresa_uid', empresa_uid)
-        .not('indicado_uid', 'is', null);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('indicado_uid, created_at, indicado:indicado_uid(uid, nome)')
+          .eq('empresa_uid', empresa_uid)
+          .not('indicado_uid', 'is', null);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por indicado
       const indicadosMap = new Map<string, {
@@ -929,7 +973,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getCrescimentoPorCidade(empresa_uid: string): Promise<CidadeCrescimento[]> {
+  async getCrescimentoPorCidade(empresa_uid: string, eleitoresPreload?: any[]): Promise<CidadeCrescimento[]> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -943,12 +987,15 @@ export const eleitorStatsService = {
       const anoAnterior = anoAtual - 1;
 
       // Buscar todos os eleitores com created_at
-      const { data: eleitores, error } = await supabaseClient
-        .from('gbp_eleitores')
-        .select('cidade, created_at')
-        .eq('empresa_uid', empresa_uid);
-
-      if (error) throw error;
+      let eleitores = eleitoresPreload;
+      if (!eleitores) {
+        const { data, error } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('cidade, created_at')
+          .eq('empresa_uid', empresa_uid);
+        if (error) throw error;
+        eleitores = data;
+      }
 
       // Processar dados por cidade
       const cidadesMap = new Map<string, {
@@ -1052,7 +1099,7 @@ export const eleitorStatsService = {
     }
   },
 
-  async getStats(empresa_uid: string): Promise<EleitorStats> {
+  async getStats(empresa_uid: string, eleitoresPreload?: any[]): Promise<EleitorStats> {
     if (!empresa_uid) {
       throw new Error('empresa_uid é obrigatório');
     }
@@ -1073,29 +1120,38 @@ export const eleitorStatsService = {
 
       console.log('Total de eleitores encontrados:', totalEleitores);
 
-      // Buscar todos os eleitores de uma vez
-      const { data: eleitoresData, error: eleitoresError } = await supabaseClient
-        .from('gbp_eleitores')
-        .select(`
-          cidade,
-          bairro,
-          zona,
-          secao,
-          confiabilidade_do_voto,
-          usuario:usuario_uid (
+      // Buscar todos os eleitores de uma vez (ou reutiliza dados pré-carregados)
+      let eleitoresData = eleitoresPreload;
+      if (!eleitoresData) {
+        const { data, error: eleitoresError } = await supabaseClient
+          .from('gbp_eleitores')
+          .select(`
             uid,
-            nome
-          ),
-          indicado:indicado_uid (
-            uid,
-            nome
-          )
-        `)
-        .eq('empresa_uid', empresa_uid);
+            nome,
+            cidade,
+            bairro,
+            logradouro,
+            numero,
+            whatsapp,
+            zona,
+            secao,
+            confiabilidade_do_voto,
+            usuario:usuario_uid (
+              uid,
+              nome
+            ),
+            indicado:indicado_uid (
+              uid,
+              nome
+            )
+          `)
+          .eq('empresa_uid', empresa_uid);
 
-      if (eleitoresError) {
-        console.error('Erro ao buscar dados dos eleitores:', eleitoresError);
-        throw eleitoresError;
+        if (eleitoresError) {
+          console.error('Erro ao buscar dados dos eleitores:', eleitoresError);
+          throw eleitoresError;
+        }
+        eleitoresData = data;
       }
 
       console.log('Dados dos eleitores recebidos:', eleitoresData?.length || 0, 'registros');
@@ -1173,6 +1229,73 @@ export const eleitorStatsService = {
         .sort((a, b) => b.total - a.total);
 
       console.log('Bairros processados:', porBairro.length);
+
+      // Processar logradouros (com normalização)
+      // Agrupa por logradouro dentro do mesmo bairro/cidade para
+      // distinguir ruas com nomes parecidos em locais diferentes
+      const logradourosMap = new Map<string, LogradouroGrupo>();
+      eleitoresData?.forEach(eleitor => {
+        if (eleitor.logradouro && eleitor.uid) {
+          const chave = `${normalizeText(eleitor.cidade || '')}|${normalizeText(eleitor.bairro || '')}|${normalizeText(eleitor.logradouro)}`;
+          const eleitorResumo: LogradouroEleitor = {
+            uid: eleitor.uid,
+            nome: eleitor.nome || 'Nome não disponível',
+            numero: eleitor.numero || null,
+            whatsapp: eleitor.whatsapp || null
+          };
+          const existente = logradourosMap.get(chave);
+          if (existente) {
+            existente.total += 1;
+            existente.eleitores.push(eleitorResumo);
+          } else {
+            logradourosMap.set(chave, {
+              logradouro: eleitor.logradouro,
+              bairro: eleitor.bairro || 'Sem bairro',
+              cidade: eleitor.cidade || 'Sem cidade',
+              total: 1,
+              eleitores: [eleitorResumo]
+            });
+          }
+        }
+      });
+
+      const porLogradouro = Array.from(logradourosMap.values())
+        .map(grupo => ({
+          ...grupo,
+          eleitores: grupo.eleitores.sort((a, b) => a.nome.localeCompare(b.nome))
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      console.log('Logradouros processados:', porLogradouro.length);
+
+      // Buscar atendimentos e agrupar por eleitor
+      const atendimentosPorEleitor: Record<string, AtendimentoResumo[]> = {};
+      try {
+        const { data: atendimentosData, error: atendimentosErr } = await supabaseClient
+          .from('gbp_atendimentos')
+          .select('eleitor_uid, data_atendimento, tipo_de_atendimento, status, descricao')
+          .eq('empresa_uid', empresa_uid)
+          .order('data_atendimento', { ascending: false });
+
+        if (atendimentosErr) {
+          console.error('Erro ao buscar atendimentos para logradouros:', atendimentosErr);
+        } else {
+          atendimentosData?.forEach(atendimento => {
+            if (!atendimento.eleitor_uid) return;
+            if (!atendimentosPorEleitor[atendimento.eleitor_uid]) {
+              atendimentosPorEleitor[atendimento.eleitor_uid] = [];
+            }
+            atendimentosPorEleitor[atendimento.eleitor_uid].push({
+              data_atendimento: atendimento.data_atendimento || null,
+              tipo_de_atendimento: atendimento.tipo_de_atendimento || null,
+              status: atendimento.status || null,
+              descricao: atendimento.descricao || null
+            });
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao processar atendimentos por eleitor:', error);
+      }
 
       // Processar zonas e seções
       const zonasMap = new Map<string, { zona: string; secao: string; total: number }>();
@@ -1322,7 +1445,9 @@ export const eleitorStatsService = {
         porUsuario,
         porIndicado,
         porConfiabilidade,
-        topEleitoresAtendimentos: topEleitoresDetalhes
+        topEleitoresAtendimentos: topEleitoresDetalhes,
+        porLogradouro,
+        atendimentosPorEleitor
       };
 
       console.log('Estatísticas processadas com sucesso:', stats);

@@ -18,13 +18,13 @@ interface Atendimento {
 
 interface Oficio {
   uid: string;
-  numero_oficio: string;
+  numero_oficio: string | null;
   titulo: string;
   descricao: string;
-  descricao_do_problema?: string;
-  status: string;
+  descricao_do_problema?: string | null;
+  status: string | null;
   data_solicitacao: string;
-  tipo_de_demanda?: string;
+  tipo_de_demanda?: string | null;
   responsavel_nome?: string | null;
   created_at: string;
 }
@@ -47,10 +47,13 @@ const PrintPessoa: React.FC<PrintPessoaProps> = ({ eleitor, atendimentos = [], o
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null) => {
     switch (status) {
       case 'Concluído': return '#10b981';
-      case 'Em Andamento': return '#f59e0b';
+      case 'Protocolado':
+      case 'Feito Ofício': return '#6366f1';
+      case 'Em Andamento':
+      case 'Aguardando': return '#f59e0b';
       case 'Pendente': return '#6b7280';
       case 'Cancelado': return '#ef4444';
       default: return '#6b7280';
@@ -370,7 +373,7 @@ const PrintPessoa: React.FC<PrintPessoaProps> = ({ eleitor, atendimentos = [], o
                 borderBottom: '2px solid #e5e7eb',
                 paddingBottom: '5px'
               }}>
-                📄 Ofícios Relacionados ({oficios.length})
+                📄 Demandas Relacionadas ({oficios.length})
               </h2>
               <table style={{ 
                 width: '100%',
@@ -385,7 +388,7 @@ const PrintPessoa: React.FC<PrintPessoaProps> = ({ eleitor, atendimentos = [], o
                       padding: '8px',
                       textAlign: 'left',
                       fontWeight: 'bold'
-                    }}>Nº Ofício</th>
+                    }}>Protocolo</th>
                     <th style={{ 
                       border: '1px solid #d1d5db',
                       padding: '8px',

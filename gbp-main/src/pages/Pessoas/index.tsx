@@ -21,8 +21,15 @@ import {
   AlertCircle,
   ArrowLeft,
   FileSpreadsheet,
+  MoreVertical,
 } from 'lucide-react';
 import { InicialDropdown } from './components/InicialDropdown';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 
 interface ActiveFiltersProps {
   filters: EleitorFilters;
@@ -379,38 +386,6 @@ export function Pessoas() {
 
                   {/* Grupo de Botões */}
                   <div className="hidden md:flex items-center gap-3">
-                    {/* Botão Filtro - oculto para visitantes */}
-                    {!isVisitante && (
-                      <button
-                        onClick={() => setShowFilters(true)}
-                        className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
-                      >
-                        <Filter className="h-4 w-4 mr-2" />
-                        Filtros
-                        {Object.values(filters).some(value => value) && (
-                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                            Ativos
-                          </span>
-                        )}
-                      </button>
-                    )}
-
-                    {/* Botão Exportar - apenas para admin */}
-                    {user?.nivel_acesso === 'admin' && (
-                      <button
-                        onClick={() => setIsExportarModalOpen(true)}
-                        className="inline-flex items-center gap-x-1.5 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-                      >
-                        <FileSpreadsheet className="-ml-0.5 h-5 w-5" aria-hidden="true" />
-                        Exportar
-                        {selectedEleitores.length > 0 && (
-                          <span className="ml-1.5 rounded-full bg-primary-700 px-2 py-0.5 text-xs">
-                            {selectedEleitores.length}
-                          </span>
-                        )}
-                      </button>
-                    )}
-
                     {/* Botão Nova Pessoa */}
                     <button
                       onClick={() => navigate('/app/pessoas/novo')}
@@ -419,6 +394,53 @@ export function Pessoas() {
                       <Plus className="h-4 w-4 mr-2" />
                       Nova Pessoa
                     </button>
+
+                    {/* Menu de opções (3 pontinhos) - Filtros e Exportar */}
+                    {(!isVisitante || user?.nivel_acesso === 'admin') && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-gray-700 hover:bg-gray-100 focus:outline-none dark:text-gray-200 dark:hover:bg-gray-700"
+                            aria-label="Mais opções"
+                          >
+                            <MoreVertical className="h-5 w-5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {/* Filtros - oculto para visitantes */}
+                          {!isVisitante && (
+                            <DropdownMenuItem
+                              onSelect={() => setShowFilters(true)}
+                              className="cursor-pointer gap-2"
+                            >
+                              <Filter className="h-4 w-4" />
+                              Filtros
+                              {Object.values(filters).some(value => value) && (
+                                <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                                  Ativos
+                                </span>
+                              )}
+                            </DropdownMenuItem>
+                          )}
+
+                          {/* Exportar - apenas para admin */}
+                          {user?.nivel_acesso === 'admin' && (
+                            <DropdownMenuItem
+                              onSelect={() => setIsExportarModalOpen(true)}
+                              className="cursor-pointer gap-2"
+                            >
+                              <FileSpreadsheet className="h-4 w-4" />
+                              Exportar
+                              {selectedEleitores.length > 0 && (
+                                <span className="ml-auto rounded-full bg-primary-100 px-2 py-0.5 text-xs text-primary-800">
+                                  {selectedEleitores.length}
+                                </span>
+                              )}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
 
                   </div>
                 </div>

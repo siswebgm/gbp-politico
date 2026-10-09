@@ -13,15 +13,35 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  GripVertical,
+  FolderOpen,
+  FolderPlus,
+  FolderX,
+  Pencil,
+  X
 } from 'lucide-react';
 import { useCategories } from '../../../hooks/useCategories';
 import { useCategoriaTipos } from '../../../hooks/useCategoriaTipos';
+import { useCategoriaGrupos } from '../../../hooks/useCategoriaGrupos';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import type { CategoryWithType } from '../../../services/categories';
 import { useCompanyStore } from '../../../store/useCompanyStore';
 import { supabaseClient } from '../../../lib/supabase';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface CategoriaFormData {
   nome: string;
@@ -36,6 +56,8 @@ interface CategoriaTag {
 interface CategoriaTipo {
   uid: string;
   nome: string;
+  grupo_uid?: string | null;
+  grupo?: { uid: string; nome: string } | null;
 }
 
 interface DeleteModalState {
@@ -45,10 +67,72 @@ interface DeleteModalState {
   hasVoters?: boolean;
 }
 
+// Seção droppable que representa um grupo de tipos (ou a área "Sem grupo")
+function GrupoDropSection({
+  id,
+  isDragging,
+  muted = false,
+  children,
+}: {
+  id: string;
+  isDragging: boolean;
+  muted?: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  const state = isOver
+    ? 'border-blue-500 bg-blue-100/50 dark:bg-blue-900/30 ring-4 ring-blue-400/30 shadow-lg scale-[1.005]'
+    : isDragging
+      ? 'border-dashed border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-900/10'
+      : muted
+        ? 'border-gray-300 dark:border-gray-600 bg-gray-50/60 dark:bg-gray-800/40'
+        : 'border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-blue-900/10 shadow-sm';
+
+  return (
+    <section ref={setNodeRef} className={`rounded-xl border-2 transition-all ${state}`}>
+      {children}
+    </section>
+  );
+}
+
+// Alça de arraste exibida no header de cada card de tipo
+function TipoDragHandle({
+  tipoUid,
+  onPreview,
+}: {
+  tipoUid: string;
+  onPreview: (active: boolean) => void;
+}) {
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: `tipo:${tipoUid}` });
+
+  return (
+    <button
+      type="button"
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onMouseEnter={() => onPreview(true)}
+      onMouseLeave={() => onPreview(false)}
+      onFocus={() => onPreview(true)}
+      onBlur={() => onPreview(false)}
+      className="relative group p-1 -ml-1 text-gray-400 dark:text-gray-500 bg-gray-200/70 dark:bg-gray-700/70 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/40 dark:hover:text-blue-300 border border-gray-300/60 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600 cursor-grab active:cursor-grabbing rounded-lg transition-colors touch-none flex-shrink-0"
+      title="Arrastar tipo para um grupo"
+    >
+      <GripVertical className="h-5 w-5" />
+      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] font-semibold px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-50">
+        Segure e arraste até uma pasta
+      </span>
+    </button>
+  );
+}
+
 export function CategorySettings() {
   const company = useCompanyStore((state) => state.company);
   const { data: categorias, isLoading, createCategory: create, updateCategory: update, deleteCategory: deleteCategoria, refetch } = useCategories();
   const { tipos, isLoading: isLoadingTipos, createTipo, updateTipo, deleteTipo, refetch: refetchTipos } = useCategoriaTipos();
+  const { grupos: categoriaGrupos, createGrupo, updateGrupo, deleteGrupo } = useCategoriaGrupos();
+  const queryClient = useQueryClient();
   const { checkCategoryHasVoters } = useCategories();
 
   useEffect(() => {
@@ -76,7 +160,21 @@ export function CategorySettings() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const [editingTipoId, setEditingTipoId] = useState<string | null>(null);
-  const [editingTipoData, setEditingTipoData] = useState<{ nome: string }>({ nome: '' });
+  const [editingTipoData, setEditingTipoData] = useState<{ nome: string; grupo_uid: string }>({ nome: '', grupo_uid: '' });
+  const [novoGrupoNome, setNovoGrupoNome] = useState('');
+
+  // Drag & drop + gestão de grupos na barra superior
+  const [activeDragTipo, setActiveDragTipo] = useState<string | null>(null);
+  const [isCreatingGrupo, setIsCreatingGrupo] = useState(false);
+  const [novoGrupoBarNome, setNovoGrupoBarNome] = useState('');
+  const [renamingGrupoId, setRenamingGrupoId] = useState<string | null>(null);
+  const [renameGrupoNome, setRenameGrupoNome] = useState('');
+  const [deleteGrupoModal, setDeleteGrupoModal] = useState<{ isOpen: boolean; grupoId: string; grupoNome: string }>({
+    isOpen: false,
+    grupoId: '',
+    grupoNome: '',
+  });
+  const [previewDropZones, setPreviewDropZones] = useState(false);
 
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
     isOpen: false,
@@ -168,7 +266,7 @@ export function CategorySettings() {
     const categoriasSemTipo = filteredCategorias.filter(cat => !cat.tipo_uid);
     if (categoriasSemTipo.length > 0) {
       grupos.push({
-        tipo: { uid: 'sem-tipo', nome: 'Sem Tipo', empresa_uid: '', id: 0, created_at: '' },
+        tipo: { uid: 'sem-tipo', nome: 'Sem Tipo', empresa_uid: '', id: 0, created_at: '', categorias: [] },
         categorias: categoriasSemTipo
       });
     }
@@ -207,12 +305,14 @@ export function CategorySettings() {
 
   const handleStartEditTipo = (tipo: CategoriaTipo) => {
     setEditingTipoId(tipo.uid);
-    setEditingTipoData({ nome: tipo.nome });
+    setEditingTipoData({ nome: tipo.nome, grupo_uid: tipo.grupo_uid || '' });
+    setNovoGrupoNome('');
   };
 
   const handleCancelEditTipo = () => {
     setEditingTipoId(null);
-    setEditingTipoData({ nome: '' });
+    setEditingTipoData({ nome: '', grupo_uid: '' });
+    setNovoGrupoNome('');
   };
 
   const toUpperCase = (str: string) => {
@@ -267,12 +367,123 @@ export function CategorySettings() {
 
   const handleUpdateTipo = async (uid: string) => {
     try {
-      await updateTipo({ uid, nome: toUpperCase(editingTipoData.nome) });
+      let grupoUid: string | null = editingTipoData.grupo_uid || null;
+
+      // Criação inline de novo grupo
+      if (editingTipoData.grupo_uid === '__novo__') {
+        if (!novoGrupoNome.trim()) {
+          toast.error('Digite o nome do novo grupo');
+          return;
+        }
+        const novoGrupo = await createGrupo(novoGrupoNome.trim().toUpperCase());
+        grupoUid = novoGrupo.uid;
+      }
+
+      await updateTipo({ uid, nome: toUpperCase(editingTipoData.nome), grupo_uid: grupoUid });
       toast.success('Tipo atualizado com sucesso!');
       handleCancelEditTipo();
     } catch (error) {
       console.error('Erro ao atualizar tipo:', error);
       toast.error('Erro ao atualizar tipo');
+    }
+  };
+
+  // ---------- Drag & Drop: tipo → grupo ----------
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+  );
+
+  // Seções visuais: uma "pasta" por grupo + seção final "Sem grupo"
+  const secoes = useMemo(() => {
+    const list: {
+      key: string;
+      dropId: string;
+      nome: string;
+      grupoUid: string | null;
+      items: typeof categoriasAgrupadas;
+    }[] = categoriaGrupos.map((g) => ({
+      key: g.uid,
+      dropId: `grupo:${g.uid}`,
+      nome: g.nome,
+      grupoUid: g.uid as string | null,
+      items: categoriasAgrupadas.filter((i) => i.tipo.grupo_uid === g.uid),
+    }));
+
+    list.push({
+      key: 'sem-grupo',
+      dropId: 'grupo:none',
+      nome: 'Sem grupo',
+      grupoUid: null,
+      items: categoriasAgrupadas.filter((i) => !i.tipo.grupo_uid),
+    });
+
+    return list;
+  }, [categoriaGrupos, categoriasAgrupadas]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragTipo(String(event.active.id));
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const dragId = String(event.active.id);
+    setActiveDragTipo(null);
+
+    const overId = event.over ? String(event.over.id) : null;
+    console.log('[DnD] drag end:', { dragId, overId });
+    if (!overId || !dragId.startsWith('tipo:')) return;
+
+    const tipoUid = dragId.replace('tipo:', '');
+    const novoGrupoUid = overId === 'grupo:none' ? null : overId.replace('grupo:', '');
+    const tipo = tipos?.find((t) => t.uid === tipoUid);
+    if (!tipo || (tipo.grupo_uid || null) === novoGrupoUid) return;
+
+    try {
+      await updateTipo({ uid: tipoUid, grupo_uid: novoGrupoUid });
+      await refetchTipos();
+      queryClient.invalidateQueries({ queryKey: ['categorias', company?.uid] });
+      toast.success(novoGrupoUid ? 'Tipo movido para o grupo!' : 'Tipo removido do grupo');
+    } catch (error) {
+      console.error('Erro ao mover tipo:', error);
+      toast.error('Erro ao mover tipo para o grupo');
+    }
+  };
+
+  const handleCreateGrupoBar = async () => {
+    const nome = novoGrupoBarNome.trim();
+    if (!nome) return;
+    try {
+      await createGrupo(nome.toUpperCase());
+      setNovoGrupoBarNome('');
+      setIsCreatingGrupo(false);
+      toast.success('Grupo criado! Arraste tipos até ele.');
+    } catch (error) {
+      console.error('Erro ao criar grupo:', error);
+      toast.error('Erro ao criar grupo');
+    }
+  };
+
+  const handleRenameGrupo = async (uid: string) => {
+    const nome = renameGrupoNome.trim();
+    setRenamingGrupoId(null);
+    if (!nome) return;
+    try {
+      await updateGrupo({ uid, nome: nome.toUpperCase() });
+      toast.success('Grupo renomeado');
+    } catch (error) {
+      console.error('Erro ao renomear grupo:', error);
+      toast.error('Erro ao renomear grupo');
+    }
+  };
+
+  const handleConfirmDeleteGrupo = async () => {
+    try {
+      await deleteGrupo(deleteGrupoModal.grupoId);
+      toast.success('Grupo excluído. Os tipos vinculados ficaram sem grupo.');
+      setDeleteGrupoModal({ isOpen: false, grupoId: '', grupoNome: '' });
+    } catch (error) {
+      console.error('Erro ao excluir grupo:', error);
+      toast.error('Erro ao excluir grupo');
     }
   };
 
@@ -685,18 +896,184 @@ export function CategorySettings() {
           Nenhuma categoria encontrada
         </div>
       ) : (
-        <div className="grid gap-3 sm:gap-4">
-          {categoriasAgrupadas.map((grupo) => (
-            <div key={grupo.tipo.uid} className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 relative">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragTipo(null)}
+        >
+          {/* Controles de grupo */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
+              <FolderOpen className="h-3.5 w-3.5 text-blue-500" />
+              <span>As <b className="text-blue-600 dark:text-blue-400">pastas azuis</b> agrupam os tipos. Arraste um tipo pelo ícone</span>
+              <GripVertical className="h-3.5 w-3.5" />
+              <span>para dentro de outra pasta</span>
+            </div>
+            {isCreatingGrupo ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={novoGrupoBarNome}
+                  onChange={(e) => setNovoGrupoBarNome(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateGrupoBar();
+                    if (e.key === 'Escape') { setIsCreatingGrupo(false); setNovoGrupoBarNome(''); }
+                  }}
+                  placeholder="NOME DO GRUPO"
+                  className="w-40 px-2.5 py-1.5 text-xs border border-blue-400 rounded-lg uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateGrupoBar}
+                  disabled={!novoGrupoBarNome.trim()}
+                  className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg disabled:opacity-40"
+                  title="Criar grupo"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingGrupo(false); setNovoGrupoBarNome(''); }}
+                  className="p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                  title="Cancelar"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsCreatingGrupo(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-blue-300 dark:border-blue-700 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 uppercase transition-colors"
+                title="Criar novo grupo"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                Novo grupo
+              </button>
+            )}
+          </div>
+
+          {/* Seções: cada grupo é uma "pasta" que contém os cards de tipo */}
+          <div className="space-y-4 sm:space-y-5">
+            {secoes.map((secao) => (
+              <GrupoDropSection
+                key={secao.key}
+                id={secao.dropId}
+                isDragging={!!activeDragTipo || previewDropZones}
+                muted={!secao.grupoUid}
+              >
+                <div className={`flex items-center gap-2.5 px-3.5 py-2.5 border-b rounded-t-xl ${
+                  secao.grupoUid
+                    ? 'border-blue-200 dark:border-blue-800/60 bg-blue-100/80 dark:bg-blue-900/30'
+                    : 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50'
+                }`}>
+                  {secao.grupoUid ? (
+                    renamingGrupoId === secao.grupoUid ? (
+                      <input
+                        autoFocus
+                        value={renameGrupoNome}
+                        onChange={(e) => setRenameGrupoNome(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameGrupo(secao.grupoUid!);
+                          if (e.key === 'Escape') setRenamingGrupoId(null);
+                        }}
+                        onBlur={() => handleRenameGrupo(secao.grupoUid!)}
+                        className="w-40 px-2 py-1 text-xs border border-blue-400 rounded-lg uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <>
+                        <FolderOpen className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <span className="text-sm font-black text-blue-900 dark:text-blue-100 uppercase tracking-wider truncate">
+                          {secao.nome}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-800/60 text-[10px] font-semibold text-blue-700 dark:text-blue-200 flex-shrink-0">
+                          {secao.items.length} {secao.items.length === 1 ? 'tipo' : 'tipos'}
+                        </span>
+                        <div className="ml-auto flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => { setRenamingGrupoId(secao.grupoUid); setRenameGrupoNome(secao.nome); }}
+                            className="p-1 text-blue-400 hover:text-blue-700 dark:hover:text-blue-200 rounded transition-colors"
+                            title="Renomear grupo"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteGrupoModal({ isOpen: true, grupoId: secao.grupoUid!, grupoNome: secao.nome })}
+                            className="p-1 text-blue-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
+                            title="Excluir grupo"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <FolderX className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="text-sm font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Tipos sem grupo
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-gray-200/80 dark:bg-gray-600/60 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
+                        {secao.items.length} {secao.items.length === 1 ? 'tipo' : 'tipos'}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className={`m-2.5 sm:m-3 ml-4 sm:ml-5 pl-3 sm:pl-4 border-l-2 grid gap-3 sm:gap-4 ${
+                  secao.grupoUid
+                    ? 'border-blue-300 dark:border-blue-700'
+                    : 'border-dashed border-gray-300 dark:border-gray-600'
+                }`}>
+                  {secao.items.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-gray-400 dark:text-gray-500 border border-dashed border-gray-200 dark:border-gray-600 rounded-lg">
+                      {secao.grupoUid
+                        ? 'Nenhum tipo nesta pasta — arraste um tipo para cá'
+                        : 'Todos os tipos estão dentro de pastas'}
+                    </div>
+                  ) : (
+                    secao.items.map((grupo) => (
+            <div key={grupo.tipo.uid} className={`bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 relative transition-opacity ${activeDragTipo === `tipo:${grupo.tipo.uid}` ? 'opacity-60' : ''}`}>
               <div className="bg-gray-50/90 dark:bg-gray-750 px-3.5 py-2.5 border-b border-gray-200 dark:border-gray-700 rounded-t-xl flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:justify-between">
                 {editingTipoId === grupo.tipo.uid ? (
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                     <input
                       type="text"
                       value={editingTipoData.nome}
-                      onChange={(e) => setEditingTipoData({ nome: toUpperCase(e.target.value) })}
+                      onChange={(e) => setEditingTipoData({ ...editingTipoData, nome: toUpperCase(e.target.value) })}
                       className="flex-1 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
+                    {grupo.tipo.uid !== 'sem-tipo' && (
+                      <>
+                        <select
+                          value={editingTipoData.grupo_uid}
+                          onChange={(e) => setEditingTipoData({ ...editingTipoData, grupo_uid: e.target.value })}
+                          className="w-full sm:w-48 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          title="Grupo do tipo"
+                        >
+                          <option value="">Sem grupo</option>
+                          {categoriaGrupos.map((g) => (
+                            <option key={g.uid} value={g.uid} className="uppercase">
+                              {g.nome}
+                            </option>
+                          ))}
+                          <option value="__novo__">+ Novo grupo</option>
+                        </select>
+                        {editingTipoData.grupo_uid === '__novo__' && (
+                          <input
+                            type="text"
+                            value={novoGrupoNome}
+                            onChange={(e) => setNovoGrupoNome(e.target.value.toUpperCase())}
+                            placeholder="NOME DO NOVO GRUPO"
+                            className="w-full sm:w-48 px-3 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          />
+                        )}
+                      </>
+                    )}
                     <div className="flex items-center gap-1 self-end">
                       <button
                         onClick={() => handleUpdateTipo(grupo.tipo.uid)}
@@ -717,6 +1094,7 @@ export function CategorySettings() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2 min-w-0">
+                      {grupo.tipo.uid !== 'sem-tipo' && <TipoDragHandle tipoUid={grupo.tipo.uid} onPreview={setPreviewDropZones} />}
                       <h3 className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider truncate">
                         {grupo.tipo.nome}
                       </h3>
@@ -921,8 +1299,22 @@ export function CategorySettings() {
                 })()}
               </div>
             </div>
-          ))}
-        </div>
+                    ))
+                  )}
+                </div>
+              </GrupoDropSection>
+            ))}
+          </div>
+
+          <DragOverlay>
+            {activeDragTipo && (
+              <div className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold uppercase shadow-xl flex items-center gap-1.5">
+                <GripVertical className="h-3.5 w-3.5" />
+                {tipos?.find((t) => `tipo:${t.uid}` === activeDragTipo)?.nome}
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* Modal de Confirmação de Exclusão */}
@@ -1027,6 +1419,52 @@ export function CategorySettings() {
                 </button>
                 <button
                   onClick={handleConfirmDeleteTipo}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-lg hover:from-rose-600 hover:to-rose-700 transition-all font-medium"
+                >
+                  Confirmar Exclusão
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Grupo */}
+      {deleteGrupoModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto overflow-hidden transform transition-all">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Excluir Grupo</h3>
+                  <p className="text-gray-600 mt-1">
+                    Tem certeza que deseja excluir este grupo?
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-rose-50 rounded-lg p-4 mb-6">
+                <p className="text-rose-800 font-medium text-center">
+                  {deleteGrupoModal.grupoNome}
+                </p>
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm text-amber-600">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Os tipos vinculados ficarão sem grupo.</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  onClick={() => setDeleteGrupoModal({ isOpen: false, grupoId: '', grupoNome: '' })}
+                  className="flex-1 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDeleteGrupo}
                   className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-lg hover:from-rose-600 hover:to-rose-700 transition-all font-medium"
                 >
                   Confirmar Exclusão

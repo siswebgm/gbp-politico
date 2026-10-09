@@ -285,7 +285,7 @@ class NotificationService {
       throw new Error('Sessão expirada. Faça login novamente.');
     }
 
-    const baseUrl = (import.meta.env.VITE_PUSH_API_URL as string | undefined) || 'https://app.gbppolitico.com/push-api';
+    const baseUrl = (import.meta.env.VITE_PUSH_API_URL as string | undefined) || 'https://push.gbppolitico.com';
 
     const response = await fetch(`${baseUrl}/enviar`, {
       method: 'POST',

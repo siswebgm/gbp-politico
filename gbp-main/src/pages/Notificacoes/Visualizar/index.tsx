@@ -13,17 +13,23 @@ interface AnexoResp {
   preview: string;
 }
 
-// Página pública: a notificação aparece como uma conversa de chat
-// (mensagem recebida à esquerda, resposta do usuário à direita)
+// Item da linha do tempo: uma notificação recebida ou uma resposta de um dos lados
+type ItemTimeline =
+  | { tipo: 'notificacao'; notif: NotificationLog; data: string }
+  | (RespostaItem & { tipo: 'resposta'; de: 'destinatario' | 'admin' });
+
+// Página pública: a conversa inteira da pessoa aparece como um chat único
+// (notificações recebidas + respostas dos dois lados, em ordem cronológica)
 export default function VisualizarNotificacao() {
   const { uid } = useParams<{ uid: string }>();
   const [log, setLog] = useState<NotificationLog | null>(null);
+  const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [empresa, setEmpresa] = useState<EmpresaPublica | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [resposta, setResposta] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [respostas, setRespostas] = useState<(RespostaItem & { de?: 'destinatario' | 'admin' })[]>([]);
+  const [respostas, setRespostas] = useState<ItemTimeline[]>([]);
   const [anexos, setAnexos] = useState<AnexoResp[]>([]);
   const [ampliada, setAmpliada] = useState<MidiaAnexo | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -37,30 +43,37 @@ export default function VisualizarNotificacao() {
         return;
       }
       try {
-        const data = await notificationLogsService.getLogByUid(uid);
-        if (!data) {
+        const conversa = await notificationLogsService.getConversaByLogUid(uid);
+        if (!conversa) {
           setNotFound(true);
           return;
         }
-        setLog(data);
-        // Timeline: respostas do destinatário + respostas do gabinete, ordenadas
-        const minhas: (RespostaItem & { de: 'destinatario' })[] =
-          Array.isArray(data.respostas) && data.respostas.length > 0
-            ? data.respostas.map((r) => ({ ...r, de: 'destinatario' as const }))
-            : (data.resposta
-                ? [{ texto: data.resposta, midias: data.resposta_midias || [], data: data.data_resposta || data.data_criacao, de: 'destinatario' as const }]
-                : []);
-        const doGabinete: (RespostaItem & { de: 'admin' })[] =
-          Array.isArray(data.respostas_admin)
-            ? data.respostas_admin.map((r) => ({ ...r, de: 'admin' as const }))
-            : [];
-        setRespostas([...minhas, ...doGabinete].sort(
-          (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()
-        ));
+        const { log: aberto, logs: thread } = conversa;
+        setLog(aberto);
+        setLogs(thread);
 
-        if (data.empresa_uid) {
+        // Timeline unificada: todas as notificações recebidas por esta pessoa
+        // + respostas dela e do gabinete, ordenadas por data
+        const itens: ItemTimeline[] = [];
+        thread.forEach((l) => {
+          itens.push({ tipo: 'notificacao', notif: l, data: l.data_envio || l.data_criacao });
+          const minhas: RespostaItem[] =
+            Array.isArray(l.respostas) && l.respostas.length > 0
+              ? l.respostas
+              : (l.resposta
+                  ? [{ texto: l.resposta, midias: l.resposta_midias || [], data: l.data_resposta || l.data_criacao }]
+                  : []);
+          minhas.forEach((r) => itens.push({ ...r, tipo: 'resposta', de: 'destinatario' }));
+          (Array.isArray(l.respostas_admin) ? l.respostas_admin : []).forEach((r) =>
+            itens.push({ ...r, tipo: 'resposta', de: 'admin' })
+          );
+        });
+        itens.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+        setRespostas(itens);
+
+        if (aberto.empresa_uid) {
           notificationSubscribersService
-            .buscarEmpresaPublica(data.empresa_uid)
+            .buscarEmpresaPublica(aberto.empresa_uid)
             .then(setEmpresa)
             .catch(() => {});
         }
@@ -126,8 +139,11 @@ export default function VisualizarNotificacao() {
         }
       }
 
-      const novo = await notificationLogsService.saveResposta(uid, texto, midias);
-      setRespostas((prev) => [...prev, { ...novo, de: 'destinatario' as const }]);
+      // A resposta vai para o log mais recente da conversa — é ele que o
+      // painel usa como canônico quando os lados se falam na mesma thread
+      const logResposta = logs.length ? logs[logs.length - 1].uid : uid!;
+      const novo = await notificationLogsService.saveResposta(logResposta, texto, midias);
+      setRespostas((prev) => [...prev, { ...novo, tipo: 'resposta', de: 'destinatario' } as ItemTimeline]);
       setResposta('');
       setAnexos([]);
     } catch (e: any) {
@@ -163,46 +179,27 @@ export default function VisualizarNotificacao() {
     );
   }
 
-  const linkCompleto = log.link_direcionar
-    ? /^https?:\/\//i.test(log.link_direcionar)
-      ? log.link_direcionar
-      : `${window.location.origin}${log.link_direcionar.startsWith('/') ? '' : '/'}${log.link_direcionar}`
-    : null;
+  const linkDe = (l: NotificationLog) =>
+    l.link_direcionar
+      ? /^https?:\/\//i.test(l.link_direcionar)
+        ? l.link_direcionar
+        : `${window.location.origin}${l.link_direcionar.startsWith('/') ? '' : '/'}${l.link_direcionar}`
+      : null;
 
-  return (
-    <div className="flex flex-col h-screen bg-[#efeae2] dark:bg-gray-900">
-      {/* Cabeçalho estilo WhatsApp */}
-      <header className="flex items-center gap-3 px-4 py-3 bg-[#008069] dark:bg-gray-800 shadow-sm">
-        {empresa?.logo ? (
-          <img
-            src={empresa.logo}
-            alt={empresa.nome || 'Empresa'}
-            className="w-10 h-10 rounded-full bg-white object-cover"
-          />
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg">
-            {(empresa?.nome || 'N')[0].toUpperCase()}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-white font-medium truncate">{empresa?.nome || 'Notificações'}</p>
-          <p className="text-white/70 text-xs">online</p>
-        </div>
-      </header>
+  // Bolha de uma notificação recebida (cada disparo vira uma bolha na conversa)
+  const renderNotificacao = (n: NotificationLog, key: number) => {
+    const linkCompleto = linkDe(n);
+    return (
+      <div key={`n-${n.uid}-${key}`} className="flex">
+        <div className="max-w-[92%] sm:max-w-[720px] bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-3 py-2 shadow-sm">
+          <p className="text-xs font-semibold text-[#008069] mb-0.5">{n.titulo}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+            {n.mensagem}
+          </p>
 
-      {/* Área de mensagens */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 space-y-3">
-        {/* Mensagem recebida (a notificação) */}
-        <div className="flex">
-          <div className="max-w-[92%] sm:max-w-[720px] bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-3 py-2 shadow-sm">
-            <p className="text-xs font-semibold text-[#008069] mb-0.5">{log.titulo}</p>
-            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
-              {log.mensagem}
-            </p>
-
-            {log.midias && log.midias.length > 0 ? (
-              <div className="mt-2 space-y-3 w-[260px] sm:w-[440px] max-w-full">
-                {log.midias.map((m, i) => (
+          {n.midias && n.midias.length > 0 ? (
+            <div className="mt-2 space-y-3 w-[260px] sm:w-[440px] max-w-full">
+              {n.midias.map((m, i) => (
                   <div
                     key={i}
                     className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-600"
@@ -216,7 +213,7 @@ export default function VisualizarNotificacao() {
                       >
                         <img
                           src={m.url}
-                          alt={m.legenda || m.nome || log.titulo}
+                          alt={m.legenda || m.nome || n.titulo}
                           className="w-full h-auto max-h-52 sm:max-h-72 object-cover"
                         />
                       </button>
@@ -278,29 +275,29 @@ export default function VisualizarNotificacao() {
               </div>
             ) : (
               <>
-                {log.imagem_url && (
+                {n.imagem_url && (
                   <button
                     type="button"
-                    onClick={() => setAmpliada({ tipo: 'imagem', url: log.imagem_url!, nome: log.titulo })}
+                    onClick={() => setAmpliada({ tipo: 'imagem', url: n.imagem_url!, nome: n.titulo })}
                     className="mt-2 w-[260px] sm:w-[440px] max-w-full block cursor-zoom-in"
                     aria-label="Ampliar imagem"
                   >
                     <img
-                      src={log.imagem_url}
-                      alt={log.titulo}
+                      src={n.imagem_url}
+                      alt={n.titulo}
                       className="w-full h-auto max-h-52 sm:max-h-72 rounded-md object-cover"
                     />
                   </button>
                 )}
-                {log.tipo_midia === 'video' && log.url_midia && (
-                  <video src={log.url_midia} controls className="mt-2 w-full rounded-md" />
+                {n.tipo_midia === 'video' && n.url_midia && (
+                  <video src={n.url_midia} controls className="mt-2 w-full rounded-md" />
                 )}
-                {log.tipo_midia === 'audio' && log.url_midia && (
-                  <audio src={log.url_midia} controls className="mt-2 w-full" />
+                {n.tipo_midia === 'audio' && n.url_midia && (
+                  <audio src={n.url_midia} controls className="mt-2 w-full" />
                 )}
-                {log.tipo_midia === 'pdf' && log.url_midia && (
+                {n.tipo_midia === 'pdf' && n.url_midia && (
                   <a
-                    href={log.url_midia}
+                    href={n.url_midia}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-2 inline-flex items-center gap-2 text-sm text-[#008069] underline"
@@ -321,26 +318,52 @@ export default function VisualizarNotificacao() {
 
             <div className="flex items-center justify-end mt-1">
               <span className="text-[11px] text-gray-400">
-                {hora(log.data_envio || log.data_criacao)}
+                {hora(n.data_envio || n.data_criacao)}
               </span>
             </div>
           </div>
         </div>
+      );
+    };
 
-        {/* Conversa: respostas do destinatário (direita) e do gabinete (esquerda) */}
-        {respostas.map((r, idx) => (
-          <div key={idx} className={`flex ${r.de === 'admin' ? 'justify-start' : 'justify-end'}`}>
-            <div className={`max-w-[92%] sm:max-w-[720px] rounded-lg px-3 py-2 shadow-sm ${
-              r.de === 'admin'
-                ? 'bg-white dark:bg-gray-800 rounded-tl-none'
-                : 'bg-[#d9fdd3] dark:bg-[#005c4b] rounded-tr-none'
-            }`}>
-              {r.de === 'admin' && (
-                <p className="text-[10px] font-semibold text-[#008069] mb-0.5">{empresa?.nome || 'Gabinete'}</p>
-              )}
-              {r.midias && r.midias.length > 0 && (
+    return (
+      <div className="flex flex-col h-screen bg-[#efeae2] dark:bg-gray-900">
+        {/* Cabeçalho estilo WhatsApp */}
+        <header className="flex items-center gap-3 px-4 py-3 bg-[#008069] dark:bg-gray-800 shadow-sm">
+          {empresa?.logo ? (
+            <img
+              src={empresa.logo}
+              alt={empresa.nome || 'Empresa'}
+              className="w-10 h-10 rounded-full bg-white object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg">
+              {(empresa?.nome || 'N')[0].toUpperCase()}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-medium truncate">{empresa?.nome || 'Notificações'}</p>
+            <p className="text-white/70 text-xs">online</p>
+          </div>
+        </header>
+
+        {/* Área de mensagens: conversa unificada (notificações + respostas) */}
+        <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 space-y-3">
+          {respostas.map((item, idx) => item.tipo === 'notificacao' ? (
+            renderNotificacao(item.notif, idx)
+          ) : (
+            <div key={idx} className={`flex ${item.de === 'admin' ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[92%] sm:max-w-[720px] rounded-lg px-3 py-2 shadow-sm ${
+                item.de === 'admin'
+                  ? 'bg-white dark:bg-gray-800 rounded-tl-none'
+                  : 'bg-[#d9fdd3] dark:bg-[#005c4b] rounded-tr-none'
+              }`}>
+                {item.de === 'admin' && (
+                  <p className="text-[10px] font-semibold text-[#008069] mb-0.5">{empresa?.nome || 'Gabinete'}</p>
+                )}
+                {item.midias && item.midias.length > 0 && (
                 <div className="space-y-3 w-[260px] sm:w-[440px] max-w-full">
-                  {r.midias.map((m, i) => (
+                  {item.midias.map((m, i) => (
                     <div key={i} className="rounded-xl overflow-hidden border border-gray-200/60">
                       {m.tipo === 'imagem' && (
                         <button type="button" onClick={() => setAmpliada(m)} className="w-full block cursor-zoom-in" aria-label="Ampliar imagem">
@@ -379,15 +402,15 @@ export default function VisualizarNotificacao() {
                 </div>
               )}
 
-              {r.texto && (
+              {item.texto && (
                 <p className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap mt-2">
-                  {r.texto}
+                  {item.texto}
                 </p>
               )}
 
               <div className="flex items-center justify-end gap-1 mt-1">
                 <span className="text-[11px] text-gray-500 dark:text-gray-300">
-                  {hora(r.data)}
+                  {hora(item.data)}
                 </span>
                 <CheckCheck className="h-4 w-4 text-[#53bdeb]" />
               </div>

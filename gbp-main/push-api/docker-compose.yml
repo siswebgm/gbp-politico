@@ -17,3 +17,17 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
+    networks:
+      - network_public
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.pushapi.rule=Host(`push.gbppolitico.com`)"
+        - "traefik.http.routers.pushapi.entrypoints=websecure"
+        - "traefik.http.routers.pushapi.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.pushapi.loadbalancer.server.port=3400"
+
+networks:
+  network_public:
+    external: true
+    name: network_public

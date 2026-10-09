@@ -16,6 +16,8 @@ import { CheckCircle, Clock, Hourglass, XCircle } from 'lucide-react';
 import { toast } from "../../components/ui/use-toast";
 import { DocumentosAnexados } from './components/DocumentosAnexados';
 import PrintPessoa from './PrintPessoa';
+import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
+import { categoryService } from '../../services/categories';
 
 interface Eleitor {
   uid: string;
@@ -212,6 +214,10 @@ export const PessoaDetalhes: FC = () => {
     tipo_de_demanda: string | null;
     responsavel_nome: string | null;
     created_at: string;
+    numero_oficio: string | null;
+    status: string | null;
+    url_oficio_protocolado: string | null;
+    fotos_do_problema: string[] | null;
   }>>([]);
   const [loadingOficios, setLoadingOficios] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -227,21 +233,70 @@ export const PessoaDetalhes: FC = () => {
   const extractedUid = window.location.pathname.match(/\/(?:pessoas|eleitores)\/([^/]+)/)?.[1];
   const effectiveUid = id || extractedUid;
 
-  // 4. Função para carregar ofícios do eleitor
-  const carregarOficios = useCallback(async (eleitorUid: string) => {
-    if (!eleitorUid) return;
-    
+  // 4. Função para carregar ofícios (demandas de rua) do eleitor
+  // Vínculo: eleitor.cpf -> gbp_requerentes_demanda_rua.cpf -> gbp_demandas_ruas.requerente_uid
+  // Sempre filtrado por empresa_uid (mesma empresa do eleitor)
+  const carregarOficios = useCallback(async (cpfEleitor?: string) => {
+    const cpf = (cpfEleitor || '').replace(/\D/g, '');
+    if (!cpf || !company?.uid) {
+      setOficios([]);
+      return;
+    }
+
     try {
       setLoadingOficios(true);
+
+      // 1) Requerente pelo CPF (aceita CPF com ou sem máscara) na mesma empresa
+      const cpfMascarado = cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      const { data: requerentes, error: reqError } = await supabaseClient
+        .from('gbp_requerentes_demanda_rua')
+        .select('uid, nome')
+        .eq('empresa_uid', company.uid)
+        .in('cpf', [cpf, cpfMascarado]);
+
+      if (reqError) throw reqError;
+
+      if (!requerentes || requerentes.length === 0) {
+        setOficios([]);
+        return;
+      }
+
+      // 2) Demandas de rua do requerente, da mesma empresa e não excluídas
       const { data, error } = await supabaseClient
-        .from('gbp_oficios')
-        .select('*')
-        .eq('eleitor_uid', eleitorUid)
-        .order('created_at', { ascending: false });
+        .from('gbp_demandas_ruas')
+        .select('uid, numero_protocolo, tipo_de_demanda, descricao_do_problema, status, criado_em, documento_protocolado, link_da_demanda, fotos_do_problema')
+        .eq('empresa_uid', company.uid)
+        .eq('excluido', false)
+        .in('requerente_uid', requerentes.map((r) => r.uid))
+        .order('criado_em', { ascending: false });
 
       if (error) throw error;
-      
-      setOficios(data || []);
+
+      const statusLabel: Record<string, string> = {
+        recebido: 'Recebido',
+        feito_oficio: 'Feito Ofício',
+        protocolado: 'Protocolado',
+        aguardando: 'Aguardando',
+        concluido: 'Concluído',
+        cancelado: 'Cancelado'
+      };
+
+      // Mapeia para o shape já usado pela lista, impressão e PDF
+      setOficios((data || []).map((d: any) => ({
+        uid: d.uid,
+        titulo: d.tipo_de_demanda || '',
+        descricao: d.descricao_do_problema || '',
+        data_solicitacao: d.criado_em,
+        descricao_do_problema: null,
+        status_solicitacao: null,
+        tipo_de_demanda: d.tipo_de_demanda,
+        responsavel_nome: requerentes.length === 1 ? null : (requerentes.find(r => r.uid === d.requerente_uid)?.nome || null),
+        created_at: d.criado_em,
+        numero_oficio: d.numero_protocolo ? `Nº ${d.numero_protocolo}` : null,
+        status: statusLabel[d.status] || d.status,
+        url_oficio_protocolado: d.documento_protocolado || d.link_da_demanda || null,
+        fotos_do_problema: Array.isArray(d.fotos_do_problema) ? d.fotos_do_problema : null
+      })));
     } catch (error) {
       console.error('Erro ao carregar ofícios:', error);
       toast({
@@ -252,7 +307,7 @@ export const PessoaDetalhes: FC = () => {
     } finally {
       setLoadingOficios(false);
     }
-  }, []);
+  }, [company?.uid]);
 
   // Função para fazer upload/troca da foto de perfil
   const uploadFoto = async (file: File) => {
@@ -543,9 +598,9 @@ export const PessoaDetalhes: FC = () => {
   // 6. Efeito para carregar ofícios quando o eleitor for carregado
   useEffect(() => {
     if (eleitor?.uid) {
-      carregarOficios(eleitor.uid);
+      carregarOficios(eleitor.cpf);
     }
-  }, [eleitor?.uid, carregarOficios]);
+  }, [eleitor?.uid, eleitor?.cpf, carregarOficios]);
 
   // Query para buscar os atendimentos
   const { data: atendimentosData, isLoading: loadingAtendimentos } = useQuery({
@@ -678,16 +733,10 @@ export const PessoaDetalhes: FC = () => {
     }
   }, [atendimentosData]);
 
-  // Buscar categorias disponíveis
+  // Buscar categorias disponíveis (com tipo + grupo para o dropdown hierárquico)
   const fetchCategorias = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('gbp_categorias')
-        .select('*')
-        .eq('empresa_uid', company?.uid)
-        .order('nome');
-
-      if (error) throw error;
+      const data = await categoryService.list(company?.uid || '');
       setCategorias(data || []);
     } catch (error) {
       console.error('Erro ao buscar categorias:', error);
@@ -1151,12 +1200,12 @@ export const PessoaDetalhes: FC = () => {
         checkNewPage(50);
         doc.setFontSize(12);
         doc.setTextColor(30, 64, 175);
-        doc.text(`Oficios Relacionados (${oficios.length})`, margin, yPosition);
+        doc.text(`Demandas Relacionadas (${oficios.length})`, margin, yPosition);
         yPosition += 8;
         
         (doc as any).autoTable({
           startY: yPosition,
-          head: [['Nº Ofício', 'Data', 'Tipo', 'Descrição', 'Status']],
+          head: [['Protocolo', 'Data', 'Tipo', 'Descrição', 'Status']],
           body: oficios.map(o => {
             let descricaoCompleta = o.descricao || o.titulo || '-';
             if (o.descricao_do_problema) {
@@ -1925,22 +1974,16 @@ export const PessoaDetalhes: FC = () => {
                   {/* Card - Categoria */}
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between">
-                      <div className="flex-grow">
+                      <div className="flex-grow min-w-0">
                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Categoria</p>
                         {editandoCategoria ? (
-                          <div className="mt-2 flex items-center gap-2">
-                            <select
-                              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white py-1.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                          <div className="mt-2 flex items-start gap-2">
+                            <NestedCategoryDropdown
                               value={eleitor?.categoria_uid || ''}
-                              onChange={(e) => atualizarCategoria(e.target.value)}
-                            >
-                              <option value="">Selecione uma categoria</option>
-                              {categorias.map((categoria) => (
-                                <option key={categoria.uid} value={categoria.uid}>
-                                  {categoria.nome}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(uid) => atualizarCategoria(uid)}
+                              categories={categorias as any}
+                              placeholder="Selecione uma categoria"
+                            />
                             <button
                               onClick={() => setEditandoCategoria(false)}
                               className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -1949,20 +1992,23 @@ export const PessoaDetalhes: FC = () => {
                             </button>
                           </div>
                         ) : (
-                          <div className="mt-1 flex items-center gap-2">
-                            <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                          <div className="mt-1 flex items-center gap-2 min-w-0">
+                            <p
+                              className="text-xl font-semibold text-gray-900 dark:text-white truncate"
+                              title={eleitor?.gbp_categorias?.nome || 'Sem categoria'}
+                            >
                               {eleitor?.gbp_categorias?.nome || 'Sem categoria'}
                             </p>
                             <button
                               onClick={() => setEditandoCategoria(true)}
-                              className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                              className="p-1 flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                           </div>
                         )}
                       </div>
-                      <div className="p-2 bg-blue-50 dark:bg-blue-900/50 rounded-lg">
+                      <div className="p-2 bg-blue-50 dark:bg-blue-900/50 rounded-lg flex-shrink-0">
                         <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
                     </div>
@@ -1981,13 +2027,13 @@ export const PessoaDetalhes: FC = () => {
                     className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Atendimentos</p>
-                        <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white animate-pulse">
+                        <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
                           {atendimentos?.length || 0}
                         </p>
                       </div>
-                      <div className="p-2 bg-blue-50 dark:bg-blue-900/50 rounded-lg animate-pulse">
+                      <div className="p-2 bg-blue-50 dark:bg-blue-900/50 rounded-lg flex-shrink-0">
                         <MessageCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
                     </div>
@@ -1996,7 +2042,7 @@ export const PessoaDetalhes: FC = () => {
                   {/* Card - Indicação */}
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Indicado por</p>
                         {editandoIndicado ? (
                           <div className="mt-2 flex items-center gap-2">
@@ -2014,26 +2060,29 @@ export const PessoaDetalhes: FC = () => {
                             </select>
                             <button
                               onClick={() => setEditandoIndicado(false)}
-                              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                              className="p-2 flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             >
                               <X className="w-5 h-5" />
                             </button>
                           </div>
                         ) : (
-                          <div className="mt-1 flex items-center gap-2">
-                            <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                          <div className="mt-1 flex items-center gap-2 min-w-0">
+                            <p
+                              className="text-xl font-semibold text-gray-900 dark:text-white truncate"
+                              title={eleitor?.gbp_indicado?.nome ?? 'Sem indicado'}
+                            >
                               {eleitor?.gbp_indicado?.nome ?? 'Sem indicado'}
                             </p>
                             <button
                               onClick={() => setEditandoIndicado(true)}
-                              className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                              className="p-1 flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                           </div>
                         )}
                       </div>
-                      <div className="p-2 bg-purple-50 dark:bg-purple-900/50 rounded-lg">
+                      <div className="p-2 bg-purple-50 dark:bg-purple-900/50 rounded-lg flex-shrink-0">
                         <Users className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                       </div>
                     </div>
@@ -2042,13 +2091,19 @@ export const PessoaDetalhes: FC = () => {
                   {/* Card - Responsável */}
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Responsável</p>
-                        <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
-                          {eleitor.responsavel || 'Nenhum'}
+                        <p
+                          className="mt-1 text-xl font-semibold text-gray-900 dark:text-white truncate"
+                          title={eleitor.responsavel || 'Nenhum'}
+                        >
+                          {/* Primeiro + segundo nome apenas — não quebra linha */}
+                          {eleitor.responsavel
+                            ? eleitor.responsavel.trim().split(/\s+/).slice(0, 2).join(' ')
+                            : 'Nenhum'}
                         </p>
                       </div>
-                      <div className="p-2 bg-yellow-50 dark:bg-yellow-900/50 rounded-lg">
+                      <div className="p-2 bg-yellow-50 dark:bg-yellow-900/50 rounded-lg flex-shrink-0">
                         <User className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                       </div>
                     </div>
@@ -2646,7 +2701,7 @@ export const PessoaDetalhes: FC = () => {
                   </div>
                 </div>
 
-                {/* Seção de Ofícios */}
+                {/* Seção de Demandas de Rua */}
                 <div className="space-y-8">
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-full">
                     <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
@@ -2655,30 +2710,8 @@ export const PessoaDetalhes: FC = () => {
                           <div className="p-2 bg-indigo-50 dark:bg-indigo-900/50 rounded-lg">
                             <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                           </div>
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ofícios</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Demandas</h3>
                         </div>
-                        
-                        <button
-                          onClick={() => {
-                            if (eleitor) {
-                              const params = new URLSearchParams({
-                                cpf: eleitor.cpf || '',
-                                cep: eleitor.cep || '',
-                                logradouro: eleitor.logradouro || '',
-                                numero: eleitor.numero || '',
-                                bairro: eleitor.bairro || '',
-                                cidade: eleitor.cidade || '',
-                                uf: eleitor.uf || '',
-                                eleitor_uid: eleitor.uid || ''
-                              });
-                              navigate(`/app/documentos/oficios/novo?${params.toString()}`);
-                            }
-                          }}
-                          className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                        >
-                          <PlusSquare className="mr-2 h-4 w-4" />
-                          Novo Ofício
-                        </button>
                       </div>
                     </div>
 
@@ -2691,9 +2724,11 @@ export const PessoaDetalhes: FC = () => {
                         <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 dark:bg-indigo-900">
                           <FileText className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                         </div>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">Nenhum ofício encontrado</h3>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">Nenhuma demanda encontrada</h3>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          Este eleitor ainda não possui ofícios registrados.
+                          {eleitor?.cpf
+                            ? 'Nenhuma demanda de rua encontrada para o CPF desta pessoa.'
+                            : 'Esta pessoa não possui CPF cadastrado para vincular demandas.'}
                         </p>
                       </div>
                     ) : (
