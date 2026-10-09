@@ -93,10 +93,20 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 const FCM_BATCH_SIZE = 500;
 
 app.post('/enviar', requireAuth, async (req, res) => {
-  const { tokens, title, body, imagem_url, icon_url, badge_url, empresa_nome, link, data = {} } = req.body || {};
+  const { tokens, envios, title, body, imagem_url, icon_url, badge_url, empresa_nome, link, data = {} } = req.body || {};
 
-  if (!Array.isArray(tokens) || tokens.length === 0 || !title || !body) {
-    return res.status(400).json({ error: 'Informe tokens, title e body' });
+  // Dois formatos aceitos:
+  // - tokens[] + data compartilhado (legado)
+  // - envios[] = [{token, data}] — cada destinatário com data própria
+  //   (usado para o link de conversa individual /notificacao/:logUid)
+  const destinos = Array.isArray(envios) && envios.length > 0
+    ? envios
+        .filter((e) => e && typeof e.token === 'string' && e.token)
+        .map((e) => ({ token: e.token, data: e.data || {} }))
+    : (Array.isArray(tokens) ? tokens.map((t) => ({ token: t, data })) : []);
+
+  if (destinos.length === 0 || !title || !body) {
+    return res.status(400).json({ error: 'Informe tokens/envios, title e body' });
   }
 
   const stringData = {};
@@ -112,14 +122,20 @@ app.post('/enviar', requireAuth, async (req, res) => {
 
   const icon = badge_url || icon_url || undefined;
 
-  const buildMessage = (batchTokens) => ({
-    tokens: batchTokens,
+  const buildMessage = (destino) => {
+    // Mescla data compartilhado com o data individual do destinatário
+    const msgData = { ...stringData };
+    Object.entries(destino.data || {}).forEach(([k, v]) => {
+      msgData[k] = String(v ?? '');
+    });
+    return {
+    token: destino.token,
     notification: {
       title,
       body,
       ...(imagem_url ? { imageUrl: imagem_url } : {}),
     },
-    data: stringData,
+    data: msgData,
     webpush: {
       headers: { Urgency: 'high', TTL: '86400' },
       notification: {
@@ -152,15 +168,16 @@ app.post('/enviar', requireAuth, async (req, res) => {
       },
       ...(imagem_url ? { fcmOptions: { imageUrl: imagem_url } } : {}),
     },
-  });
+    };
+  };
 
   const results = [];
 
-  // Envia em lotes de até 500 tokens (limite do FCM), sequencialmente
-  for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
-    const batchTokens = tokens.slice(i, i + FCM_BATCH_SIZE);
+  // Envia em lotes de até 500 mensagens (limite do FCM sendEach), sequencialmente
+  for (let i = 0; i < destinos.length; i += FCM_BATCH_SIZE) {
+    const batch = destinos.slice(i, i + FCM_BATCH_SIZE);
     try {
-      const response = await admin.messaging().sendEachForMulticast(buildMessage(batchTokens));
+      const response = await admin.messaging().sendEach(batch.map(buildMessage));
       response.responses.forEach((r, idx) => {
         const code = r.error?.code || '';
         const msg = r.error?.message || '';
@@ -171,10 +188,10 @@ app.post('/enviar', requireAuth, async (req, res) => {
           code === 'messaging/mismatched-credential' ||
           /unregistered|not.?registered|invalid.?token|sender.?id.?mismatch/i.test(msg);
         if (!r.success) {
-          console.log('[push-api] Falha no token', batchTokens[idx]?.substring(0, 15) + '...', '| code:', code, '| msg:', msg);
+          console.log('[push-api] Falha no token', batch[idx]?.token?.substring(0, 15) + '...', '| code:', code, '| msg:', msg);
         }
         results.push({
-          token: batchTokens[idx],
+          token: batch[idx].token,
           success: r.success,
           invalid_token: invalidToken,
           ...(r.error ? { error: r.error.message } : {}),
@@ -182,8 +199,8 @@ app.post('/enviar', requireAuth, async (req, res) => {
       });
     } catch (error) {
       // Falha no lote inteiro (ex.: erro de rede/credencial): marca todos como falha
-      batchTokens.forEach((token) => {
-        results.push({ token, success: false, error: error.message });
+      batch.forEach((d) => {
+        results.push({ token: d.token, success: false, error: error.message });
       });
     }
   }

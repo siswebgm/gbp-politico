@@ -270,7 +270,8 @@ class NotificationService {
   }
 
   async enviarParaTokens(params: {
-    tokens: string[];
+    tokens?: string[];
+    envios?: Array<{ token: string; data?: Record<string, string> }>;
     title: string;
     body: string;
     imagem_url?: string;

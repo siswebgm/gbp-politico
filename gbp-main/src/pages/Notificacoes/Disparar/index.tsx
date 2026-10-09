@@ -394,36 +394,41 @@ export default function DispararNotificacao() {
       let mensagemResultado = '';
 
       if (comToken.length > 0) {
-        // Envio individual: cada destinatário recebe o uid do seu log em data.id,
-        // usado para abrir a página de visualização ao clicar na notificação
-        let enviadosProgresso = 0;
-        const resultadosEnvio = (
-          await Promise.all(
-            selecionados.map((dest, idx) =>
-              !dest.token
-                ? Promise.resolve([])
-                : notificationService.enviarParaTokens({
-                    tokens: [dest.token as string],
-                    title: titulo,
-                    body: mensagem,
-                    imagem_url: imagemUrlFinal,
-                    icon_url: company.logo || undefined,
-                    badge_url: company.logo || undefined,
-                    empresa_nome: company.nome || undefined,
-                    link: undefined,
-                    data: {
-                      id: logs[idx].uid,
-                      tipo_midia: tipoMidiaFinal,
-                      url_midia: urlMidiaFinal || ''
-                    }
-                  }).then(r => {
-                    enviadosProgresso++;
-                    setProgresso({ etapa: 'Enviando notificações...', atual: enviadosProgresso, total: comToken.length });
-                    return r;
-                  })
-            )
-          )
-        ).flat();
+        // Envio em lote: cada destinatário recebe o uid do seu log em data.id
+        // (link da conversa /notificacao/:uid), mas os tokens vão em pacotes de
+        // 200 por requisição ao push-api — viável para milhares de inscritos
+        const envios = selecionados
+          .map((dest, idx) => ({ dest, log: logs[idx] }))
+          .filter((x) => !!x.dest.token)
+          .map((x) => ({
+            token: x.dest.token as string,
+            data: {
+              id: x.log.uid,
+              tipo_midia: tipoMidiaFinal,
+              url_midia: urlMidiaFinal || ''
+            }
+          }));
+
+        const LOTE = 200;
+        const resultadosEnvio: Array<{ token: string; success: boolean; invalid_token?: boolean; error?: string }> = [];
+        for (let i = 0; i < envios.length; i += LOTE) {
+          const parcial = await notificationService.enviarParaTokens({
+            envios: envios.slice(i, i + LOTE),
+            title: titulo,
+            body: mensagem,
+            imagem_url: imagemUrlFinal,
+            icon_url: company.logo || undefined,
+            badge_url: company.logo || undefined,
+            empresa_nome: company.nome || undefined,
+            link: undefined,
+          });
+          resultadosEnvio.push(...parcial);
+          setProgresso({
+            etapa: 'Enviando notificações...',
+            atual: Math.min(i + LOTE, envios.length),
+            total: envios.length
+          });
+        }
 
         await Promise.all(
           selecionados.map((dest, idx) => {
