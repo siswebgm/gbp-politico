@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowLeft, Bell, BellRing, Check, CheckCircle, XCircle, AlertCircle, User, Phone, Loader2 } from 'lucide-react';
-import { requestNotificationPermission } from '../../../lib/firebase';
+import { forceRefreshToken } from '../../../lib/firebase';
 import { notificationSubscribersService, EmpresaPublica } from '../../../services/notificationSubscribers';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -100,7 +100,10 @@ export function AceitarNotificacoes() {
         return;
       }
 
-      const token = await requestNotificationPermission();
+      // Força token NOVO — sem isso o dispositivo devolve o token em cache
+      // mesmo quando o FCM já o marcou como 'unregistered' (reativação ficava
+      // presa com token morto)
+      const token = await forceRefreshToken();
       setSemToken(!token);
 
       await notificationSubscribersService.registrar({

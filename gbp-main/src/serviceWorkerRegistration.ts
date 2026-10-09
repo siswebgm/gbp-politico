@@ -36,11 +36,21 @@ export function register() {
   }
 }
 
+// Nunca desregistrar o SW do Firebase Messaging — desregistrá-lo apaga a
+// push subscription e o FCM passa a rejeitar o token como 'unregistered'
+// (era a causa das notificações de inscritos falharem após o 1º envio)
+const isFirebaseMessagingSW = (r: ServiceWorkerRegistration): boolean => {
+  const url = r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || '';
+  return url.includes('firebase-messaging-sw');
+};
+
 export function unregister() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .getRegistrations()
-      .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+      .then((registrations) =>
+        Promise.all(registrations.filter((r) => !isFirebaseMessagingSW(r)).map((r) => r.unregister()))
+      )
       .catch((error) => {
         console.error(error?.message || error);
       });

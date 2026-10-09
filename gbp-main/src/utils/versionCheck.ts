@@ -61,10 +61,14 @@ export const checkForNewVersion = () => {
           }
         }
         
-        // Limpa o Service Worker apenas se houver nova versão
+        // Limpa o Service Worker apenas se houver nova versão.
+        // EXCETO o firebase-messaging-sw.js: desregistrá-lo apaga a push
+        // subscription e o token FCM vira 'unregistered'
         if ('serviceWorker' in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
+            const script = registration.active?.scriptURL || registration.waiting?.scriptURL || '';
+            if (script.includes('firebase-messaging-sw')) continue;
             await registration.unregister();
           }
         }

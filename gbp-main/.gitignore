@@ -15,6 +15,9 @@ dist-ssr
 # Version file (generated on build)
 public/version.json
 
+# Deploy com secrets literais — nao commitar
+push-api/docker-compose.deploy.yml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

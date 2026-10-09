@@ -106,6 +106,30 @@ async function requestNotificationPermissionInternal(): Promise<string | null> {
   }
 }
 
+// Força a emissão de um token NOVO: apaga o registro local atual e pede outro.
+// Resolve o caso em que o FCM marcou o token como 'unregistered' mas o
+// dispositivo ainda devolve o mesmo token em cache no getToken (reativação
+// de inscrito ficava com o token morto para sempre).
+export async function forceRefreshToken(): Promise<string | null> {
+  try {
+    if (!VAPID_KEY) return null;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return null;
+    const instance = await getMessagingInstance();
+    if (!instance) return null;
+
+    try {
+      await deleteToken(instance);
+    } catch (e) {
+      console.warn('Falha ao apagar token antigo (seguindo para getToken):', e);
+    }
+
+    return await requestNotificationPermission();
+  } catch (error) {
+    console.error('Erro ao forçar novo token FCM:', error);
+    return null;
+  }
+}
+
 // Remove o token FCM local caso seja o mesmo informado — força o próximo
 // getToken a gerar um token novo (usado quando o servidor FCM rejeita o token)
 export async function deleteTokenIfMatches(token: string): Promise<void> {
