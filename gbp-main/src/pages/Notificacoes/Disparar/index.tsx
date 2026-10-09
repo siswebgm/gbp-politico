@@ -434,15 +434,9 @@ export default function DispararNotificacao() {
               return notificationLogsService.markAsSent(logs[idx].uid);
             }
             falhas++;
-            if (r?.invalid_token) {
-              if (dest.tipo === 'inscrito') {
-                notificationSubscribersService
-                  .alterarAtivo(dest.uid, false)
-                  .catch(err => console.error('[Disparar] Falha ao desativar inscrito:', err));
-              } else {
-                notificationService.handleInvalidToken(dest.token, dest.uid);
-              }
-            }
+            // Token inválido NÃO desativa mais o destinatário — a falha fica
+            // registrada apenas no log, e a pessoa segue disponível para
+            // futuros disparos (o token pode rotacionar e voltar a funcionar).
             return notificationLogsService.markError(logs[idx].uid, r?.error || 'Falha no envio');
           })
         );
