@@ -235,6 +235,20 @@ class NotificationSubscribersService {
     }
   }
 
+  // Renova o token FCM quando o inscrito abre a página pública da notificação.
+  // Cura automática para rotação de token — não depende do link de convite.
+  async atualizarToken(uid: string, token: string) {
+    const { error } = await supabaseClient
+      .from('gbp_notificacoes_inscritos')
+      .update({ token, permissao: 'granted', atualizado_em: new Date().toISOString() })
+      .eq('uid', uid)
+      .neq('token', token);
+
+    if (error) {
+      console.error('[Inscritos] Falha ao renovar token:', error);
+    }
+  }
+
   async excluir(uid: string) {
     const { data, error } = await supabaseClient
       .from('gbp_notificacoes_inscritos')

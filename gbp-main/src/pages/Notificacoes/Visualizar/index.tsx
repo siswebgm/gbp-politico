@@ -80,6 +80,20 @@ export default function VisualizarNotificacao() {
 
         notificationLogsService.markAsViewed(uid).catch(() => {});
         notificationLogsService.markAsClicked(uid).catch(() => {});
+
+        // Cura automática do token FCM: quem abre a notificação já tem
+        // permissão — renova o token no banco (cobre rotação do service worker,
+        // sem exigir que a pessoa abra o link de convite de novo)
+        const inscritoUid = aberto.inscrito_uid;
+        if (inscritoUid && 'Notification' in window && Notification.permission === 'granted') {
+          requestNotificationPermission()
+            .then((novoToken) => {
+              if (novoToken) {
+                notificationSubscribersService.atualizarToken(inscritoUid, novoToken);
+              }
+            })
+            .catch(() => {});
+        }
       } finally {
         setLoading(false);
       }
