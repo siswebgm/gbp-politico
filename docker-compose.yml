@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   gbppolitico:
-    image: siswebgm/gbp-politico:2.9.42
+    image: siswebgm/gbp-politico:2.9.43
     networks:
       - network_public
     healthcheck:
