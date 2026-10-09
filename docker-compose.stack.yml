@@ -46,7 +46,7 @@ services:
           memory: 128M
 
   push-api:
-    image: siswebgm/gbp-push-api:1.0.0
+    image: siswebgm/gbp-politico-push:1.1
     networks:
       - network_public
     environment:
@@ -57,11 +57,11 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gbp-push-api.rule=Host(`app.gbppolitico.com`) && PathPrefix(`/push-api`)"
+        - "traefik.http.routers.gbp-push-api.rule=Host(`app.gbppolitico.com`) && PathPrefix(`/push`)"
         - "traefik.http.routers.gbp-push-api.entrypoints=websecure"
         - "traefik.http.routers.gbp-push-api.tls.certresolver=letsencryptresolver"
         - "traefik.http.routers.gbp-push-api.middlewares=gbp-push-api-strip"
-        - "traefik.http.middlewares.gbp-push-api-strip.stripprefix.prefixes=/push-api"
+        - "traefik.http.middlewares.gbp-push-api-strip.stripprefix.prefixes=/push"
         - "traefik.http.services.gbp-push-api.loadbalancer.server.port=3400"
       mode: replicated
       replicas: 1
