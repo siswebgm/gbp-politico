@@ -1,5 +1,6 @@
-# Stack para deploy no Portainer (Build method: Repository)
-# Compose path: push-api/docker-compose.yml
+# Stack para deploy no Portainer
+# Cole este arquivo no Web editor OU use Build method: Repository
+# com compose path: gbp-main/push-api/docker-compose.yml
 #
 # Defina as variáveis abaixo na seção "Environment variables" do Portainer:
 #   SUPABASE_URL, SUPABASE_ANON_KEY, FIREBASE_SERVICE_ACCOUNT
@@ -7,7 +8,7 @@
 
 services:
   push-api:
-    build: .
+    image: siswebgm/gbp-politico-push:1.0
     container_name: push-api
     restart: unless-stopped
     ports:
