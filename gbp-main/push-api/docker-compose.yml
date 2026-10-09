@@ -23,9 +23,11 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pushapi.rule=Host(`push.gbppolitico.com`)"
+        - "traefik.http.routers.pushapi.rule=Host(`app.gbppolitico.com`) && PathPrefix(`/push`)"
         - "traefik.http.routers.pushapi.entrypoints=websecure"
         - "traefik.http.routers.pushapi.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.pushapi.middlewares=pushapi-strip"
+        - "traefik.http.middlewares.pushapi-strip.stripprefix.prefixes=/push"
         - "traefik.http.services.pushapi.loadbalancer.server.port=3400"
 
 networks:
