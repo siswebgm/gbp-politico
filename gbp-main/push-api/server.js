@@ -21,6 +21,12 @@ function loadLocalEnv() {
 
 const localEnv = loadLocalEnv();
 
+// Dev local: qualquer var do ../.env vira fallback de process.env
+// (o módulo google.js lê GOOGLE_* e APP_ORIGIN direto de process.env)
+Object.entries(localEnv).forEach(([k, v]) => {
+  if (process.env[k] === undefined) process.env[k] = v;
+});
+
 const FIREBASE_SERVICE_ACCOUNT =
   process.env.FIREBASE_SERVICE_ACCOUNT ||
   (process.env.FIREBASE_SERVICE_ACCOUNT_FILE
@@ -67,7 +73,7 @@ async function requireAuth(req, res, next) {
   }
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/gbp_usuarios?uid=eq.${uid}&select=uid&limit=1`,
+      `${SUPABASE_URL}/rest/v1/gbp_usuarios?uid=eq.${uid}&select=uid,empresa_uid,nivel_acesso,cargo&limit=1`,
       {
         headers: {
           apikey: SUPABASE_ANON_KEY,
@@ -76,10 +82,16 @@ async function requireAuth(req, res, next) {
       },
     );
     if (!response.ok) return res.status(401).json({ error: 'Sessão inválida' });
-    const rows = await response.json();
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(401).json({ error: 'Usuário não encontrado' });
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(401).json({ error: 'Não autenticado' });
     }
+    req.user = {
+      uid: data[0].uid,
+      empresa_uid: data[0].empresa_uid || null,
+      nivel_acesso: data[0].nivel_acesso || null,
+      cargo: data[0].cargo || null,
+    };
     next();
   } catch (error) {
     console.error('Erro ao validar sessão:', error);
@@ -88,6 +100,9 @@ async function requireAuth(req, res, next) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Integração Google Calendar (conexão por empresa)
+require('./google')(app, { supabaseUrl: SUPABASE_URL, requireAuth });
 
 // FCM limita sendEachForMulticast a 500 tokens por chamada
 const FCM_BATCH_SIZE = 500;

@@ -49,6 +49,7 @@ export function useAtendimentos() {
           gbp_categorias:gbp_categorias!gbp_atendimentos_categoria_uid_fkey (uid, nome, tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(uid, nome))
         `)
         .eq('empresa_uid', companyUid)
+        .eq('oculto', false)
         .order('data_atendimento', { ascending: false });
 
       if (atendimentosError) {

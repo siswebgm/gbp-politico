@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { DocumentCards } from './components/DocumentCards';
+import { DocumentsSummary } from './components/DocumentsSummary';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useAuth } from '../../providers/AuthProvider';
 
@@ -49,7 +50,7 @@ export function Documents() {
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="flex-1 py-2 md:py-6 px-2 md:px-4">
+      <div className="flex-1 py-2 md:py-6 px-4">
         <div className="flex flex-col space-y-2 md:space-y-4">
           {/* Header Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-4">
@@ -69,6 +70,7 @@ export function Documents() {
 
           {/* Main Content */}
           <div className="space-y-4">
+            <DocumentsSummary />
             <DocumentCards />
           </div>
         </div>

@@ -336,7 +336,7 @@ export function ElectoralMap() {
 
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white leading-tight mb-1">
-                Mapa de Eleitores
+                Mapa
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 break-words">
                 Distribuição geográfica dos eleitores.

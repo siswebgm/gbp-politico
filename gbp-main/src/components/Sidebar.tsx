@@ -60,16 +60,17 @@ const navigation: NavigationItem[] = [
   //   href: '/app/resultados-eleitorais', 
   //   icon: BarChart3,
   // },
-  { 
-    name: 'Pesquisas', 
-    href: '/app/pesquisas', 
-    icon: Search,
-    items: [
-      { name: 'Nova Pesquisa', href: '/app/pesquisas/nova' },
-      { name: 'Listar Pesquisas', href: '/app/pesquisas' },
-      { name: 'Relatórios', href: '/app/pesquisas/relatorios' }
-    ]
-  },
+  // Oculto temporariamente — não estamos utilizando pesquisas no momento
+  // {
+  //   name: 'Pesquisas',
+  //   href: '/app/pesquisas',
+  //   icon: Search,
+  //   items: [
+  //     { name: 'Nova Pesquisa', href: '/app/pesquisas/nova' },
+  //     { name: 'Listar Pesquisas', href: '/app/pesquisas' },
+  //     { name: 'Relatórios', href: '/app/pesquisas/relatorios' }
+  //   ]
+  // },
   { name: 'Documentos', href: '/app/documentos', icon: FileText },
   { name: 'Demandas Ruas', href: '/app/documentos/demandas-ruas', icon: AlertTriangle },
   {
@@ -83,7 +84,7 @@ const navigation: NavigationItem[] = [
       { name: 'Conversas', href: '/app/notificacoes/conversas' }
     ]
   },
-  { name: 'Mapa Eleitoral', href: '/app/mapa-eleitoral', icon: Map },
+  { name: 'Mapa', href: '/app/mapa-eleitoral', icon: Map },
   { name: 'Relatório', href: '/app/pessoas/relatorio', icon: BarChart3 },
   { name: 'Usuários', href: '/app/users', icon: UserCircle },
   { name: 'Configurações', href: '/app/settings', icon: Settings },

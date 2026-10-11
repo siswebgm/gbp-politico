@@ -11,6 +11,8 @@ import { useCompanyStore } from '../../store/useCompanyStore';
 import { Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { AttendanceTable } from './components/AttendanceTable';
 import { useNavigate } from 'react-router-dom';
+import { useCategories } from '../../hooks/useCategories';
+import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
 
 type AtendimentoStatus = 'Pendente' | 'Em Andamento' | 'Concluído';
 
@@ -27,6 +29,7 @@ export function AttendanceList() {
     );
   }
   const { data: atendimentos = [], isLoading } = useAtendimentos();
+  const { data: categorias } = useCategories();
   const { user } = useAuth();
   
   // Get user from localStorage as fallback
@@ -337,57 +340,74 @@ export function AttendanceList() {
                 <div>
                   <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Atendimentos</h1>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Gerencie todos os atendimentos em um só lugar
+                    Gerencie todos os atendimentos
                   </p>
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-2">
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtros
-                </button>
-
-                {hasAdminAccess && (
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowExportMenu(!showExportMenu);
-                      }}
-                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    >
-                      <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    </button>
-
-                    {showExportMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
-                        <button
-                          onClick={() => {
-                            handleExportExcel();
-                            setShowExportMenu(false);
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                          <span>Exportar Excel</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            handleExportPDF();
-                            setShowExportMenu(false);
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-b-lg"
-                        >
-                          <FileText className="w-4 h-4 text-red-600" />
-                          <span>Exportar PDF</span>
-                        </button>
-                      </div>
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowExportMenu(!showExportMenu);
+                    }}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative"
+                    aria-label="Mais opções"
+                  >
+                    <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    {/* Badge: filtros avançados ativos */}
+                    {Object.keys(filters).filter(k => k !== 'categoria').length > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[1rem] h-4 px-0.5 bg-blue-600 text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
+                        {Object.keys(filters).filter(k => k !== 'categoria').length}
+                      </span>
                     )}
-                  </div>
-                )}
+                  </button>
+
+                  {showExportMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                      <button
+                        onClick={() => {
+                          setShowFilters(!showFilters);
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                      >
+                        <Filter className="w-4 h-4 text-blue-600" />
+                        <span>Filtros avançados</span>
+                        {Object.keys(filters).filter(k => k !== 'categoria').length > 0 && (
+                          <span className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400">
+                            {Object.keys(filters).filter(k => k !== 'categoria').length} ativo{Object.keys(filters).filter(k => k !== 'categoria').length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </button>
+                      {hasAdminAccess && (
+                        <>
+                          <div className="border-t border-gray-200 dark:border-gray-700" />
+                          <button
+                            onClick={() => {
+                              handleExportExcel();
+                              setShowExportMenu(false);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                            <span>Exportar Excel</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleExportPDF();
+                              setShowExportMenu(false);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                          >
+                            <FileText className="w-4 h-4 text-red-600" />
+                            <span>Exportar PDF</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -501,55 +521,62 @@ export function AttendanceList() {
               </div>
             </div>
 
-            {/* Filtro de Período */}
-            <div className="grid grid-cols-2 sm:flex gap-2">
-              <button
-                onClick={() => setQuickPeriod('all')}
-                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-                  quickPeriod === 'all'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
+            {/* Consulta rápida: lê como uma frase — "atendimentos [status] da categoria [X] em [período]" */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as AtendimentoStatus | 'all')}
+                className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                aria-label="Filtrar por status"
               >
-                Todos
-              </button>
-              <button
-                onClick={() => setQuickPeriod('today')}
-                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-                  quickPeriod === 'today'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
+                <option value="all">Todos os status</option>
+                <option value="Pendente">Pendentes</option>
+                <option value="Em Andamento">Em Andamento</option>
+                <option value="Concluído">Concluídos</option>
+              </select>
+
+              <NestedCategoryDropdown
+                value={categorias?.find(c => c.nome === filters.categoria)?.uid || ''}
+                onChange={(uid) => {
+                  setFilters(prev => {
+                    const next = { ...prev };
+                    const cat = categorias?.find(c => c.uid === uid);
+                    if (cat) next.categoria = cat.nome;
+                    else delete next.categoria;
+                    return next;
+                  });
+                }}
+                categories={categorias || []}
+                placeholder="Todas as categorias"
+                className="text-sm"
+              />
+
+              <select
+                value={quickPeriod}
+                onChange={(e) => setQuickPeriod(e.target.value as 'all' | 'today' | 'week' | 'month')}
+                className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                aria-label="Filtrar por período"
               >
-                Hoje
-              </button>
-              <button
-                onClick={() => setQuickPeriod('week')}
-                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-                  quickPeriod === 'week'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                Últimos 7 dias
-              </button>
-              <button
-                onClick={() => setQuickPeriod('month')}
-                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-                  quickPeriod === 'month'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                Últimos 30 dias
-              </button>
+                <option value="all">Todo o período</option>
+                <option value="today">Hoje</option>
+                <option value="week">Últimos 7 dias</option>
+                <option value="month">Últimos 30 dias</option>
+              </select>
             </div>
           </div>
 
           {/* Indicador de Filtros Ativos */}
-          {(quickSearch || quickPeriod !== 'all' || Object.keys(filters).length > 0) && (
+          {(quickSearch || quickPeriod !== 'all' || statusFilter !== 'all' || Object.keys(filters).length > 0) && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-gray-600 dark:text-gray-400">Filtros ativos:</span>
+              {statusFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
+                  Status: {statusFilter}
+                  <button onClick={() => setStatusFilter('all')} className="hover:text-blue-900 dark:hover:text-blue-100">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
               {quickSearch && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
                   Busca: "{quickSearch}"
@@ -566,9 +593,20 @@ export function AttendanceList() {
                   </button>
                 </span>
               )}
-              {Object.keys(filters).length > 0 && (
+              {filters.categoria && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
-                  Filtros avançados: {Object.keys(filters).length}
+                  Categoria: {filters.categoria}
+                  <button
+                    onClick={() => setFilters(prev => { const next = { ...prev }; delete next.categoria; return next; })}
+                    className="hover:text-blue-900 dark:hover:text-blue-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {Object.keys(filters).filter(k => k !== 'categoria').length > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">
+                  Filtros avançados: {Object.keys(filters).filter(k => k !== 'categoria').length}
                   <button onClick={() => setFilters({})} className="hover:text-blue-900 dark:hover:text-blue-100">
                     <X className="h-3 w-3" />
                   </button>
@@ -591,6 +629,8 @@ export function AttendanceList() {
             atendimentos={filteredAtendimentos} 
             isLoading={isLoading} 
             calculateElapsedTime={calculateElapsedTime}
+            hasActiveFilters={!!(quickSearch || quickPeriod !== 'all' || statusFilter !== 'all' || Object.keys(filters).length > 0)}
+            onClearFilters={() => { setQuickSearch(''); setQuickPeriod('all'); setStatusFilter('all'); setFilters({}); }}
           />
         </div>
         </div>

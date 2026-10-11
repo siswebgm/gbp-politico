@@ -4,7 +4,7 @@ import { Calendar } from "../../components/ui/calendar";
 import { ptBR } from 'date-fns/locale';
 import { format, isAfter, isBefore, isToday, startOfToday, addMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isPast } from 'date-fns';
 import { Button } from "../../components/ui/button";
-import { NewEventModal } from './components/NewEventModal';
+import { NewEventPanel } from './components/NewEventPanel';
 import { useAgenda } from "../../hooks/useAgenda";
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -18,7 +18,6 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Menu,
-  Download,
   Calendar as CalendarViewIcon,
   CalendarDays,
   CalendarRange,
@@ -26,9 +25,15 @@ import {
   ArrowRight,
   Pencil,
   Trash2,
-  Users
+  Users,
+  MoreVertical,
+  FileSpreadsheet,
+  FileText,
+  RefreshCw,
+  Filter
 } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'react-toastify';
 import {
   Select,
   SelectContent,
@@ -43,25 +48,171 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useAuth } from "../../hooks/useAuth";
+import { useCompanyStore } from "../../store/useCompanyStore";
+import { googleCalendarService, GoogleConnectionStatus, GoogleAgendaEvent } from "../../services/googleCalendar";
+import { Link2, Unlink, AlertTriangle } from 'lucide-react';
 
 export default function AgendaPage() {
-  const [isNewEventModalOpen, setIsNewEventModalOpen] = useState(false);
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [view, setView] = useState<'month' | 'week' | 'day' | 'list'>('month');
   const [showSidebar, setShowSidebar] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'all' | 'expired' | 'active' | 'year' | 'past-years'>('day');
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'all' | 'expired' | 'active' | 'year' | 'past-years'>('all');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('calendar');
   const [initialDate, setInitialDate] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(3);
   const selectedEventRef = useRef<HTMLDivElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<any>(null);
   const [eventToEdit, setEventToEdit] = useState<any>(null);
+  // Painel inline de edição (criação acontece na página /app/agenda/novaagenda)
+  const isCreatingEvent = !!eventToEdit;
+  const fecharPainelEvento = () => setEventToEdit(null);
   
   const { user } = useAuth();
+  const company = useCompanyStore(state => state.company);
+  // O usuário da store tem uid+cargo sempre; o do useAuth pode ser
+  // um objeto do localStorage sem uid
+  const storeUser = useCompanyStore((state: any) => state.user);
+  const googleUser = storeUser?.uid ? storeUser : user;
+  const isAdmin =
+    (googleUser?.nivel_acesso || '').toLowerCase() === 'admin' ||
+    (googleUser?.cargo || '').toLowerCase() === 'admin';
   const { events, isLoading, deleteEvent } = useAgenda();
+
+  // ---- Integração Google Calendar (conexão por empresa) ----
+  const [googleStatus, setGoogleStatus] = useState<GoogleConnectionStatus | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<GoogleAgendaEvent[]>([]);
+
+  // A sync do Google é incremental: retorna só o que mudou.
+  // Mescla no estado por google_id e remove os deletados.
+  const aplicarDeltaGoogle = (s: { events?: GoogleAgendaEvent[]; deleted?: string[] }) => {
+    setGoogleEvents(prev => {
+      const map = new Map(prev.map(g => [g.google_id, g]));
+      (s.events || []).forEach(g => map.set(g.google_id, g));
+      (s.deleted || []).forEach(id => map.delete(id));
+      return [...map.values()];
+    });
+  };
+
+  const sincronizarGoogle = async (full = false): Promise<boolean> => {
+    if (!company?.uid || !googleUser?.uid || !googleStatus?.connected || googleStatus?.needs_reconnect) return false;
+    try {
+      const s = await googleCalendarService.sync(company.uid, googleUser.uid, full);
+      if (full) {
+        // Sync completa: a resposta é a janela inteira — substitui
+        setGoogleEvents(s.events || []);
+      } else {
+        aplicarDeltaGoogle(s);
+      }
+      return true;
+    } catch (e: any) {
+      console.warn('[agenda] google sync:', e);
+      if (/insufficient authentication scopes/i.test(e?.message || '')) {
+        marcarNeedsReconnect();
+      }
+      return false;
+    }
+  };
+
+  // Fallback: se o push-api ainda não expõe needs_reconnect no /status,
+  // o próprio erro 502 do Google revela a falta de escopo → flag local.
+  const marcarNeedsReconnect = () => {
+    setGoogleStatus(prev => (prev ? { ...prev, needs_reconnect: true } : prev));
+    toast.warn(
+      'A conexão com o Google Agenda está sem permissão de agenda. Desconecte e conecte novamente marcando a caixa do Google Agenda.',
+      { toastId: 'google-needs-reconnect', autoClose: 8000 },
+    );
+  };
+
+  // Fecha o menu de ações ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = () => setShowActionsMenu(false);
+    if (showActionsMenu) document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showActionsMenu]);
+
+  // Polling: puxa mudanças do Google a cada 45s e ao voltar pra aba
+  useEffect(() => {
+    if (!googleStatus?.connected || googleStatus?.needs_reconnect) return;
+    const interval = setInterval(sincronizarGoogle, 45_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sincronizarGoogle();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleStatus?.connected, googleStatus?.needs_reconnect, company?.uid, googleUser?.uid]);
+
+  const carregarStatusGoogle = async () => {
+    if (!company?.uid || !googleUser?.uid) {
+      console.log('[agenda] google status skip:', { empresa: company?.uid, usuario: googleUser?.uid });
+      return;
+    }
+    try {
+      const st = await googleCalendarService.status(company.uid, googleUser.uid);
+      setGoogleStatus(st);
+      console.log('[agenda] google status OK:', st, '| isAdmin:', isAdmin, '| cargo:', googleUser?.cargo, '| nivel_acesso:', googleUser?.nivel_acesso);
+      if (st?.connected && st?.needs_reconnect) {
+        toast.warn(
+          'A conexão com o Google Agenda está sem permissão de agenda. Desconecte e conecte novamente marcando a caixa do Google Agenda.',
+          { toastId: 'google-needs-reconnect', autoClose: 8000 },
+        );
+      }
+      if (st?.connected && !st?.needs_reconnect) {
+        try {
+          const s = await googleCalendarService.sync(company.uid, googleUser.uid, true);
+          setGoogleEvents(s.events || []);
+        } catch (e: any) {
+          console.warn('[agenda] google sync:', e);
+          if (/insufficient authentication scopes/i.test(e?.message || '')) {
+            marcarNeedsReconnect();
+          }
+        }
+      } else if (!st?.connected) {
+        setGoogleEvents([]);
+      }
+    } catch (e) {
+      console.error('[agenda] google status:', e);
+      setGoogleStatus(null); // push-api sem integração configurada
+    }
+  };
+
+  const conectarGoogle = async () => {
+    if (!company?.uid || !googleUser?.uid) return;
+    setGoogleLoading(true);
+    try {
+      const { url } = await googleCalendarService.authUrl(company.uid, googleUser.uid);
+      window.location.href = url; // OAuth do Google
+    } catch (e: any) {
+      alert(e?.message || 'Falha ao iniciar conexão com o Google');
+      setGoogleLoading(false);
+    }
+  };
+
+  const desconectarGoogle = async () => {
+    if (!company?.uid || !googleUser?.uid) return;
+    setGoogleLoading(true);
+    try {
+      await googleCalendarService.disconnect(company.uid, googleUser.uid);
+      setGoogleStatus({ connected: false, google_email: null, google_name: null, calendar_id: null });
+      setGoogleEvents([]);
+      setShowDisconnectModal(false);
+      toast.success('Google Agenda desconectado.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao desconectar');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const getEventStatus = (event: any) => {
     const now = new Date();
@@ -87,16 +238,66 @@ export default function AgendaPage() {
     return "text-emerald-600 text-xs";
   };
 
+  // Eventos do app + eventos vindos do Google (sem duplicar os já vinculados)
+  const mergedEvents = useMemo<any[]>(() => {
+    const linkedGoogleIds = new Set(
+      (events || []).map((e: any) => e.google_event_id).filter(Boolean)
+    );
+    const onlyGoogle = googleEvents
+      .filter(g => !linkedGoogleIds.has(g.google_id))
+      .map(g => {
+        // Evento all_day do Google vem como 'YYYY-MM-DD' — força meio-dia
+        // local para não cair no dia anterior no fuso -03:00
+        const toDate = (v: string) =>
+          v && !v.includes('T') ? new Date(`${v}T12:00:00`) : new Date(v);
+        return {
+          ...g,
+          start_time: toDate(g.start_time),
+          end_time: toDate(g.end_time),
+        };
+      });
+    return [...events, ...onlyGoogle];
+  }, [events, googleEvents]);
+
+  // Dias que têm pelo menos 1 evento (marca bolinha no mini calendário)
+  const diasComEvento = useMemo(() => {
+    return new Set(mergedEvents.map(e => format(new Date(e.start_time), 'yyyy-MM-dd')));
+  }, [mergedEvents]);
+
+  // Estatísticas rápidas e próximos compromissos (sidebar)
+  const agendaStats = useMemo(() => {
+    const now = new Date();
+    const semanaIni = startOfWeek(now, { weekStartsOn: 1 });
+    const semanaFim = endOfWeek(now, { weekStartsOn: 1 });
+    return {
+      hoje: mergedEvents.filter(e => isToday(new Date(e.start_time))).length,
+      semana: mergedEvents.filter(e => {
+        const d = new Date(e.start_time);
+        return d >= semanaIni && d <= semanaFim;
+      }).length,
+      vencidos: mergedEvents.filter(e => isPast(new Date(e.end_time || e.start_time))).length,
+      google: mergedEvents.filter(e => e.origem === 'google').length,
+    };
+  }, [mergedEvents]);
+
+  const proximosEventos = useMemo(() => {
+    const now = new Date();
+    return mergedEvents
+      .filter(e => new Date(e.start_time) >= now || isToday(new Date(e.start_time)))
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .slice(0, 5);
+  }, [mergedEvents]);
+
   const filteredEvents = useMemo(() => {
-    if (!events) return [];
+    if (!mergedEvents) return [];
 
     // Se houver um evento selecionado, mostrar apenas ele
     if (selectedEventId && activeTab === 'list') {
-      const selectedEvent = events.find(e => e.uid === selectedEventId);
+      const selectedEvent = mergedEvents.find(e => e.uid === selectedEventId);
       return selectedEvent ? [selectedEvent] : [];
     }
 
-    let filtered = [...events];
+    let filtered = [...mergedEvents];
     const now = new Date();
     const startOfWeekDate = startOfWeek(now, { weekStartsOn: 1 }); // Segunda-feira
     const endOfWeekDate = endOfWeek(now, { weekStartsOn: 1 });
@@ -170,7 +371,7 @@ export default function AgendaPage() {
     });
 
     return filtered;
-  }, [events, selectedPeriod, selectedEventId, activeTab]);
+  }, [mergedEvents, selectedPeriod, selectedEventId, activeTab]);
 
   // Paginação
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
@@ -346,13 +547,16 @@ export default function AgendaPage() {
     
     // Scroll para o evento após renderização
     setTimeout(() => {
-      selectedEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // 'nearest' evita rolar o <main> junto (block:'center' revelava
+      // espaço morto no fim da página ao clicar num evento)
+      selectedEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 100);
   };
 
   const handleDateClick = (date: Date) => {
+    setEventToEdit(null);
     setInitialDate(date);
-    setIsNewEventModalOpen(true);
+    navigate(`/app/agenda/novaagenda?data=${format(date, 'yyyy-MM-dd')}`);
   };
 
   const handleDeleteClick = (event: any, e: React.MouseEvent) => {
@@ -364,7 +568,15 @@ export default function AgendaPage() {
   const handleConfirmDelete = async () => {
     if (eventToDelete) {
       try {
-        await deleteEvent.mutateAsync(eventToDelete.uid);
+        if (eventToDelete.origem === 'google' && eventToDelete.google_id) {
+          // Evento só existe no Google — apaga direto lá
+          if (company?.uid && googleUser?.uid) {
+            await googleCalendarService.deleteEvent(company.uid, googleUser.uid, eventToDelete.google_id);
+          }
+          setGoogleEvents(prev => prev.filter(g => g.google_id !== eventToDelete.google_id));
+        } else {
+          await deleteEvent.mutateAsync(eventToDelete.uid);
+        }
         setShowDeleteModal(false);
         setEventToDelete(null);
         setSelectedEventId(null);
@@ -377,21 +589,38 @@ export default function AgendaPage() {
   const handleEditClick = (event: any, e: React.MouseEvent) => {
     e.stopPropagation();
     setEventToEdit(event);
-    setIsNewEventModalOpen(true);
   };
 
   useEffect(() => {
     if (selectedEventId && activeTab === 'list') {
-      selectedEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      selectedEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedEventId, activeTab]);
+
+  // Status da conexão Google + trata retorno do OAuth (?google=conectado|erro_*)
+  useEffect(() => {
+    carregarStatusGoogle();
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get('google');
+    if (g) {
+      if (g === 'conectado') {
+        carregarStatusGoogle();
+      } else if (g.startsWith('erro')) {
+        alert('Não foi possível conectar ao Google Agenda. Tente novamente.');
+      }
+      params.delete('google');
+      const qs = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.uid, googleUser?.uid]);
 
   return (
     <div className="bg-gray-50">
       <div className="flex flex-col flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="pb-6">
-            <div className="mx-auto sm:px-0 md:px-0">
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="pb-1">
+            <div className="mx-auto p-2.5">
               {/* Filtros e Ações */}
               <div className="bg-white rounded-lg shadow-sm">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4">
@@ -405,53 +634,120 @@ export default function AgendaPage() {
                       <ArrowLeft className="h-5 w-5" />
                     </Link>
 
-                    {/* Título e Subtítulo */}
-                    <div>
-                      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                        Agenda
-                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          {filteredEvents.length}
-                        </span>
-                      </h1>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Gerencie seus compromissos e eventos
-                      </p>
+                    {/* Ícone + Título e Subtítulo */}
+                    <div className="flex items-center gap-3">
+                      <div className="hidden sm:flex items-center justify-center w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 text-blue-600">
+                        <CalendarViewIcon className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                          Agenda
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            {filteredEvents.length}
+                          </span>
+                        </h1>
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                          Gerencie seus compromissos e eventos
+                        </p>
+                      </div>
                     </div>
                   </div>
 
                   {/* Grupo de Botões */}
                   <div className="hidden md:flex items-center gap-3">
-                    {/* Botão Exportar */}
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={exportToExcel}
-                        variant="outline"
-                        size="lg"
-                        className="text-green-600 hover:text-green-700"
+                    {/* Menu de ações (Google + exportação) */}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowActionsMenu(!showActionsMenu);
+                        }}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative"
+                        aria-label="Mais opções"
                       >
-                        <div className="flex items-center gap-2">
-                          <Download className="w-4 h-4" />
-                          <span>Excel</span>
+                        <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        {/* Bolinha verde quando o Google está conectado */}
+                        {googleStatus?.connected && (
+                          <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${googleStatus.needs_reconnect ? 'bg-amber-500' : 'bg-green-500'}`} />
+                        )}
+                      </button>
+
+                      {showActionsMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                          {/* Google Agenda - conexão por empresa */}
+                          {googleStatus?.connected ? (
+                            <>
+                              <div className="px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                                <Link2 className={`w-4 h-4 shrink-0 ${googleStatus.needs_reconnect ? 'text-amber-500' : 'text-green-600'}`} />
+                                <span className="truncate">{googleStatus.google_email || 'Google conectado'}</span>
+                              </div>
+                              {googleStatus.needs_reconnect && (
+                                <div className="px-4 py-2 text-xs text-amber-700 bg-amber-50 flex items-center gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Sem permissão de agenda — reconecte.</span>
+                                </div>
+                              )}
+                              {isAdmin && googleStatus.needs_reconnect && (
+                                <button
+                                  onClick={() => { conectarGoogle(); setShowActionsMenu(false); }}
+                                  disabled={googleLoading}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${googleLoading ? 'animate-spin' : ''}`} />
+                                  <span>Reconectar Google</span>
+                                </button>
+                              )}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => { setShowDisconnectModal(true); setShowActionsMenu(false); }}
+                                  disabled={googleLoading}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                >
+                                  <Unlink className="w-4 h-4" />
+                                  <span>Desconectar Google</span>
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            isAdmin && googleStatus !== null && (
+                              <button
+                                onClick={() => { conectarGoogle(); }}
+                                disabled={googleLoading}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                              >
+                                <Link2 className="w-4 h-4 text-blue-600" />
+                                <span>{googleLoading ? 'Conectando...' : 'Conectar Google'}</span>
+                              </button>
+                            )
+                          )}
+
+                          <div className="border-t border-gray-200 dark:border-gray-700" />
+
+                          {/* Exportação */}
+                          <button
+                            onClick={() => { exportToExcel(); setShowActionsMenu(false); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                            <span>Exportar Excel</span>
+                          </button>
+                          <button
+                            onClick={() => { exportToPDF(); setShowActionsMenu(false); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                          >
+                            <FileText className="w-4 h-4 text-red-600" />
+                            <span>Exportar PDF</span>
+                          </button>
                         </div>
-                      </Button>
-                      <Button
-                        onClick={exportToPDF}
-                        variant="outline"
-                        size="lg"
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Download className="w-4 h-4" />
-                          <span>PDF</span>
-                        </div>
-                      </Button>
+                      )}
                     </div>
 
                     {/* Botão Nova Agenda */}
                     <Button
                       onClick={() => {
+                        setEventToEdit(null);
                         setInitialDate(selectedDate);
-                        setIsNewEventModalOpen(true);
+                        navigate(`/app/agenda/novaagenda?data=${format(selectedDate, 'yyyy-MM-dd')}`);
                       }}
                       size="lg"
                       className="bg-blue-600 hover:bg-blue-700"
@@ -465,7 +761,8 @@ export default function AgendaPage() {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0 pb-6">
+            {!isCreatingEvent && (
             <div className="flex items-center justify-between gap-2 px-2 sm:px-4">
               <TabsList className="h-auto p-1">
                 <TabsTrigger value="calendar" className="flex items-center gap-2 data-[state=active]:bg-blue-100">
@@ -536,11 +833,186 @@ export default function AgendaPage() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
 
-            <div className="mt-4">
-              <TabsContent value="calendar" className="m-0">
-                <div className="bg-white rounded-lg border shadow-sm">
+              {googleStatus?.connected && !googleStatus?.needs_reconnect && (
+                <button
+                  onClick={async () => {
+                    const tid = toast.loading('Sincronizando com o Google Agenda...');
+                    setGoogleLoading(true);
+                    const ok = await sincronizarGoogle(true);
+                    setGoogleLoading(false);
+                    toast.update(tid, {
+                      render: ok ? 'Agenda sincronizada com sucesso!' : 'Falha ao sincronizar. Tente novamente.',
+                      type: ok ? 'success' : 'error',
+                      isLoading: false,
+                      autoClose: 3000,
+                    });
+                  }}
+                  disabled={googleLoading}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50"
+                  title="Sincronizar com Google Agenda"
+                >
+                  <RefreshCw className={`w-4 h-4 ${googleLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+            )}
+
+            <div className={cn('flex items-stretch flex-1 min-h-0', isCreatingEvent ? 'mt-10' : 'mt-1')}>
+              {/* Sidebar esquerda: mini calendário + resumo + próximos */}
+              <aside className="hidden lg:block w-72 shrink-0 space-y-3 m-2.5 mr-1.5 sticky top-4 self-start">
+                {/* Mini calendário (oculto no modo nova agenda) */}
+                {!isCreatingEvent && (
+                <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                  {/* Cabeçalho próprio: mês centralizado + navegação */}
+                  <div className="flex items-center justify-between px-3 pt-3">
+                    <button
+                      onClick={() => setSelectedDate(d => addMonths(d, -1))}
+                      className="p-1 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
+                      title="Mês anterior"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-semibold text-gray-800 capitalize">
+                      {format(selectedDate, 'MMMM yyyy', { locale: ptBR })}
+                    </span>
+                    <button
+                      onClick={() => setSelectedDate(d => addMonths(d, 1))}
+                      className="p-1 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
+                      title="Próximo mês"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(d) => { if (d) { setSelectedDate(d); setInitialDate(d); } }}
+                    month={selectedDate}
+                    onMonthChange={setSelectedDate}
+                    locale={ptBR}
+                    weekStartsOn={1}
+                    modifiers={{
+                      hasEvent: (date) => diasComEvento.has(format(date, 'yyyy-MM-dd')),
+                    }}
+                    modifiersClassNames={{
+                      hasEvent: "relative after:absolute after:bottom-0.5 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:rounded-full after:bg-blue-500",
+                    }}
+                    className="p-2 w-full"
+                    classNames={{
+                      months: "w-full",
+                      month: "w-full space-y-2",
+                      month_caption: "hidden",
+                      nav: "hidden",
+                      month_grid: "w-full",
+                      weekdays: "flex",
+                      weekday: "flex-1 text-center text-gray-400 font-medium text-[10px] uppercase",
+                      weeks: "w-full",
+                      week: "flex w-full",
+                      day: "flex-1 h-8 flex items-center justify-center p-0 relative",
+                      day_button: "h-8 w-8 p-0 text-xs rounded-full hover:bg-blue-50 flex items-center justify-center",
+                      selected: "[&>button]:bg-blue-600 [&>button]:text-white [&>button]:font-semibold [&>button]:hover:bg-blue-600",
+                      today: "[&>button]:text-blue-600 [&>button]:font-semibold",
+                      outside: "[&>button]:text-gray-300",
+                    }}
+                  />
+                </div>
+                )}
+
+                {/* Resumo clicável */}
+                <div className="bg-white rounded-lg border shadow-sm p-3 space-y-1.5">
+                  {[
+                    { label: 'Hoje', value: agendaStats.hoje, period: 'day', classes: 'text-blue-700 bg-blue-50 border-blue-200' },
+                    { label: 'Esta semana', value: agendaStats.semana, period: 'week', classes: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+                    { label: 'Vencidos', value: agendaStats.vencidos, period: 'expired', classes: 'text-red-700 bg-red-50 border-red-200' },
+                  ].map((s) => (
+                    <button
+                      key={s.period}
+                      onClick={() => {
+                        // Segundo clique no mesmo card desativa o filtro
+                        const next = selectedPeriod === s.period ? 'all' : s.period;
+                        setSelectedPeriod(next as any);
+                        setSelectedEventId(null);
+                        setCurrentPage(1);
+                        // Garante que o calendário mostre a região do filtro
+                        if (next === 'day' || next === 'week') setSelectedDate(new Date());
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm font-medium transition-all hover:shadow-sm',
+                        s.classes,
+                        selectedPeriod === s.period && 'ring-2 ring-offset-1 ring-blue-400'
+                      )}
+                    >
+                      <span>{s.label}</span>
+                      <span className="font-bold">{s.value}</span>
+                    </button>
+                  ))}
+                  {['day', 'week', 'expired'].includes(selectedPeriod) && (
+                    <button
+                      onClick={() => { setSelectedPeriod('all'); setSelectedEventId(null); }}
+                      className="w-full text-center text-xs text-gray-500 hover:text-blue-600 py-1 transition-colors"
+                    >
+                      Limpar filtro
+                    </button>
+                  )}
+                  {agendaStats.google > 0 && (
+                    <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-500">
+                      <span className="flex items-center gap-1"><Link2 className="w-3 h-3" /> Do Google</span>
+                      <span>{agendaStats.google}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Próximos compromissos */}
+                <div className="bg-white rounded-lg border shadow-sm p-3">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Próximos compromissos</h3>
+                  {proximosEventos.length === 0 ? (
+                    <p className="text-xs text-gray-400">Nenhum compromisso futuro.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {proximosEventos.map((ev) => (
+                        <button
+                          key={ev.uid}
+                          onClick={() => handleEventClick(ev)}
+                          className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-gray-50 transition-colors group"
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="flex flex-col items-center shrink-0 w-9 text-center">
+                              <span className="text-sm font-bold text-blue-600 leading-none">{format(new Date(ev.start_time), 'dd')}</span>
+                              <span className="text-[10px] uppercase text-gray-500">{format(new Date(ev.start_time), 'MMM', { locale: ptBR })}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate group-hover:text-blue-700 flex items-center gap-1">
+                                {ev.origem === 'google' && <Link2 className="w-3 h-3 text-sky-500 shrink-0" />}
+                                {ev.title}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {ev.all_day ? 'Dia inteiro' : format(new Date(ev.start_time), 'HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </aside>
+
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+              {isCreatingEvent ? (
+                <div className="m-2.5 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                  <NewEventPanel
+                    initialDate={initialDate || selectedDate}
+                    eventToEdit={eventToEdit}
+                    googleConnected={!!googleStatus?.connected && !googleStatus?.needs_reconnect}
+                    onCancel={fecharPainelEvento}
+                    onSaved={() => { fecharPainelEvento(); sincronizarGoogle(); }}
+                  />
+                </div>
+              ) : (
+              <>
+              <TabsContent value="calendar" className="m-0 flex-1 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
+                <div className="bg-white rounded-lg border shadow-sm m-2.5 flex-1 flex flex-col min-h-0">
                   <div className="flex items-center gap-2 p-4 border-b sticky top-0 bg-white z-10">
                     <Button
                       variant="outline"
@@ -549,9 +1021,20 @@ export default function AgendaPage() {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
-                    <h2 className="flex-1 text-center font-medium text-lg capitalize">
-                      {format(selectedDate, 'MMMM yyyy', { locale: ptBR })}
+                    <h2 className="text-lg font-medium flex-1 text-center">
+                      {format(selectedDate, 'MMMM yyyy', { locale: ptBR }).replace(/^./, (str) => str.toUpperCase())}
                     </h2>
+                    {selectedPeriod !== 'all' && (
+                      <button
+                        onClick={() => setSelectedPeriod('all')}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                        title="Limpar filtro de período"
+                      >
+                        <Filter className="w-3 h-3" />
+                        Filtro ativo
+                        <span className="font-bold">×</span>
+                      </button>
+                    )}
                     <Button
                       variant="outline"
                       size="icon"
@@ -559,21 +1042,37 @@ export default function AgendaPage() {
                     >
                       <ChevronRight className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedDate(new Date())}
+                      disabled={isToday(selectedDate)}
+                    >
+                      Hoje
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-7 text-sm">
+                  <div className="grid grid-cols-7 text-sm shrink-0">
                     {["seg", "ter", "qua", "qui", "sex", "sab", "dom"].map((day) => (
-                      <div key={day} className="text-center py-2 font-medium text-gray-500 border-b sticky top-[73px] bg-white z-10">
+                      <div key={day} className="text-center py-2.5 text-xs font-semibold uppercase tracking-wider text-gray-400 border-b bg-white">
                         {day}
                       </div>
                     ))}
-                    {Array.from({ length: 35 }).map((_, index) => {
+                  </div>
+                  {(() => {
                       // Ajusta para semana começar na segunda-feira (1)
                       const firstDayOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
                       const dayOfWeek = firstDayOfMonth.getDay();
-                      const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Ajuste para segunda-feira
+                      const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                      const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+                      const weeks = Math.ceil((offset + daysInMonth) / 7);
+                      return (
+                      <div className="grid grid-cols-7 text-sm flex-1 min-h-0" style={{ gridTemplateRows: `repeat(${weeks}, minmax(76px, 1fr))` }}>
+                      {Array.from({ length: weeks * 7 }).map((_, index) => {
                       const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), index - offset + 1);
                       const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
-                      const dayEvents = events?.filter(event => 
+                      const isSelectedDay = date.toDateString() === selectedDate.toDateString();
+                      // Respeita o filtro de período ativo (Hoje/Semana/Vencidos)
+                      const dayEvents = filteredEvents?.filter((event: any) =>
                         format(new Date(event.start_time), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
                       );
 
@@ -581,15 +1080,22 @@ export default function AgendaPage() {
                         <div
                           key={index}
                           className={cn(
-                            "border-b border-r p-1 h-[calc((100vh-20rem)/5)] min-h-[60px] cursor-pointer hover:bg-gray-50/80 transition-colors relative group",
+                            "border-b border-r p-1 cursor-pointer hover:bg-gray-50/80 transition-colors relative group",
                             index % 7 === 0 && "border-l",
+                            isCurrentMonth && (date.getDay() === 0 || date.getDay() === 6) && "bg-slate-50",
                             !isCurrentMonth && "bg-gray-50 text-gray-400",
                             isToday(date) && "bg-blue-50",
+                            isSelectedDay && !isToday(date) && "bg-blue-50/70 ring-2 ring-inset ring-blue-300",
                           )}
                           onClick={() => handleDateClick(date)}
                         >
                           <div className="flex flex-col h-full">
-                            <span className={cn("font-medium", isToday(date) && "text-blue-600")}>
+                            <span className={cn(
+                              "inline-flex items-center justify-center w-7 h-7 text-sm font-medium rounded-full",
+                              isToday(date) ? "bg-blue-600 text-white shadow-sm"
+                                : !isCurrentMonth ? "text-gray-400"
+                                : "text-gray-700"
+                            )}>
                               {format(date, 'd')}
                             </span>
                             <div className="flex-1 mt-1 space-y-1 overflow-y-auto">
@@ -613,6 +1119,9 @@ export default function AgendaPage() {
                                       handleEventClick(event);
                                     }}
                                   >
+                                    {event.origem === 'google' && (
+                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-sky-500 mr-1" title="Do Google" />
+                                    )}
                                     {event.title}
                                   </div>
                                 );
@@ -646,12 +1155,14 @@ export default function AgendaPage() {
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                    );
+                  })()}
                 </div>
               </TabsContent>
-              <TabsContent value="list" className="m-0">
-                <div className="bg-white rounded-lg border shadow-sm flex flex-col">
-                  <ScrollArea className="flex-1 h-[calc(100vh-280px)]">
+              <TabsContent value="list" className="m-0 flex-1 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
+                <div className="bg-white rounded-lg border shadow-sm m-2.5 flex-1 flex flex-col min-h-0">
+                  <ScrollArea className="flex-1 min-h-0">
                     {isLoading ? (
                       <div className="p-2 sm:p-4 flex flex-col gap-3 sm:gap-4">
                         {[...Array(5)].map((_, i) => (
@@ -710,6 +1221,12 @@ export default function AgendaPage() {
                                       <Trash2 className="h-4 w-4" />
                                     </button>
                                   </div>
+                                  {event.origem === 'google' && (
+                                    <Badge variant="outline" className="font-semibold bg-sky-50 border-sky-300 text-sky-700">
+                                      <Link2 className="w-3 h-3 mr-1" />
+                                      Google
+                                    </Badge>
+                                  )}
                                   <Badge
                                     variant="outline"
                                     className={cn(
@@ -864,6 +1381,9 @@ export default function AgendaPage() {
                   </ScrollArea>
                 </div>
               </TabsContent>
+              </>
+              )}
+              </div>
             </div>
           </Tabs>
         </div>
@@ -876,22 +1396,12 @@ export default function AgendaPage() {
 
       {/* Botão flutuante para mobile */}
       <Button
-        onClick={() => setIsNewEventModalOpen(true)}
+        onClick={() => { setEventToEdit(null); setInitialDate(selectedDate); navigate(`/app/agenda/novaagenda?data=${format(selectedDate, 'yyyy-MM-dd')}`); }}
         size="icon"
         className="fixed right-4 bottom-4 w-14 h-14 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 sm:hidden flex items-center justify-center"
       >
         <Plus className="w-6 h-6" />
       </Button>
-
-      <NewEventModal 
-        open={isNewEventModalOpen} 
-        onOpenChange={(open) => {
-          setIsNewEventModalOpen(open);
-          if (!open) setEventToEdit(null);
-        }}
-        initialDate={initialDate}
-        eventToEdit={eventToEdit}
-      />
 
       {/* Modal de Confirmação de Exclusão */}
       {showDeleteModal && (
@@ -932,6 +1442,46 @@ export default function AgendaPage() {
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50"
               >
                 {deleteEvent.isPending ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Desconexão do Google */}
+      {showDisconnectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white shadow-2xl max-w-md w-full p-6 rounded-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100">
+                <Unlink className="h-6 w-6 text-red-600" />
+              </div>
+              <h2 className="text-xl font-semibold text-slate-800">Desconectar Google</h2>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-slate-600">
+                Deseja desconectar a conta <strong>{googleStatus?.google_email}</strong> desta empresa?
+              </p>
+              <p className="text-sm text-slate-500 mt-2">
+                Os eventos do Google deixarão de aparecer na agenda.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowDisconnectModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-800 transition-colors"
+                disabled={googleLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={desconectarGoogle}
+                disabled={googleLoading}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 rounded-lg"
+              >
+                {googleLoading ? 'Desconectando...' : 'Desconectar'}
               </button>
             </div>
           </div>

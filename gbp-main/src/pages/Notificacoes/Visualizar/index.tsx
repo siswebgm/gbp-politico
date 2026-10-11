@@ -4,6 +4,7 @@ import { Send, CheckCheck, AlertCircle, FileText, Download, X, Paperclip, Loader
 import { notificationLogsService, NotificationLog, MidiaAnexo, RespostaItem } from '../../../services/notificationLogs';
 import { notificationSubscribersService, EmpresaPublica } from '../../../services/notificationSubscribers';
 import { supabaseClient } from '../../../lib/supabase';
+import { requestNotificationPermission } from '../../../lib/firebase';
 
 const ACEITA_MIDIA = 'image/*,video/*,audio/*,application/pdf';
 

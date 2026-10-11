@@ -82,6 +82,7 @@ export function AtendimentosRecentes() {
           status
         `)
         .in('uid', atendimentosPermitidos)
+        .eq('oculto', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

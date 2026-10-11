@@ -3,6 +3,7 @@ import { supabaseClient } from '../lib/supabase';
 import { AgendaEvent } from '../types/agenda';
 import { useAuth } from '../providers/AuthProvider';
 import { useCompanyStore } from '../store/useCompanyStore';
+import { googleCalendarService } from '../services/googleCalendar';
 import { v4 as uuidv4 } from 'uuid';
 
 export function useAgenda(filters?: {
@@ -14,6 +15,7 @@ export function useAgenda(filters?: {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const company = useCompanyStore(state => state.company);
+  const storeUser = useCompanyStore((state: any) => state.user);
 
   const generateUUID = () => {
     try {
@@ -57,7 +59,8 @@ export function useAgenda(filters?: {
           task_responsible,
           task_status,
           usuarios_uid,
-          usuario_nome
+          usuario_nome,
+          google_event_id
         `)
         .eq('empresa_uid', company.uid);
 
@@ -201,12 +204,28 @@ export function useAgenda(filters?: {
 
   const deleteEvent = useMutation({
     mutationFn: async (eventId: string) => {
+      // Busca o vínculo com o Google antes de apagar
+      const { data: row } = await supabaseClient
+        .from('gbp_agendamentos')
+        .select('google_event_id')
+        .eq('uid', eventId)
+        .maybeSingle();
+
       const { error } = await supabaseClient
         .from('gbp_agendamentos')
         .delete()
         .eq('uid', eventId);
 
       if (error) throw error;
+
+      // Best-effort: remove também no Google Calendar
+      if (row?.google_event_id && company?.uid && storeUser?.uid) {
+        try {
+          await googleCalendarService.deleteEvent(company.uid, storeUser.uid, row.google_event_id);
+        } catch (e) {
+          console.warn('[agenda→google] falha ao excluir no Google:', e);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agenda'] });

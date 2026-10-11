@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, BellRing, Check, CheckCircle, XCircle, AlertCircle, User, Phone, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bell, BellRing, Check, CheckCircle, XCircle, AlertCircle, User, Phone, Loader2, Share, Download, Smartphone } from 'lucide-react';
 import { forceRefreshToken } from '../../../lib/firebase';
 import { notificationSubscribersService, EmpresaPublica } from '../../../services/notificationSubscribers';
 import { supabaseClient } from '../../../lib/supabase';
@@ -63,6 +63,19 @@ export function AceitarNotificacoes() {
 
   const suportado = typeof window !== 'undefined' && 'Notification' in window;
 
+  // iOS só libera push para o site instalado como PWA (Adicionar à Tela
+  // de Início, iOS 16.4+). No Safari comum, Notification nem existe.
+  const isIOS = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+  const isStandalone = typeof window !== 'undefined' && (
+    window.matchMedia?.('(display-mode: standalone)').matches === true ||
+    (navigator as any).standalone === true
+  );
+  // iOS ainda não instalado: mostra instrução em vez do botão de ativação
+  const precisaInstalarIOS = isIOS && !isStandalone;
+
   const handleAtivar = async () => {
     if (!empresa_uid) return;
 
@@ -105,15 +118,24 @@ export function AceitarNotificacoes() {
       // presa com token morto)
       const token = await forceRefreshToken();
       setSemToken(!token);
+      if (!token) {
+        console.warn('[AceitarNotificacoes] Permissão concedida mas token FCM veio nulo — inscrito será salvo sem token');
+      }
 
-      await notificationSubscribersService.registrar({
-        empresa_uid,
-        eleitor_uid,
-        nome,
-        telefone,
-        token,
-        permissao: 'granted'
-      });
+      try {
+        await notificationSubscribersService.registrar({
+          empresa_uid,
+          eleitor_uid,
+          nome,
+          telefone,
+          token,
+          permissao: 'granted'
+        });
+        console.log('[AceitarNotificacoes] Inscrito registrado/atualizado. token:', token ? 'ok' : 'NULL');
+      } catch (regError) {
+        console.error('[AceitarNotificacoes] Falha no registrar():', regError);
+        throw regError;
+      }
       setEtapa('sucesso');
     } catch (error: any) {
       if (error?.code === 'JA_REGISTRADO') {
@@ -201,26 +223,56 @@ export function AceitarNotificacoes() {
               </div>
             )}
 
-            <button
-              onClick={handleAtivar}
-              disabled={etapa === 'processando'}
-              className="w-full h-12 flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl text-base font-semibold shadow-md shadow-blue-600/25 active:scale-[0.98] hover:bg-blue-700 disabled:bg-gray-400 disabled:shadow-none transition"
-            >
-              {etapa === 'processando' ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Ativando...
-                </>
-              ) : (
-                <>
-                  <Bell className="h-5 w-5" />
-                  Ativar notificações
-                </>
-              )}
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-3">
-              O celular vai pedir permissão. Toque em <span className="font-semibold text-gray-600">"Permitir"</span>.
-            </p>
+            {precisaInstalarIOS ? (
+              <div className="rounded-2xl bg-gray-50 border border-gray-200 px-4 py-4">
+                <p className="text-sm font-semibold text-gray-900 mb-3">
+                  No iPhone, primeiro instale o app:
+                </p>
+                <ol className="space-y-3">
+                  <li className="flex items-center gap-3 text-sm text-gray-700">
+                    <span className="h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0">
+                      <Share className="h-3.5 w-3.5" />
+                    </span>
+                    Toque em <span className="font-semibold">Compartilhar</span> na barra do Safari
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-gray-700">
+                    <span className="h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0">
+                      <Download className="h-3.5 w-3.5" />
+                    </span>
+                    Escolha <span className="font-semibold">"Adicionar à Tela de Início"</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-gray-700">
+                    <span className="h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0">
+                      <Smartphone className="h-3.5 w-3.5" />
+                    </span>
+                    Abra o app pelo novo ícone e toque em <span className="font-semibold">Ativar notificações</span>
+                  </li>
+                </ol>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleAtivar}
+                  disabled={etapa === 'processando'}
+                  className="w-full h-12 flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl text-base font-semibold shadow-md shadow-blue-600/25 active:scale-[0.98] hover:bg-blue-700 disabled:bg-gray-400 disabled:shadow-none transition"
+                >
+                  {etapa === 'processando' ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Ativando...
+                    </>
+                  ) : (
+                    <>
+                      <Bell className="h-5 w-5" />
+                      Ativar notificações
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-gray-400 text-center mt-3">
+                  O celular vai pedir permissão. Toque em <span className="font-semibold text-gray-600">"Permitir"</span>.
+                </p>
+              </>
+            )}
           </>
         )}
 
@@ -305,7 +357,11 @@ export function AceitarNotificacoes() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Navegador não suportado</h2>
             <p className="text-base text-gray-600 leading-relaxed">
-              Este navegador não permite notificações. No iPhone, toque em Compartilhar, escolha "Adicionar à Tela de Início" e abra o site por lá.
+              {precisaInstalarIOS
+                ? 'No iPhone, toque em Compartilhar, escolha "Adicionar à Tela de Início" e abra o site pelo ícone do app.'
+                : isIOS
+                  ? 'Atualize o iPhone para o iOS 16.4 ou mais recente — versões antigas não suportam notificações.'
+                  : 'Este navegador não permite notificações. Abra o link no Chrome, Edge ou Safari mais recente.'}
             </p>
           </div>
         )}

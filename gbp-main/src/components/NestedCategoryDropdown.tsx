@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight, ChevronDown, Search } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X } from 'lucide-react';
 import { Category } from '../types/category';
 
 interface NestedCategoryDropdownProps {
@@ -299,8 +299,18 @@ export const NestedCategoryDropdown: React.FC<NestedCategoryDropdownProps> = ({
                 onChange={(e) => setBusca(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Buscar categoria..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-600 transition-colors"
               />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setBusca(''); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  aria-label="Limpar busca"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 

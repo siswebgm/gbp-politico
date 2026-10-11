@@ -23,7 +23,8 @@ import {
   Check,
   Download,
   Pencil,
-  Loader2
+  Loader2,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings } from 'lucide-react';
 
@@ -812,39 +814,36 @@ export function DemandasRuas() {
               </div>
               
               <div className="flex items-center gap-2">
-                {/* Botão de Relatórios - apenas para admins */}
-                {user?.nivel_acesso?.toLowerCase() === 'admin' && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => navigate('/app/documentos/demandas-ruas/relatorios')}
-                    className="h-9 hidden md:flex items-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Relatórios
-                  </Button>
-                )}
-                
-                {/* Botão de Exportar - para todos os usuários */}
-                <Button 
-                  variant="outline"
-                  onClick={exportarDemandas}
-                  className="h-9 flex items-center bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
-                >
-                  <Download className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Exportar</span>
-                </Button>
-                
-                {/* Botão de Configurações - apenas para admins */}
-                {user?.nivel_acesso?.toLowerCase() === 'admin' && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}
-                    className="h-9 hidden md:flex items-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    Configurações
-                  </Button>
-                )}
+                {/* Menu de ações resumido nos três pontinhos */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-9 w-9 p-0 flex items-center justify-center bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300"
+                      aria-label="Ações"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                      <DropdownMenuItem onClick={() => navigate('/app/documentos/demandas-ruas/relatorios')}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        Relatórios
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={exportarDemandas}>
+                      <Download className="mr-2 h-4 w-4 text-green-600" />
+                      Exportar
+                    </DropdownMenuItem>
+                    {user?.nivel_acesso?.toLowerCase() === 'admin' && (
+                      <DropdownMenuItem onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Configurações
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>

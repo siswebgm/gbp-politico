@@ -95,14 +95,31 @@ async function requestNotificationPermissionInternal(): Promise<string | null> {
     // Subscription antiga presa a outra VAPID causa 401 no fcmregistrations
     await resetSubscriptionIfVapidChanged(registration);
 
-    const token = await getToken(instance, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration
-    });
+    const token = await getTokenWithRetry(instance, registration);
     return token || null;
   } catch (error) {
     console.error('Erro ao obter token de notificação:', error);
     return null;
+  }
+}
+
+// O SDK do Messaging guarda o token num IndexedDB que pode estar com a
+// conexão fechando (aba em background ou versionchange de outra aba).
+// Nesse caso a próxima chamada reabre o DB — uma retry resolve.
+async function getTokenWithRetry(
+  instance: Messaging,
+  registration: ServiceWorkerRegistration
+): Promise<string> {
+  const options = { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration };
+  try {
+    return await getToken(instance, options);
+  } catch (error: any) {
+    const isClosingDb =
+      error?.name === 'InvalidStateError' ||
+      /connection is closing/i.test(error?.message || '');
+    if (!isClosingDb) throw error;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return await getToken(instance, options);
   }
 }
 

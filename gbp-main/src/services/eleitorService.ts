@@ -774,7 +774,16 @@ class EleitorService {
 
       if (insertError) throw insertError;
 
-      // 3. Remover da tabela de eleitores
+      // 3. Ocultar atendimentos do eleitor — sem o "dono" na tabela de
+      //    eleitores eles não ficam visíveis, mas podem ser restaurados depois
+      const { error: atendimentosError } = await supabaseClient
+        .from('gbp_atendimentos')
+        .update({ oculto: true })
+        .eq('eleitor_uid', uid);
+
+      if (atendimentosError) throw atendimentosError;
+
+      // 4. Remover da tabela de eleitores
       const { error: deleteError } = await supabaseClient
         .from('gbp_eleitores')
         .delete()

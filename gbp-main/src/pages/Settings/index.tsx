@@ -179,7 +179,7 @@ export function Settings() {
       <div className="flex-1 overflow-y-auto">
         {/* Header com título */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-5">
+          <div className="w-full px-4 sm:px-6 py-5">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigate('/app')}
@@ -236,7 +236,7 @@ export function Settings() {
         </div>
 
         {/* Layout Principal: 2 Colunas no Desktop (Sidebar vertical + Conteúdo) */}
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="w-full px-4 sm:px-6 py-6">
           <div className="flex flex-col lg:flex-row gap-6 items-stretch">
             {/* Sidebar Desktop */}
             <aside className="hidden lg:flex flex-col w-72 flex-shrink-0">

@@ -12,9 +12,11 @@ import { Login } from './pages/Login';
 import { useAuth } from './providers/AuthProvider';
 import { useCompanyStore } from './store/useCompanyStore';
 import AgendaPage from './pages/Agenda';
+import NovaAgendaPage from './pages/Agenda/NovaAgenda';
 import ResultadosEleitorais from './pages/ResultadosEleitorais';
 import DetalheCandidatoPage from './pages/ResultadosEleitorais/DetalheCandidato';
 import { Documents } from './pages/Documents';
+import { PastaDocumentos } from './pages/Documents/Pastas';
 import { NewDocument } from './pages/Documents/NewDocument';
 import { EditDocument } from './pages/Documents/EditDocument';
 import { DemandasRuas } from './pages/Documents/DemandasRuas';
@@ -323,7 +325,10 @@ export function AppRoutes() {
           <Route path=":id" element={<AttendanceForm />} />
           <Route path="relatorios" element={<AttendanceReport />} />
         </Route>
-        <Route path="agenda" element={<AgendaPage />} />
+        <Route path="agenda">
+          <Route index element={<AgendaPage />} />
+          <Route path="novaagenda" element={<NovaAgendaPage />} />
+        </Route>
                 <Route path="resultados-eleitorais">
           <Route index element={<ResultadosEleitorais />} />
           <Route path="detalhe/:tableName/:numero" element={<DetalheCandidatoPage />} />
@@ -368,6 +373,7 @@ export function AppRoutes() {
             <Route path="novo" element={<AdminRoute><EmendaParlamentarForm /></AdminRoute>} />
             <Route path=":id/editar" element={<AdminRoute><EmendaParlamentarForm /></AdminRoute>} />
           </Route>
+          <Route path="pastas/:uid" element={<AdminRoute><PastaDocumentos /></AdminRoute>} />
         </Route>
         <Route path="disparo-de-midia" element={<DisparoMidia />} />
         <Route path="relatorio-disparo" element={<RelatorioDisparo />} />

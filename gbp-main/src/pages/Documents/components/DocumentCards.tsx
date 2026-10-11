@@ -1,11 +1,18 @@
-import { FileText, BookOpen, FileSpreadsheet, DollarSign } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, BookOpen, FileSpreadsheet, DollarSign, FolderPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentCounts } from '../../../hooks/useDocumentCounts';
 import { useAuth } from '../../../providers/AuthProvider';
+import { useDocumentosPastas } from '../../../hooks/useDocumentosPastas';
+import { NovaPastaModal } from './NovaPastaModal';
+import { corPadrao, iconePadrao, pastaCores, pastaIcones } from './pastaConfig';
 
 export function DocumentCards() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = user?.nivel_acesso === 'admin';
+  const { pastas, contagens } = useDocumentosPastas();
+  const [novaPastaOpen, setNovaPastaOpen] = useState(false);
   const { 
     oficiosCount, 
     projetosLeiCount, 
@@ -66,7 +73,30 @@ export function DocumentCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+    <>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Card para criar nova pasta — mesmo tamanho e estrutura dos demais */}
+      {isAdmin && (
+        <button
+          onClick={() => setNovaPastaOpen(true)}
+          className="group relative flex flex-col p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-300 min-h-[150px] overflow-hidden"
+        >
+          <div className="relative z-10 flex items-center justify-between mb-3">
+            <div className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-50 ring-1 ring-black/5 transition-colors">
+              <FolderPlus className="w-6 h-6 text-gray-400 group-hover:text-blue-600 transition-colors" />
+            </div>
+          </div>
+          <div className="relative z-10 flex-1 flex flex-col justify-end">
+            <h3 className="text-base sm:text-lg font-bold text-gray-600 dark:text-gray-300 group-hover:text-blue-600 mb-1 transition-colors">
+              Nova pasta
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Organize documentos do seu jeito
+            </p>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-50 transition-colors" />
+        </button>
+      )}
       {cards
         .filter(card => {
           // Filtra por nível de acesso
@@ -75,27 +105,27 @@ export function DocumentCards() {
           }
           return true;
         })
-        .map((card, index) => {
+        .map((card) => {
         const Icon = card.icon;
         return (
           <button
-            key={index}
+            key={card.title}
             onClick={card.onClick}
-            className={`group relative flex flex-col p-4 sm:p-6 lg:p-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 text-left min-h-[200px] overflow-hidden ${card.hoverBg}`}
+            className={`group relative flex flex-col p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 text-left min-h-[150px] overflow-hidden ${card.hoverBg}`}
           >
             {/* Gradient decoration */}
             <div className={`absolute top-0 right-0 w-24 sm:w-32 h-24 sm:h-32 bg-gradient-to-br ${card.gradientFrom} ${card.gradientTo} opacity-10 rounded-bl-full transform translate-x-6 sm:translate-x-8 -translate-y-6 sm:-translate-y-8`} />
             
             {/* Icon container */}
-            <div className={`relative z-10 flex items-center justify-between mb-4 sm:mb-6`}>
-              <div className={`p-2 sm:p-3 rounded-xl ${card.bgColor} backdrop-blur-sm ring-1 ring-black/5`}>
-                <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${card.color}`} />
+            <div className={`relative z-10 flex items-center justify-between mb-3`}>
+              <div className={`p-2 rounded-xl ${card.bgColor} backdrop-blur-sm ring-1 ring-black/5`}>
+                <Icon className={`w-6 h-6 ${card.color}`} />
               </div>
               {/* Count badge */}
               {isLoading ? (
-                <div className="h-6 sm:h-8 w-12 sm:w-16 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
               ) : (
-                <span className={`flex items-center h-6 sm:h-8 px-3 sm:px-4 rounded-full ${card.bgColor} ${card.color} font-semibold text-sm ring-1 ring-black/5`}>
+                <span className={`flex items-center h-6 px-3 rounded-full ${card.bgColor} ${card.color} font-semibold text-sm ring-1 ring-black/5`}>
                   {card.count}
                 </span>
               )}
@@ -103,10 +133,10 @@ export function DocumentCards() {
 
             {/* Content */}
             <div className="relative z-10 flex-1 flex flex-col">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-gray-800 dark:group-hover:text-gray-200">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-1 group-hover:text-gray-800 dark:group-hover:text-gray-200">
                 {card.title}
               </h3>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300">
+              <p className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300">
                 {card.description}
               </p>
             </div>
@@ -116,6 +146,42 @@ export function DocumentCards() {
           </button>
         );
       })}
+
+      {/* Pastas personalizadas — somente admin, no mesmo grid dos demais cards */}
+      {isAdmin &&
+        pastas.map((pasta) => {
+          const cor = pastaCores[pasta.cor] || pastaCores[corPadrao];
+          const Icone = pastaIcones[pasta.icone]?.icon || pastaIcones[iconePadrao].icon;
+          return (
+            <button
+              key={pasta.uid}
+              onClick={() => navigate(`/app/documentos/pastas/${pasta.uid}`)}
+              className={`group relative flex flex-col p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 text-left min-h-[150px] overflow-hidden ${cor.hoverBg}`}
+            >
+              <div className={`absolute top-0 right-0 w-24 sm:w-32 h-24 sm:h-32 bg-gradient-to-br ${cor.gradientFrom} ${cor.gradientTo} opacity-10 rounded-bl-full transform translate-x-6 sm:translate-x-8 -translate-y-6 sm:-translate-y-8`} />
+              <div className="relative z-10 flex items-center justify-between mb-3">
+                <div className={`p-2 rounded-xl ${cor.bg} backdrop-blur-sm ring-1 ring-black/5`}>
+                  <Icone className={`w-6 h-6 ${cor.text}`} />
+                </div>
+                <span className={`flex items-center h-6 px-3 rounded-full ${cor.bg} ${cor.text} font-semibold text-sm ring-1 ring-black/5`}>
+                  {contagens[pasta.uid] || 0}
+                </span>
+              </div>
+              <div className="relative z-10 flex-1 flex flex-col">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-1">
+                  {pasta.nome}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {pasta.descricao || 'Pasta personalizada'}
+                </p>
+              </div>
+              <div className={`absolute bottom-0 left-0 right-0 h-1 ${cor.bg}`} />
+            </button>
+          );
+        })}
     </div>
+
+    <NovaPastaModal open={novaPastaOpen} onClose={() => setNovaPastaOpen(false)} />
+    </>
   );
 }

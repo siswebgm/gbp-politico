@@ -47,4 +47,9 @@ export interface AgendaEvent {
   task_responsible?: string;
   task_progress?: number;
   task_status?: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDO';
+  // Integração Google Calendar
+  google_event_id?: string | null; // id do evento no Google (quando o registro é do app)
+  origem?: 'app' | 'google';       // 'google' = veio da sync do Google e não existe em gbp_agendamentos
+  google_id?: string;              // id no Google (eventos de origem 'google')
+  google_link?: string | null;
 }

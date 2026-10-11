@@ -4,7 +4,6 @@ import { useCategoriaTipos } from '../../../hooks/useCategoriaTipos';
 import { useAtendimentoIndicados } from '../../../hooks/useAtendimentoIndicados';
 import { useAtendimentoLocais } from '../../../hooks/useAtendimentoLocais';
 import { useAtendimentoResponsaveis } from '../../../hooks/useAtendimentoResponsaveis';
-import { useCategories } from '../../../hooks/useCategories';
 import { Button } from '@mui/material';
 import { useAtendimentos } from '../../../hooks/useAtendimentos';
 
@@ -28,8 +27,6 @@ export interface AttendanceFilters {
 
 export function AttendanceFilters({ onClose, filters, onApplyFilters }: AttendanceFiltersProps) {
   const { tipos, isLoading: tiposLoading } = useCategoriaTipos();
-  const selectedTipo = tipos?.find(t => t.nome === filters.categoriaTipo);
-  const { data: categorias, isLoading: categoriasLoading } = useCategories(selectedTipo?.uid);
   const { data: locais } = useAtendimentoLocais();
   const { data: responsaveis } = useAtendimentoResponsaveis();
 
@@ -82,30 +79,6 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
             ))}
           </select>
         </div>
-
-        {/* Categoria */}
-        <div className="flex flex-col space-y-1">
-          <label htmlFor="categoria" className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Categoria
-          </label>
-          <select
-            id="categoria"
-            name="categoria"
-            value={filters.categoria || ''}
-            onChange={handleInputChange}
-            className="h-[38px] px-3 form-select block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            style={{ colorScheme: 'light dark', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none' }}
-          >
-            <option value="">Todos</option>
-            {categorias?.map((categoria) => (
-              <option key={categoria.uid} value={categoria.nome}>
-                {categoria.nome}
-              </option>
-            ))}
-          </select>
-        </div>
-
-
 
         {/* Indicado por */}
         <div className="flex flex-col space-y-1">
@@ -242,8 +215,8 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
         </div>
       </div>
 
-      {/* Botão de Limpar */}
-      <div className="mt-6 flex justify-end">
+      {/* Botões de ação */}
+      <div className="mt-6 flex justify-end gap-2">
         <Button
           onClick={handleClearFilters}
           variant="outlined"
@@ -251,6 +224,13 @@ export function AttendanceFilters({ onClose, filters, onApplyFilters }: Attendan
           className="text-gray-700 dark:text-gray-200"
         >
           Limpar Filtros
+        </Button>
+        <Button
+          onClick={onClose}
+          variant="contained"
+          size="small"
+        >
+          Fechar
         </Button>
       </div>
     </div>

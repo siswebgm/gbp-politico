@@ -128,9 +128,13 @@ export function useEleitores({
   const { mutateAsync: softDeleteEleitor } = useMutation({
     mutationFn: async (uid: string) => {
       const result = await eleitorService.softDelete(uid);
-      // Força um refetch após deletar
-      await refetch();
       return result;
+    },
+    onSuccess: () => {
+      // Invalida TODAS as queries de eleitores (qualquer filtro/página) —
+      // a lista exibida refaz o fetch e a linha some imediatamente
+      queryClient.invalidateQueries({ queryKey: ['eleitores', company?.uid] });
+      queryClient.invalidateQueries({ queryKey: ['eleitores'] });
     },
   });
 

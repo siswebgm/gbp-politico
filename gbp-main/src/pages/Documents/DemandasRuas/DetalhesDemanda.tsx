@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHo
 import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1598,9 +1599,132 @@ export function DetalhesDemanda() {
   };
 
   if (carregando) {
+    // Skeleton que espelha o layout real: cabeçalho + cards em coluna única
     return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
+        <div className="w-full px-2 pt-2 pb-4 sm:px-4 sm:pt-4 sm:pb-8 flex-1 max-w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg sm:rounded-xl shadow-sm overflow-hidden">
+            {/* Cabeçalho (gradiente azul) */}
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 border-b border-blue-100 dark:border-blue-900/50">
+              <div className="px-3 py-3 sm:px-6 sm:py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <Skeleton className="h-8 w-8 sm:h-10 sm:w-10 rounded-md flex-shrink-0" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-7 sm:h-9 w-48 sm:w-64" />
+                      <Skeleton className="h-5 w-36 rounded-full" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-28 rounded-full" />
+                    <Skeleton className="h-8 w-8 sm:h-10 sm:w-10 rounded-md" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cards de conteúdo */}
+            <div className="p-3 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                {/* Informações da Demanda */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <Skeleton className="h-6 w-52" />
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="h-5 w-full" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-5 w-full" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-32" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Endereço */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <Skeleton className="h-6 w-28" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-5 w-1/2" />
+                    <Skeleton className="h-5 w-2/3" />
+                  </CardContent>
+                </Card>
+
+                {/* Fotos do Problema */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <Skeleton className="h-6 w-44" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="aspect-square w-full rounded-lg" />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Card de ações/status (borda azul) */}
+                <Card className="border-2 border-blue-200 dark:border-blue-800">
+                  <CardHeader>
+                    <Skeleton className="h-7 w-40" />
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Skeleton className="h-10 w-full rounded-lg" />
+                    <div className="flex gap-3">
+                      <Skeleton className="h-10 flex-1 rounded-lg" />
+                      <Skeleton className="h-10 flex-1 rounded-lg" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Mensagens WhatsApp (borda verde) */}
+                <Card className="border-2 border-green-200 dark:border-green-800">
+                  <CardHeader>
+                    <Skeleton className="h-7 w-56" />
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <div className="flex gap-2">
+                      <Skeleton className="h-9 w-24 rounded-lg" />
+                      <Skeleton className="h-9 w-32 rounded-lg" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Observações */}
+                <Card className="border-2 border-blue-200 dark:border-blue-800">
+                  <CardHeader>
+                    <Skeleton className="h-7 w-36" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-20 w-full rounded-lg" />
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

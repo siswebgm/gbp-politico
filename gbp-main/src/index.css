@@ -78,6 +78,21 @@ body.public-page-scroll #root {
   overflow: hidden;
 }
 
+/* Dentro do layout autenticado (.app-content), a área útil do <main> não é
+   100vh: o header fixo consome 4rem e o padding superior ~1rem. Redefinimos
+   as alturas "de tela cheia" para descontar esse offset — caso contrário o
+   conteúdo excede a área visível e cria um espaço morto rolável no fim da
+   página, revelado por cliques (scrollIntoView / foco de elementos).
+   Páginas públicas e modais em portal ficam fora de .app-content e não
+   são afetadas. */
+.app-content .min-h-screen {
+  min-height: calc(100vh - 5rem);
+}
+
+.app-content .h-screen {
+  height: calc(100vh - 5rem);
+}
+
 /* Global Scrollbar Styles */
 * {
   scrollbar-width: thin;

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog as HeadlessDialog } from '@headlessui/react';
 import { 
   Share2,
   ChevronDown,
+  Eye,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -14,6 +15,7 @@ import {
   AlertCircle,
   Printer,
   MoreVertical,
+  Filter,
 } from 'lucide-react';
 import { useAtendimentos } from '../../../hooks/useAtendimentos';
 
@@ -47,9 +49,38 @@ interface AttendanceTableProps {
   atendimentos: any[];
   isLoading?: boolean;
   calculateElapsedTime?: (dataAtendimento: string) => string;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }
 
-export function AttendanceTable({ atendimentos, isLoading = false, calculateElapsedTime }: AttendanceTableProps) {
+// Tom da coluna Tempo: sinaliza idade de atendimentos não concluídos
+// >30 dias = vermelho, >7 dias = amarelo (ajuda a ver gargalos sem ler)
+type ElapsedTone = 'normal' | 'warning' | 'danger';
+
+const getElapsedTone = (atendimento: any): ElapsedTone => {
+  if (!atendimento.data_atendimento || atendimento.status === 'Concluído') return 'normal';
+  const dias = Math.floor((Date.now() - new Date(atendimento.data_atendimento).getTime()) / 86400000);
+  if (dias > 30) return 'danger';
+  if (dias > 7) return 'warning';
+  return 'normal';
+};
+
+const elapsedTextClass: Record<ElapsedTone, string> = {
+  normal: 'text-gray-600 dark:text-gray-400',
+  warning: 'text-yellow-600 dark:text-yellow-400 font-medium',
+  danger: 'text-red-600 dark:text-red-400 font-medium',
+};
+
+const elapsedIconClass: Record<ElapsedTone, string> = {
+  normal: 'text-gray-400',
+  warning: 'text-yellow-500 dark:text-yellow-400',
+  danger: 'text-red-500 dark:text-red-400',
+};
+
+const formatDataAtendimento = (data?: string) =>
+  data ? `Data do atendimento: ${new Date(data).toLocaleDateString('pt-BR')}` : undefined;
+
+export function AttendanceTable({ atendimentos, isLoading = false, calculateElapsedTime, hasActiveFilters = false, onClearFilters }: AttendanceTableProps) {
   const navigate = useNavigate();
   const company = useCompanyStore((state) => state.company);
   const { updateAtendimentoStatus } = useAtendimentos();
@@ -59,6 +90,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const tableTopRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -94,6 +126,12 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    // Volta ao topo da lista — desconta o header fixo (~80px) para não ficar escondido
+    const el = tableTopRef.current;
+    if (!el) return;
+    const scroller = el.closest('main') as HTMLElement | null;
+    const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY) - 80;
+    (scroller || window).scrollTo({ top, behavior: 'smooth' });
   };
 
   const handleRowClick = (atendimento: any) => {
@@ -311,6 +349,32 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
   }
 
   if (atendimentos.length === 0) {
+    // Lista zerada por causa dos filtros ≠ empresa sem atendimentos
+    if (hasActiveFilters) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="rounded-full bg-gray-100 dark:bg-gray-700 p-3 mb-4">
+              <Filter className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+              Nenhum resultado para os filtros aplicados
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Tente ajustar a busca ou remover alguns filtros
+            </p>
+            {onClearFilters && (
+              <button
+                onClick={onClearFilters}
+                className="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <div className="flex flex-col items-center justify-center text-center">
@@ -330,7 +394,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
 
   return (
     <>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-visible">
+      <div ref={tableTopRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-visible">
         {/* Header com contagem total */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
           <div className="flex items-center justify-between">
@@ -381,6 +445,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                     key={atendimento.uid}
                     onClick={() => handleRowClick(atendimento)}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                    title="Clique para ver os detalhes do atendimento"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -391,7 +456,8 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                               navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
                             }
                           }}
-                          className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer"
+                          className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline cursor-pointer"
+                          title="Ver ficha do eleitor"
                         >
                           {getEleitorName(atendimento)}
                         </div>
@@ -423,9 +489,11 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                           className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium ${
                             statusConfig[atendimento.status as AtendimentoStatus]?.color
                           }`}
+                          title="Clique para alterar o status"
                         >
                           <StatusIcon className="h-4 w-4 mr-1" />
                           {atendimento.status}
+                          <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
                         </button>
                         
                         {openStatusMenu === atendimento.uid && (
@@ -460,9 +528,9 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2" title={formatDataAtendimento(atendimento.data_atendimento)}>
+                        <Clock className={`h-4 w-4 ${elapsedIconClass[getElapsedTone(atendimento)]}`} />
+                        <span className={`text-sm ${elapsedTextClass[getElapsedTone(atendimento)]}`}>
                           {atendimento.data_atendimento && calculateElapsedTime 
                             ? calculateElapsedTime(atendimento.data_atendimento)
                             : '-'}
@@ -485,10 +553,21 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                           <div className="absolute right-0 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
                             <button
                               onClick={(e) => {
-                                handlePrint(e, atendimento);
+                                e.stopPropagation();
+                                handleRowClick(atendimento);
                                 setOpenActionMenu(null);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Ver detalhes</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                handlePrint(e, atendimento);
+                                setOpenActionMenu(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
                             >
                               <Printer className="w-4 h-4" />
                               <span>Imprimir</span>
@@ -539,7 +618,16 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="text-base font-medium text-gray-900 dark:text-white truncate">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (atendimento.eleitor_uid) {
+                            navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
+                          }
+                        }}
+                        className="text-base font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer truncate"
+                        title="Ver ficha do eleitor"
+                      >
                         {getEleitorName(atendimento)}
                       </div>
                       {(() => {
@@ -569,10 +657,21 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                         <div className="absolute right-0 top-8 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
                           <button
                             onClick={(e) => {
-                              handlePrint(e, atendimento);
+                              e.stopPropagation();
+                              handleRowClick(atendimento);
                               setOpenActionMenu(null);
                             }}
                             className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 rounded-t-lg"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>Ver detalhes</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              handlePrint(e, atendimento);
+                              setOpenActionMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
                           >
                             <Printer className="w-4 h-4" />
                             <span>Imprimir</span>
@@ -614,6 +713,7 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                           statusConfig[atendimento.status as AtendimentoStatus]?.color
                         }`}
+                        title="Clique para alterar o status"
                       >
                         <StatusIcon className="w-3.5 h-3.5 mr-1" />
                         {atendimento.status}
@@ -652,8 +752,8 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                     </div>
                     
                     {atendimento.data_atendimento && calculateElapsedTime && (
-                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                        <Clock className="h-3.5 w-3.5" />
+                      <div className={`flex items-center gap-1 text-sm ${elapsedTextClass[getElapsedTone(atendimento)]}`} title={formatDataAtendimento(atendimento.data_atendimento)}>
+                        <Clock className={`h-3.5 w-3.5 ${elapsedIconClass[getElapsedTone(atendimento)]}`} />
                         <span>Há {calculateElapsedTime(atendimento.data_atendimento)}</span>
                       </div>
                     )}

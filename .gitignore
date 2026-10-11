@@ -12,3 +12,7 @@ gbp-main-dist/
 *.log
 *.aab
 *.tar.gz
+
+docker-compose.combined.yml
+
+gbp-main/.env

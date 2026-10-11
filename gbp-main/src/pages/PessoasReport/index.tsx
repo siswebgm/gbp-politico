@@ -2471,110 +2471,139 @@ export function PessoasReport() {
           {/* Cabeçalho com Total e Líderes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card Total de Eleitores */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Total de Eleitores</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                    <Users2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
-                  </div>
+            <Card className="p-4 sm:p-5 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-300">Total de Eleitores</h3>
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                  <Users2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                 </div>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
-                    {stats.totalEleitores.toLocaleString()}
-                  </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
-                    eleitores
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
-                  <span>{stats.porCidade.length} cidades</span>
-                  <span className="hidden sm:inline">•</span>
-                  <span>{stats.porBairro.length} bairros</span>
-                  <span className="hidden sm:inline">•</span>
-                  <span>{new Set(stats.porZonaSecao.map(z => z.zona)).size} zonas</span>
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
+                  {stats.totalEleitores.toLocaleString()}
+                </span>
+                <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
+                  eleitores
+                </span>
+              </div>
+              {/* Rodapé fixo no fim do card: distribuição + barra cheia (100%) */}
+              <div className="mt-auto pt-3">
+                <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-300 truncate block">
+                  {stats.porCidade.length} cidades · {stats.porBairro.length} bairros · {new Set(stats.porZonaSecao.map(z => z.zona)).size} zonas
+                </span>
+                <div className="mt-2 h-1 w-full bg-blue-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: '100%' }} />
                 </div>
               </div>
             </Card>
 
             {/* Cidade Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Cidade Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                    <Building2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
-                  </div>
+            <Card className="p-4 sm:p-5 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-300">Cidade Líder</h3>
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                  <Building2 className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                 </div>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
-                    {stats.porCidade[0]?.total.toLocaleString() || '0'}
-                  </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
-                    eleitores
-                  </span>
-                </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
+                  {stats.porCidade[0]?.total.toLocaleString() || '0'}
+                </span>
+                <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
+                  eleitores
+                </span>
+              </div>
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
                   <span className="font-medium text-gray-900 dark:text-white truncate" title={stats.porCidade[0]?.cidade || '-'}>
                     {stats.porCidade[0]?.cidade || '-'}
                   </span>
-                  <span>({((stats.porCidade[0]?.total / stats.totalEleitores) * 100).toFixed(1)}% do total)</span>
+                  <span className="shrink-0 font-semibold text-blue-600 dark:text-blue-300">
+                    {stats.totalEleitores ? ((stats.porCidade[0]?.total || 0) / stats.totalEleitores * 100).toFixed(1) : '0'}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1 w-full bg-blue-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${Math.max(stats.totalEleitores ? (stats.porCidade[0]?.total || 0) / stats.totalEleitores * 100 : 0, 2)}%` }}
+                  />
                 </div>
               </div>
             </Card>
 
             {/* Bairro Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Bairro Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                    <Home className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
-                  </div>
+            <Card className="p-4 sm:p-5 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-300">Bairro Líder</h3>
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                  <Home className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                 </div>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
-                    {stats.porBairro[0]?.total.toLocaleString() || '0'}
-                  </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
-                    eleitores
-                  </span>
-                </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
-                  <span className="font-medium text-gray-900 dark:text-white truncate" title={stats.porBairro[0]?.bairro || '-'}>
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
+                  {stats.porBairro[0]?.total.toLocaleString() || '0'}
+                </span>
+                <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
+                  eleitores
+                </span>
+              </div>
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+                  <span
+                    className="font-medium text-gray-900 dark:text-white truncate"
+                    title={`${stats.porBairro[0]?.bairro || '-'} · ${stats.porBairro[0]?.cidade || '-'}`}
+                  >
                     {stats.porBairro[0]?.bairro || '-'}
+                    {stats.porBairro[0]?.cidade && (
+                      <span className="font-normal text-gray-500 dark:text-gray-400"> · {stats.porBairro[0].cidade}</span>
+                    )}
                   </span>
-                  <span className="truncate" title={stats.porBairro[0]?.cidade || '-'}>
-                    {stats.porBairro[0]?.cidade || '-'}
+                  <span className="shrink-0 font-semibold text-blue-600 dark:text-blue-300">
+                    {stats.totalEleitores ? ((stats.porBairro[0]?.total || 0) / stats.totalEleitores * 100).toFixed(1) : '0'}%
                   </span>
-                  <span>({((stats.porBairro[0]?.total / stats.totalEleitores) * 100).toFixed(1)}% do total)</span>
+                </div>
+                <div className="mt-2 h-1 w-full bg-blue-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${Math.max(stats.totalEleitores ? (stats.porBairro[0]?.total || 0) / stats.totalEleitores * 100 : 0, 2)}%` }}
+                  />
                 </div>
               </div>
             </Card>
 
             {/* Zona Líder */}
-            <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg">
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-600 dark:text-white">Zona Líder</h3>
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                    <MapPin className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
-                  </div>
+            <Card className="p-4 sm:p-5 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 shadow-lg flex flex-col">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-300">Zona Líder</h3>
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                  <MapPin className="w-4 sm:w-5 h-4 sm:h-5 text-blue-600 dark:text-blue-300" />
                 </div>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
-                    {stats.porZonaSecao[0]?.total.toLocaleString() || '0'}
-                  </span>
-                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
-                    eleitores
-                  </span>
-                </div>
-                <div className="flex flex-col space-y-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
-                  <span className="font-medium text-gray-900 dark:text-white">
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-white">
+                  {stats.porZonaSecao[0]?.total.toLocaleString() || '0'}
+                </span>
+                <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-300">
+                  eleitores
+                </span>
+              </div>
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+                  <span className="font-medium text-gray-900 dark:text-white truncate">
                     Zona {stats.porZonaSecao[0]?.zona || '-'}
+                    {stats.porZonaSecao[0]?.secao && (
+                      <span className="font-normal text-gray-500 dark:text-gray-400"> · Seção {stats.porZonaSecao[0].secao}</span>
+                    )}
                   </span>
-                  <span>Seção {stats.porZonaSecao[0]?.secao || '-'}</span>
-                  <span>({((stats.porZonaSecao[0]?.total / stats.totalEleitores) * 100).toFixed(1)}% do total)</span>
+                  <span className="shrink-0 font-semibold text-blue-600 dark:text-blue-300">
+                    {stats.totalEleitores ? ((stats.porZonaSecao[0]?.total || 0) / stats.totalEleitores * 100).toFixed(1) : '0'}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1 w-full bg-blue-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${Math.max(stats.totalEleitores ? (stats.porZonaSecao[0]?.total || 0) / stats.totalEleitores * 100 : 0, 2)}%` }}
+                  />
                 </div>
               </div>
             </Card>
@@ -2583,14 +2612,14 @@ export function PessoasReport() {
           {/* Distribuição por Faixa Etária */}
           <Card id="secao-faixa-etaria" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <Users2 className="w-5 h-5 text-blue-600" />
                   Distribuição por Faixa Etária
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Baseado na data de nascimento cadastrada
-                  {faixasEtarias.semInfo > 0 && ` • ${faixasEtarias.semInfo} sem informação`}
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Baseado na data de nascimento cadastrada${faixasEtarias.semInfo > 0 ? ` • ${faixasEtarias.semInfo} sem informação` : ''}`}>
+                  Por nascimento
+                  {faixasEtarias.semInfo > 0 && ` · ${faixasEtarias.semInfo} sem info`}
                 </p>
               </div>
               <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
@@ -2730,13 +2759,13 @@ export function PessoasReport() {
           {/* Qualidade do Cadastro — percentual de campos preenchidos */}
           <Card className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <ClipboardCheck className="w-5 h-5 text-emerald-600" />
                   Qualidade do Cadastro
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Percentual de preenchimento dos campos — útil para saber quais dados faltam para a estratégia
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title="Percentual de preenchimento dos campos — útil para saber quais dados faltam para a estratégia">
+                  Campos preenchidos do cadastro
                 </p>
               </div>
               <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
@@ -2822,13 +2851,13 @@ export function PessoasReport() {
           {/* Distribuição por Cidade com Análise de Crescimento */}
           <Card id="secao-cidades" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Distribuição por Cidade
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porCidade.length} cidades • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porCidade.length} cidades • Análise de crescimento mensal e anual`}>
+                  Total: {stats.porCidade.length} cidades · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -3292,13 +3321,13 @@ export function PessoasReport() {
           {/* Distribuição por Indicado com Análise de Crescimento */}
           <Card id="secao-indicados" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Distribuição por Indicado
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porIndicado.length} indicados • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porIndicado.length} indicados • Análise de crescimento mensal e anual`}>
+                  Total: {stats.porIndicado.length} indicados · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -3599,13 +3628,13 @@ export function PessoasReport() {
           {/* Distribuição por Categoria com Análise de Crescimento */}
           <Card id="secao-categorias" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Distribuição por Categoria
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {categorias.length} categorias • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${categorias.length} categorias • Análise de crescimento mensal e anual`}>
+                  Total: {categorias.length} categorias · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -3926,13 +3955,13 @@ export function PessoasReport() {
           {/* Distribuição por Bairro com Análise de Crescimento */}
           <Card id="secao-bairros" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Distribuição por Bairro
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porBairro.length} bairros em {new Set(stats.porBairro.map(b => b.cidade)).size} cidades • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porBairro.length} bairros em ${new Set(stats.porBairro.map(b => b.cidade)).size} cidades • Análise de crescimento mensal e anual`}>
+                  {stats.porBairro.length} bairros · {new Set(stats.porBairro.map(b => b.cidade)).size} cidades · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -4306,13 +4335,13 @@ export function PessoasReport() {
           {/* Distribuição por Logradouro */}
           <Card id="secao-logradouros" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <Route className="h-5 w-5 text-blue-500" />
                   Distribuição por Logradouro
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Ruas agrupadas por bairro e cidade — clique na linha para ver os eleitores cadastrados e seus atendimentos
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title="Agrupadas por bairro e cidade — toque na linha para expandir">
+                  Agrupadas por bairro e cidade
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -4573,13 +4602,13 @@ export function PessoasReport() {
           {/* Distribuição por Zona e Seção com Análise de Crescimento */}
           <Card id="secao-zonas" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Distribuição por Zona e Seção
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porZonaSecao.length} zonas/seções • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porZonaSecao.length} zonas/seções • Análise de crescimento mensal e anual`}>
+                  Total: {stats.porZonaSecao.length} zonas/seções · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -4892,12 +4921,12 @@ export function PessoasReport() {
           {/* Top 5 Eleitores com Mais Atendimentos */}
           <Card id="secao-atendimentos" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
                   <Users2 className="w-5 h-5 text-gray-900 dark:text-white" />
                   Top 20 Eleitores - Atendimentos
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Eleitores com maior número de atendimentos registrados</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title="Eleitores com maior número de atendimentos registrados">Eleitores com mais atendimentos</p>
               </div>
               <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
                 <button
@@ -5025,13 +5054,13 @@ export function PessoasReport() {
           {/* Tabela de Confiabilidade */}
           <Card id="secao-confiabilidade" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Confiabilidade do Voto
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porConfiabilidade.length} níveis • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porConfiabilidade.length} níveis • Análise de crescimento mensal e anual`}>
+                  Total: {stats.porConfiabilidade.length} níveis · mensal/anual
                 </p>
               </div>
               <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
@@ -5327,12 +5356,12 @@ export function PessoasReport() {
           {/* Aniversariantes do Mês */}
           <Card id="secao-aniversariantes" className="p-4 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0 w-full">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
                   <Cake className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                   Aniversariantes do Mês
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Visualize todos os aniversariantes do mês selecionado</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title="Visualize todos os aniversariantes do mês selecionado">Aniversariantes do mês selecionado</p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <input
@@ -5769,13 +5798,13 @@ export function PessoasReport() {
           {/* Tabela de Usuários */}
           <Card id="secao-usuarios" className="p-4 mb-8 dark:bg-gray-900">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Cadastros por Usuário
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Total: {stats.porUsuario.length} usuários ativos • Análise de crescimento mensal e anual
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={`Total: ${stats.porUsuario.length} usuários ativos • Análise de crescimento mensal e anual`}>
+                  Total: {stats.porUsuario.length} usuários · mensal/anual
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
