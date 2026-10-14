@@ -268,11 +268,14 @@ export const NestedCategoryDropdown: React.FC<NestedCategoryDropdownProps> = ({
     return createPortal(
       <>
         {/* Backdrop para evitar interações com elementos abaixo */}
+        {/* pointerEvents: 'auto' — modais Radix/shadcn aplicam pointer-events:none
+            no body; sem isso o portal ficaria visível mas não clicável */}
         <div 
           className="fixed inset-0 bg-transparent"
-          style={{ zIndex: 40 }}
+          style={{ zIndex: 40, pointerEvents: 'auto' }}
           onClick={() => setIsOpen(false)}
           onWheel={handleBackdropWheel}
+          data-remove-scroll-shard
         />
         
         {/* Dropdown */}
@@ -286,8 +289,10 @@ export const NestedCategoryDropdown: React.FC<NestedCategoryDropdownProps> = ({
             top: abreParaCima ? 'auto' : posicao.top,
             bottom: abreParaCima ? posicao.bottom : 'auto',
             maxHeight: `${maxAltura}px`,
-            zIndex: 9999
+            zIndex: 9999,
+            pointerEvents: 'auto'
           }}
+          data-remove-scroll-shard
         >
           {/* Busca interna — fica fixa no topo enquanto a lista rola */}
           <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-3 py-2">

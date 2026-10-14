@@ -28,6 +28,7 @@ import { AttendanceDrawer } from './AttendanceDrawer';
 import ShareAtendimentoModal from '../../../components/ShareAtendimentoModal';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { carregarImagemBase64, desenharBlocoAtendimento, extrairFotoUrl } from '../../../utils/atendimentoPdf';
 
 const statusConfig = {
   'Pendente': {
@@ -212,68 +213,15 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
     doc.setTextColor(0, 0, 0);
     doc.text('Detalhes do Atendimento', 105, 20, { align: 'center' });
     
-    let yPos = 35;
-    
-    const dataAtendimento = atendimento.data_atendimento 
-      ? new Date(atendimento.data_atendimento).toLocaleDateString('pt-BR')
-      : '-';
-    
-    // Cabeçalho do atendimento
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setFillColor(0, 87, 231);
-    doc.setTextColor(255, 255, 255);
-    doc.rect(10, yPos - 5, 190, 8, 'F');
-    doc.text('Informações do Atendimento', 15, yPos);
-    
-    // Dados do atendimento
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    yPos += 10;
-    
-    const dados = [
-      ['Eleitor:', atendimento.eleitor || atendimento.gbp_eleitores?.nome || '-', 'WhatsApp:', atendimento.whatsapp || '-'],
-      ['CPF:', atendimento.cpf || '-', 'Número do SUS:', atendimento.numero_do_sus || '-'],
-      ['Cidade:', atendimento.cidade || '-', 'Bairro:', atendimento.bairro || '-'],
-      ['Logradouro:', atendimento.logradouro || '-', 'CEP:', atendimento.cep || '-'],
-      ['Categoria:', atendimento.gbp_categorias?.nome || '-', 'Status:', atendimento.status || '-'],
-      ['Responsável:', atendimento.gbp_usuarios?.nome || '-', 'Indicado por:', atendimento.indicado || '-'],
-      ['Data do Atendimento:', dataAtendimento, '', '']
-    ];
-    
-    dados.forEach(([label1, value1, label2, value2]) => {
-      // Coluna 1
-      doc.setFont('helvetica', 'bold');
-      doc.text(label1, 15, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(value1, 60, yPos);
-      
-      // Coluna 2 - só se houver
-      if (label2) {
-        doc.setFont('helvetica', 'bold');
-        doc.text(label2, 120, yPos);
-        doc.setFont('helvetica', 'normal');
-        doc.text(value2, 165, yPos);
-      }
-      
-      yPos += 7;
-    });
-    
-    // Descrição
-    if (atendimento.descricao) {
-      yPos += 3;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Descrição:', 15, yPos);
-      doc.setFont('helvetica', 'normal');
-      
-      const descricaoLines = doc.splitTextToSize(atendimento.descricao, 170);
-      descricaoLines.forEach((line: string) => {
-        yPos += 5;
-        doc.text(line, 15, yPos);
-      });
-    }
-    
+    // Carrega a foto do eleitor (gbp_eleitores.foto_url)
+    const fotoUrl = extrairFotoUrl(atendimento.gbp_eleitores?.foto_url);
+    const fotoBase64 = fotoUrl ? await carregarImagemBase64(fotoUrl) : null;
+
+    const tituloBloco = atendimento.numero
+      ? `Atendimento Nº ${atendimento.numero}`
+      : 'Informações do Atendimento';
+    desenharBlocoAtendimento(doc, atendimento, 35, tituloBloco, fotoBase64);
+
     // Rodapé
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');

@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 COPY server.js ./
+COPY google.js ./
 
 ENV PORT=3400
 EXPOSE 3400

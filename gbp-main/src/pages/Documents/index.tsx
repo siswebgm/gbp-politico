@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, FolderOpen } from 'lucide-react';
 import { DocumentCards } from './components/DocumentCards';
 import { DocumentsSummary } from './components/DocumentsSummary';
 import { useCompanyStore } from '../../store/useCompanyStore';
@@ -53,25 +53,35 @@ export function Documents() {
       <div className="flex-1 py-2 md:py-6 px-4">
         <div className="flex flex-col space-y-2 md:space-y-4">
           {/* Header Section */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 md:p-4">
-            <div className="flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-gray-100 dark:ring-gray-700/60 p-3 md:p-4">
+            <div className="flex items-center gap-3">
               <button 
                 onClick={() => navigate('/app/dashboard')} 
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                 aria-label="Voltar para Dashboard"
               >
                 <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-gray-500 dark:text-gray-400" />
               </button>
-              <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">
-                Documentos
-              </h1>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-100 dark:ring-blue-800/40 shrink-0">
+                  <FolderOpen className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white leading-tight truncate">
+                    Documentos
+                  </h1>
+                  <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 truncate">
+                    Central de documentos do gabinete
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Main Content */}
           <div className="space-y-4">
-            <DocumentsSummary />
             <DocumentCards />
+            <DocumentsSummary />
           </div>
         </div>
       </div>

@@ -49,7 +49,8 @@ export function useAtendimentos() {
           gbp_categorias:gbp_categorias!gbp_atendimentos_categoria_uid_fkey (uid, nome, tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(uid, nome))
         `)
         .eq('empresa_uid', companyUid)
-        .eq('oculto', false)
+        // Só atendimentos visíveis (oculto = false ou NULL — coluna nullable)
+        .or('oculto.is.null,oculto.eq.false')
         .order('data_atendimento', { ascending: false });
 
       if (atendimentosError) {
@@ -58,42 +59,125 @@ export function useAtendimentos() {
       }
 
       // Buscar dados relacionados em queries separadas
-      const eleitorUids = [...new Set(
-        (atendimentosData || [])
-          .map(a => a.eleitor_uid)
-          .filter((uid): uid is string => Boolean(uid))
-      )];
       const usuarioUids = (atendimentosData || [])
         .map(a => a.usuario_uid)
         .filter((uid): uid is string => Boolean(uid));
 
-      const eleitoresResponse = eleitorUids.length > 0
-        ? await supabaseClient
+      // .in() com centenas de uids derruba o PostgREST (502 Bad Gateway).
+      // Alternativa estável: paginar por empresa_uid (coluna indexada),
+      // 1000 linhas por vez — query simples que o servidor aguenta.
+      const buscarEleitoresDaEmpresa = async (select: string) => {
+        const linhas: any[] = [];
+        let erro: any = null;
+        const PAGINA = 1000;
+        for (let offset = 0; ; offset += PAGINA) {
+          const resp = await supabaseClient
             .from('gbp_eleitores')
-            .select('uid, nome, foto_url')
-            .in('uid', eleitorUids)
-        : { data: [], error: null };
+            .select(select)
+            .eq('empresa_uid', companyUid)
+            .range(offset, offset + PAGINA - 1);
+          if (resp.error) {
+            erro = resp.error;
+            console.error(`[gbp_eleitores] página ${offset / PAGINA + 1} falhou:`, resp.error);
+            break;
+          }
+          linhas.push(...(resp.data || []));
+          if ((resp.data || []).length < PAGINA) break;
+        }
+        return { data: linhas, error: erro };
+      };
 
-      // Buscar usuários
-      const usuariosResponse = await supabaseClient
-        .from('gbp_usuarios')
-        .select('uid, nome')
-        .in('uid', usuarioUids);
+      // Query simples (sem embeds) — embeds com hint de FK falham inteiro se
+      // qualquer relacionamento/coluna estiver diferente no schema
+      let eleitoresResponse = await buscarEleitoresDaEmpresa(
+        `uid, nome, cpf, nascimento, whatsapp, genero,
+         cep, logradouro, cidade, uf, bairro, numero, complemento,
+         numero_do_sus, foto_url, indicado_uid, categoria_uid`
+      );
+
+      // Fallback: se alguma coluna não existir no schema, tenta o mínimo
+      if (eleitoresResponse.error) {
+        console.error('Eleitores (select completo) falhou:', eleitoresResponse.error);
+        eleitoresResponse = await buscarEleitoresDaEmpresa(
+          'uid, nome, cpf, whatsapp, bairro, cidade, uf, foto_url'
+        );
+      }
+
+      // .in() em listas pequenas (indicados/categorias/usuários) é seguro
+      const buscarPorLotes = async (tabela: string, select: string, uids: string[], tamanhoLote = 100) => {
+        const linhas: any[] = [];
+        let erro: any = null;
+        for (let i = 0; i < uids.length; i += tamanhoLote) {
+          const lote = uids.slice(i, i + tamanhoLote);
+          const resp = await supabaseClient.from(tabela).select(select).in('uid', lote);
+          if (resp.error) {
+            erro = resp.error;
+            console.error(`[${tabela}] lote ${i / tamanhoLote + 1} falhou:`, resp.error);
+            continue; // continua nos demais lotes — dado parcial > nada
+          }
+          linhas.push(...(resp.data || []));
+        }
+        return { data: linhas, error: erro };
+      };
+
+      // Relacionamentos do eleitor em queries separadas (padrão dos usuários)
+      const indicadoUids = [...new Set(
+        (eleitoresResponse.data || []).map((e: any) => e.indicado_uid).filter(Boolean)
+      )];
+      const categoriaEleitorUids = [...new Set(
+        (eleitoresResponse.data || []).map((e: any) => e.categoria_uid).filter(Boolean)
+      )];
+
+      // gbp_atendimentos.indicado é texto: pode guardar o uid do
+      // gbp_indicado (relacionamento) ou o nome direto — coleta os uids
+      const REGEX_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const indicadoAtendUids = [...new Set(
+        (atendimentosData || [])
+          .map((a: any) => a.indicado)
+          .filter((v: any): v is string => typeof v === 'string' && REGEX_UUID.test(v))
+      )] as string[];
+
+      const [indicadosResponse, categoriasEleitorResponse, indicadosAtendResponse] = await Promise.all([
+        buscarPorLotes('gbp_indicado', 'uid, nome', indicadoUids as string[]),
+        buscarPorLotes('gbp_categorias', 'uid, nome', categoriaEleitorUids as string[]),
+        buscarPorLotes('gbp_indicado', 'uid, nome', indicadoAtendUids),
+      ]);
+
+      // Anexa indicado/categoria em cada eleitor
+      const eleitoresData = (eleitoresResponse.data || []).map((e: any) => ({
+        ...e,
+        gbp_indicado: indicadosResponse.data?.find((i: any) => i.uid === e.indicado_uid) || null,
+        gbp_categorias: categoriasEleitorResponse.data?.find((c: any) => c.uid === e.categoria_uid) || null,
+      }));
+
+      // Buscar usuários (também em lotes)
+      const usuariosResponse = await buscarPorLotes('gbp_usuarios', 'uid, nome', usuarioUids);
 
       // Log dos dados
       console.log('Dados dos atendimentos:', atendimentosData);
       console.log('Erro dos atendimentos:', atendimentosError);
       console.log('Dados dos usuários:', usuariosResponse.data);
       console.log('Erro dos usuários:', usuariosResponse.error);
-      console.log('Dados dos eleitores:', eleitoresResponse.data);
+      console.log('Dados dos eleitores:', eleitoresData);
       console.log('Erro dos eleitores:', eleitoresResponse.error);
+      console.log('Erro dos indicados:', indicadosResponse.error);
+      console.log('Indicados (uids nos atendimentos):', indicadoAtendUids);
+      console.log('Indicados resolvidos:', indicadosAtendResponse.data, 'erro:', indicadosAtendResponse.error);
+      console.log('Erro das categorias do eleitor:', categoriasEleitorResponse.error);
 
       const atendimentosCompletos = atendimentosData?.map(atendimento => {
-        console.log('Processando atendimento:', atendimento);
+        // indicado (texto): uuid → resolve no gbp_indicado; texto → usa direto
+        const indicadoNome =
+          typeof atendimento.indicado === 'string' && REGEX_UUID.test(atendimento.indicado)
+            ? indicadosAtendResponse.data?.find((i: any) => i.uid === atendimento.indicado)?.nome
+              || eleitoresData.find((e: any) => e.uid === atendimento.indicado)?.nome // pode apontar p/ eleitor
+              || null
+            : atendimento.indicado || null;
         return {
           ...atendimento,
           eleitor: atendimento.eleitor || null,
-          gbp_eleitores: eleitoresResponse.data?.find(e => e.uid === atendimento.eleitor_uid) || null,
+          indicado_nome: indicadoNome,
+          gbp_eleitores: eleitoresData.find(e => e.uid === atendimento.eleitor_uid) || null,
           gbp_usuarios: usuariosResponse.data?.find(u => u.uid === atendimento.usuario_uid) || null,
           gbp_categorias: atendimento.gbp_categorias || null
         };

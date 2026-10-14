@@ -471,16 +471,17 @@ export const NovaPessoa: React.FC = () => {
   // Função para abrir o modal de atendimentos
   const abrirModalAtendimentos = () => {
     setShowModalAtendimentos(true);
-    setNovoAtendimentoCategoria(categoriaUid);
-    setNovoAtendimentoCategoriaPrincipal('');
+    // Pré-seleciona a categoria do eleitor; o tipo é derivado dela
+    setNovoAtendimentoCategoriaPrincipal(categoriaUid || '');
+    setNovoAtendimentoCategoria(categorias?.find(c => c.uid === categoriaUid)?.tipo_uid || '');
     setNovoAtendimentoErrors({ categoria: '', categoriaPrincipal: '', descricao: '', status: '' });
   };
 
   // Função para adicionar atendimento à lista (dentro do modal)
   const adicionarAtendimentoNoModal = () => {
-    if (!novoAtendimentoCategoria || !novoAtendimentoCategoriaPrincipal || !novoAtendimentoDescricao || !novoAtendimentoStatus) {
+    if (!novoAtendimentoCategoriaPrincipal || !novoAtendimentoDescricao || !novoAtendimentoStatus) {
       setNovoAtendimentoErrors({
-        categoria: !novoAtendimentoCategoria ? 'Campo obrigatório' : '',
+        categoria: '',
         categoriaPrincipal: !novoAtendimentoCategoriaPrincipal ? 'Campo obrigatório' : '',
         descricao: !novoAtendimentoDescricao ? 'Campo obrigatório' : '',
         status: !novoAtendimentoStatus ? 'Campo obrigatório' : ''
@@ -500,8 +501,8 @@ export const NovaPessoa: React.FC = () => {
     ]);
 
     // Limpar todos os campos após adicionar
-    setNovoAtendimentoCategoria(categoriaUid);
-    setNovoAtendimentoCategoriaPrincipal('');
+    setNovoAtendimentoCategoriaPrincipal(categoriaUid || '');
+    setNovoAtendimentoCategoria(categorias?.find(c => c.uid === categoriaUid)?.tipo_uid || '');
     setNovoAtendimentoDescricao('');
     setNovoAtendimentoStatus('Pendente');
     setNovoAtendimentoAnexos([]);
@@ -847,10 +848,6 @@ export const NovaPessoa: React.FC = () => {
     });
   };
 
-  // Efeito para limpar categoria principal quando o tipo mudar
-  useEffect(() => {
-    setNovoAtendimentoCategoriaPrincipal('');
-  }, [novoAtendimentoCategoria]);
   const [atendimentoErrors, setAtendimentoErrors] = useState({
     categoria: '',
     descricao: '',
@@ -2562,7 +2559,14 @@ export const NovaPessoa: React.FC = () => {
         />
 
         {/* Modal de Atendimentos Adicionais */}
-        <Dialog open={showModalAtendimentos} onOpenChange={setShowModalAtendimentos}>
+        {/* modal={false}: o NestedCategoryDropdown renderiza via portal fora do
+            Dialog; com modal=true o Radix bloqueia foco/clique/scroll externos.
+            Como o Radix não renderiza o Overlay em modo não-modal, usamos um
+            overlay manual (z-40, abaixo do DialogContent z-50) para escurecer o fundo */}
+        {showModalAtendimentos && (
+          <div className="fixed inset-0 z-40 bg-black/50" aria-hidden="true" />
+        )}
+        <Dialog open={showModalAtendimentos} onOpenChange={setShowModalAtendimentos} modal={false}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Gerenciar Atendimentos</DialogTitle>
@@ -2699,62 +2703,22 @@ export const NovaPessoa: React.FC = () => {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                      Tipo de Categoria <span className="text-red-500">*</span>
+                      Categoria <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={novoAtendimentoCategoria}
-                      onChange={(e) => {
-                        setNovoAtendimentoCategoria(e.target.value);
-                        setNovoAtendimentoErrors(prev => ({ ...prev, categoria: '' }));
+                    <NestedCategoryDropdown
+                      value={novoAtendimentoCategoriaPrincipal}
+                      onChange={(uid) => {
+                        setNovoAtendimentoCategoriaPrincipal(uid);
+                        // O tipo da categoria é derivado automaticamente
+                        setNovoAtendimentoCategoria(categorias?.find(c => c.uid === uid)?.tipo_uid || '');
+                        setNovoAtendimentoErrors(prev => ({ ...prev, categoria: '', categoriaPrincipal: '' }));
                       }}
-                      className={`mt-1 block w-full appearance-none pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white ${novoAtendimentoErrors.categoria ? 'border-red-500' : ''}`}
-                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-                      disabled={isLoadingCategoriaTipos}
-                    >
-                      <option value="">Selecione o tipo</option>
-                      {categoriaTipos?.map((categoria) => (
-                        <option key={categoria.uid} value={categoria.uid}>
-                          {categoria.nome}
-                        </option>
-                      ))}
-                    </select>
-                    {isLoadingCategoriaTipos && (
-                      <p className="mt-1 text-sm text-gray-500">Carregando tipos...</p>
-                    )}
-                    {novoAtendimentoErrors.categoria && (
-                      <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.categoria}</p>
-                    )}
+                      categories={categorias || []}
+                      isLoading={isLoadingCategorias}
+                      placeholder="Selecione a categoria"
+                      error={novoAtendimentoErrors.categoriaPrincipal || novoAtendimentoErrors.categoria || undefined}
+                    />
                   </div>
-                  {novoAtendimentoCategoria && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
-                        Categoria Principal <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={novoAtendimentoCategoriaPrincipal}
-                        onChange={(e) => {
-                          setNovoAtendimentoCategoriaPrincipal(e.target.value);
-                          setNovoAtendimentoErrors(prev => ({ ...prev, categoriaPrincipal: '' }));
-                        }}
-                        className="mt-1 block w-full appearance-none pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                        style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
-                        disabled={isLoadingCategorias}
-                      >
-                        <option value="">Selecione a categoria</option>
-                        {categorias?.filter(cat => cat.tipo_uid === novoAtendimentoCategoria).map((categoria) => (
-                          <option key={categoria.uid} value={categoria.uid}>
-                            {categoria.nome}
-                          </option>
-                        ))}
-                      </select>
-                      {isLoadingCategorias && (
-                        <p className="mt-1 text-sm text-gray-500">Carregando categorias...</p>
-                      )}
-                      {novoAtendimentoErrors.categoriaPrincipal && (
-                        <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.categoriaPrincipal}</p>
-                      )}
-                    </div>
-                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-1">
                       Descrição do Atendimento <span className="text-red-500">*</span>

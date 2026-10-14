@@ -13,6 +13,8 @@ import { AttendanceTable } from './components/AttendanceTable';
 import { useNavigate } from 'react-router-dom';
 import { useCategories } from '../../hooks/useCategories';
 import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
+import { carregarFotosAtendimentos, desenharBlocoAtendimento, estimarAlturaBloco } from '../../utils/atendimentoPdf';
+import { useToast } from '../../hooks/useToast';
 
 type AtendimentoStatus = 'Pendente' | 'Em Andamento' | 'Concluído';
 
@@ -28,7 +30,8 @@ export function AttendanceList() {
       </div>
     );
   }
-  const { data: atendimentos = [], isLoading } = useAtendimentos();
+  const { data: atendimentos = [], isLoading, isFetching } = useAtendimentos();
+  const toast = useToast();
   const { data: categorias } = useCategories();
   const { user } = useAuth();
   
@@ -91,6 +94,28 @@ export function AttendanceList() {
   };
 
   const handleExportPDF = async () => {
+    // Não permite gerar PDF antes dos dados carregarem — evita relatório vazio
+    if (isLoading || isFetching) {
+      toast.showToast({
+        title: 'Aguarde o carregamento',
+        description: 'Os atendimentos ainda estão sendo carregados. Tente novamente em alguns segundos.',
+        type: 'warning',
+      });
+      return;
+    }
+    if (filteredAtendimentos.length === 0) {
+      toast.showToast({
+        title: 'Nada para exportar',
+        description: 'Nenhum atendimento encontrado com os filtros atuais.',
+        type: 'warning',
+      });
+      return;
+    }
+    const semEleitor = filteredAtendimentos.filter((a) => !a.gbp_eleitores).length;
+    if (semEleitor > 0) {
+      console.warn(`[PDF] ${semEleitor}/${filteredAtendimentos.length} atendimentos sem gbp_eleitores carregado`);
+    }
+
     const doc = new jsPDF();
     // Cabeçalho com nome do sistema
     doc.setFontSize(10);
@@ -108,97 +133,60 @@ export function AttendanceList() {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0); // Preto
     doc.text('Relatório de Atendimentos', 105, 20, { align: 'center' });
-    
-    let yPos = 35;
-    
-    filteredAtendimentos.forEach((atendimento, index) => {
-      // Adiciona uma nova página se não houver espaço suficiente
-      if (yPos > 250) {
-        // Adiciona rodapé na página atual
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(128, 128, 128);
-        doc.text(`Página ${doc.getCurrentPageInfo().pageNumber}`, 105, 290, { align: 'center' });
-        
-        // Nova página
-        doc.addPage();
-        yPos = 35;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total: ${filteredAtendimentos.length} atendimento(s)`, 105, 27, { align: 'center' });
 
-        // Adiciona cabeçalho na nova página
-        doc.setFontSize(10);
-        doc.text('GBP Político', 15, 10);
-        doc.text(dataHora, 195, 10, { align: 'right' });
-      }
+    // Pré-carrega as fotos dos eleitores (gbp_eleitores.foto_url)
+    const fotos = await carregarFotosAtendimentos(filteredAtendimentos);
 
-      const dataAtendimento = atendimento.data_atendimento 
-        ? new Date(atendimento.data_atendimento).toLocaleDateString('pt-BR')
-        : '-';
-
-      // Cabeçalho do atendimento
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setFillColor(0, 87, 231);
-      doc.setTextColor(255, 255, 255);
-      doc.rect(10, yPos - 5, 190, 8, 'F');
-      doc.text(`Atendimento ${index + 1}`, 15, yPos);
-      
-      // Dados do atendimento
+    const cabecalhoPagina = () => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(128, 128, 128);
+      doc.text('GBP Político', 15, 10);
+      doc.text(dataHora, 195, 10, { align: 'right' });
       doc.setTextColor(0, 0, 0);
-      yPos += 10;
+    };
 
-      const dados = [
-        ['Eleitor:', atendimento.eleitor || '-', 'WhatsApp:', atendimento.whatsapp || '-'],
-        ['CPF:', atendimento.cpf || '-', 'Número do SUS:', atendimento.numero_do_sus || '-'],
-        ['Cidade:', atendimento.cidade || '-', 'Bairro:', atendimento.bairro || '-'],
-        ['Logradouro:', atendimento.logradouro || '-', 'CEP:', atendimento.cep || '-'],
-        ['Categoria:', atendimento.gbp_categorias?.nome || '-', 'Status:', atendimento.status || '-'],
-        ['Responsável:', atendimento.gbp_usuarios?.nome || '-', 'Indicado por:', atendimento.indicado || '-'],
-        ['Data do Atendimento:', dataAtendimento, '', '']
-      ];
+    const rodapePagina = () => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(128, 128, 128);
+      doc.text(`Página ${doc.getCurrentPageInfo().pageNumber}`, 105, 290, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+    };
 
-      dados.forEach(([label1, value1, label2, value2]) => {
-        // Coluna 1
-        doc.setFont('helvetica', 'bold');
-        doc.text(label1, 15, yPos);
-        doc.setFont('helvetica', 'normal');
-        const valueWidth1 = doc.getTextWidth(value1);
-        doc.text(value1, 60, yPos);
+    // Quebra de página dentro de um bloco: fecha a página atual e abre outra
+    const novaPagina = () => {
+      rodapePagina();
+      doc.addPage();
+      cabecalhoPagina();
+      return 35;
+    };
 
-        // Coluna 2 - só se houver
-        if (label2) {
-          doc.setFont('helvetica', 'bold');
-          doc.text(label2, 120, yPos);
-          doc.setFont('helvetica', 'normal');
-          doc.text(value2, 165, yPos);
-        }
+    let yPos = 35;
 
-        yPos += 7;
-      });
-
-      // Descrição
-      if (atendimento.descricao) {
-        yPos += 3;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Descrição:', 15, yPos);
-        doc.setFont('helvetica', 'normal');
-        
-        const descricaoLines = doc.splitTextToSize(atendimento.descricao, 170);
-        descricaoLines.forEach(line => {
-          yPos += 5;
-          doc.text(line, 15, yPos);
-        });
+    for (const [index, atendimento] of filteredAtendimentos.entries()) {
+      // O bloco pode quebrar no meio (garantirEspaco cuida) — só pula de
+      // página quando sobrar pouco espaço, senão a folha fica vazia embaixo
+      const alturaBloco = estimarAlturaBloco(doc, atendimento, fotos.has(atendimento.uid));
+      const espacoRestante = 275 - yPos;
+      if (alturaBloco > espacoRestante && espacoRestante < 45) {
+        yPos = novaPagina();
       }
 
-      // Linha divisória entre atendimentos
-      yPos += 10;
-      doc.setDrawColor(200, 200, 200);
-      doc.line(10, yPos - 5, 200, yPos - 5);
-      yPos += 10;
-    });
+      yPos = desenharBlocoAtendimento(
+        doc,
+        atendimento,
+        yPos,
+        `Atendimento Nº ${atendimento.numero || index + 1}`,
+        fotos.get(atendimento.uid) || null,
+        novaPagina
+      );
+    }
 
-    // Adiciona rodapé na última página
+    // Rodapé na última página
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(128, 128, 128);
@@ -398,7 +386,8 @@ export function AttendanceList() {
                               handleExportPDF();
                               setShowExportMenu(false);
                             }}
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                            disabled={isLoading || isFetching}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <FileText className="w-4 h-4 text-red-600" />
                             <span>Exportar PDF</span>

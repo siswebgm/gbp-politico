@@ -1275,6 +1275,8 @@ export const eleitorStatsService = {
           .from('gbp_atendimentos')
           .select('eleitor_uid, data_atendimento, tipo_de_atendimento, status, descricao')
           .eq('empresa_uid', empresa_uid)
+          // Só atendimentos visíveis (oculto = false ou NULL — coluna nullable)
+          .or('oculto.is.null,oculto.eq.false')
           .order('data_atendimento', { ascending: false });
 
         if (atendimentosErr) {
@@ -1363,27 +1365,16 @@ export const eleitorStatsService = {
 
       console.log('Confiabilidade processada:', porConfiabilidade.length);
 
-      // Inicializar array vazio para os top eleitores
-      let topEleitoresAtendimentos: any[] = [];
-      
-      try {
-        // Buscar contagem de atendimentos por eleitor usando SQL direto
-        const { data: atendimentosCount, error: atendimentosError } = await supabaseClient
-          .rpc('get_top_eleitores_atendimentos', {
-            p_empresa_uid: empresa_uid,
-            p_limit: 20
-          });
-
-        if (atendimentosError) {
-          console.error('Erro ao buscar atendimentos:', atendimentosError);
-          // Não lançar erro, apenas logar e continuar com array vazio
-        } else if (atendimentosCount) {
-          topEleitoresAtendimentos = atendimentosCount;
-        }
-      } catch (error) {
-        console.error('Erro ao processar atendimentos:', error);
-        // Continuar com array vazio em caso de erro
-      }
+      // Top 20 eleitores por atendimentos — computado a partir de
+      // atendimentosPorEleitor (já filtrado por oculto = false/NULL),
+      // dispensando a RPC get_top_eleitores_atendimentos
+      const topEleitoresAtendimentos = Object.entries(atendimentosPorEleitor)
+        .map(([eleitor_uid, arr]) => ({
+          eleitor_uid,
+          total_atendimentos: arr.length
+        }))
+        .sort((a, b) => b.total_atendimentos - a.total_atendimentos)
+        .slice(0, 20);
 
       // Buscar detalhes dos eleitores com mais atendimentos
       let topEleitoresDetalhes: any[] = [];

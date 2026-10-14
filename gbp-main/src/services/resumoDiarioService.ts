@@ -196,6 +196,8 @@ export async function fetchResumoAtividades(
       .from('gbp_atendimentos')
       .select('uid, eleitor, descricao, status, created_at')
       .eq('empresa_uid', empresaUid)
+      // Só conta atendimentos visíveis (oculto = false ou NULL — coluna nullable)
+      .or('oculto.is.null,oculto.eq.false')
       .gte('created_at', inicioISO)
       .lte('created_at', fimISO)
       .order('created_at', { ascending: false }),

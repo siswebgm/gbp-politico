@@ -160,6 +160,8 @@ export function useDashboardData() {
           .from('gbp_atendimentos')
           .select('uid, created_at, status')
           .eq('empresa_uid', company.uid)
+          // Só conta atendimentos visíveis (oculto = false ou NULL — coluna nullable)
+          .or('oculto.is.null,oculto.eq.false')
           .order('created_at', { ascending: false }),
         supabaseClient
           .from('gbp_oficios')

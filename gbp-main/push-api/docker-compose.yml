@@ -4,11 +4,13 @@
 #
 # Defina as variáveis abaixo na seção "Environment variables" do Portainer:
 #   SUPABASE_URL, SUPABASE_ANON_KEY, FIREBASE_SERVICE_ACCOUNT
+#   SUPABASE_SERVICE_ROLE_KEY (service_role — usado p/ ler/escrever gbp_google_tokens)
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, APP_ORIGIN
 # FIREBASE_SERVICE_ACCOUNT = conteúdo inteiro do JSON da service account (1 linha)
 
 services:
   push-api:
-    image: siswebgm/gbp-politico-push:1.0
+    image: siswebgm/gbp-politico-push:1.1
     container_name: push-api
     restart: unless-stopped
     ports:
@@ -17,7 +19,13 @@ services:
       PORT: "3400"
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
+      # Integração Google Calendar
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      APP_ORIGIN: ${APP_ORIGIN}
     networks:
       - network_public
     deploy:

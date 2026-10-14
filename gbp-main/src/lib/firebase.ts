@@ -10,7 +10,16 @@ const firebaseConfig = {
   appId: '1:955852815886:web:a625a99a6d2969b11fc65f'
 };
 
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
+// VAPID é chave PÚBLICA (termina no bundle do cliente de qualquer jeito).
+// O fallback evita o deploy quebrar silenciosamente quando o servidor de
+// build não tem o .env.production — foi a causa do inscrito salvar sem token.
+const VAPID_KEY =
+  (import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined) ||
+  'BNWpTy-kxw_npsVRyUMD_f-E5yqauoZXsEmQpebam7lcto8vkEE6q7ZH6TqA0tLZZXTEwz6qgtzMHvvZRAYIGu4';
+
+if (!import.meta.env.VITE_FIREBASE_VAPID_KEY) {
+  console.warn('[FCM] VITE_FIREBASE_VAPID_KEY ausente no build — usando chave embutida no código');
+}
 
 const app = initializeApp(firebaseConfig);
 
@@ -47,11 +56,15 @@ async function resetSubscriptionIfVapidChanged(
 async function getMessagingInstance(): Promise<Messaging | null> {
   if (messaging) return messaging;
   try {
-    if (!(await isSupported())) return null;
+    const suportado = await isSupported();
+    if (!suportado) {
+      console.warn('[FCM] Messaging não suportado neste navegador (provável WebView de app — WhatsApp/Instagram). Sem token.');
+      return null;
+    }
     messaging = getMessaging(app);
     return messaging;
   } catch (error) {
-    console.error('Erro ao inicializar Firebase Messaging:', error);
+    console.error('[FCM] Erro ao inicializar Firebase Messaging:', error);
     return null;
   }
 }
@@ -84,10 +97,16 @@ async function requestNotificationPermissionInternal(): Promise<string | null> {
       Notification.permission === 'default'
         ? await Notification.requestPermission()
         : Notification.permission;
-    if (permission !== 'granted') return null;
+    if (permission !== 'granted') {
+      console.warn('[FCM] Permissão não está granted — token não gerado. Atual:', permission);
+      return null;
+    }
 
     const instance = await getMessagingInstance();
-    if (!instance) return null;
+    if (!instance) {
+      console.warn('[FCM] Messaging indisponível — token não gerado');
+      return null;
+    }
 
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
@@ -96,6 +115,7 @@ async function requestNotificationPermissionInternal(): Promise<string | null> {
     await resetSubscriptionIfVapidChanged(registration);
 
     const token = await getTokenWithRetry(instance, registration);
+    if (!token) console.warn('[FCM] getToken retornou vazio — push subscription não foi criada');
     return token || null;
   } catch (error) {
     console.error('Erro ao obter token de notificação:', error);
@@ -129,10 +149,19 @@ async function getTokenWithRetry(
 // de inscrito ficava com o token morto para sempre).
 export async function forceRefreshToken(): Promise<string | null> {
   try {
-    if (!VAPID_KEY) return null;
-    if (!('Notification' in window) || Notification.permission !== 'granted') return null;
+    if (!VAPID_KEY) {
+      console.warn('[FCM] VAPID_KEY ausente no build — token não gerado');
+      return null;
+    }
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      console.warn('[FCM] Permissão não está granted — token não gerado. Atual:', Notification.permission);
+      return null;
+    }
     const instance = await getMessagingInstance();
-    if (!instance) return null;
+    if (!instance) {
+      console.warn('[FCM] Messaging indisponível — token não gerado');
+      return null;
+    }
 
     try {
       await deleteToken(instance);
