@@ -4,8 +4,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Building2, Mail, Lock, User, Phone, Globe, MapPin } from 'lucide-react';
-import { supabasePublicClient } from '../../lib/supabase';
+import { supabasePublicClient, supabaseAdmin } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { useAffiliateTracking } from '../../hooks/useAffiliateTracking';
+import { AffiliateService } from '../../services/AffiliateService';
 
 const registerSchema = z.object({
   // Campos da empresa
@@ -33,6 +35,7 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 export function Register() {
   const navigate = useNavigate();
+  const { getAffiliateCode, clearAffiliateCode } = useAffiliateTracking();
   const {
     register,
     handleSubmit,
@@ -43,6 +46,18 @@ export function Register() {
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
+      // Obtém código de afiliado do localStorage
+      const affiliateCode = getAffiliateCode();
+      let afiliadoId = null;
+
+      // Se houver código de afiliado, busca o afiliado
+      if (affiliateCode) {
+        const afiliado = await AffiliateService.getAffiliateByCode(affiliateCode);
+        if (afiliado) {
+          afiliadoId = afiliado.id;
+        }
+      }
+
       // 1. Criar empresa
       const { data: companyData, error: companyError } = await supabasePublicClient
         .from('gbp_empresas')
@@ -55,6 +70,7 @@ export function Register() {
           cidade: data.city,
           estado: data.state,
           cep: data.zipCode,
+          afiliado_codigo: affiliateCode || null,
           created_at: new Date().toISOString(),
         }])
         .select()
@@ -84,6 +100,20 @@ export function Register() {
         console.error('Erro ao criar usuário:', userError);
         throw userError;
       }
+
+      // 3. Se houver afiliado, registra a indicação
+      if (afiliadoId && affiliateCode) {
+        try {
+          await AffiliateService.registerIndication(afiliadoId, companyData.uid, affiliateCode);
+          console.log('Indicação registrada com sucesso');
+        } catch (error) {
+          console.error('Erro ao registrar indicação:', error);
+          // Não bloqueia o registro se falhar a indicação
+        }
+      }
+
+      // Limpa o código de afiliado após vincular
+      clearAffiliateCode();
 
       toast.success('Registro concluído com sucesso!');
       navigate('/login');

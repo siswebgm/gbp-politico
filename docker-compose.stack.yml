@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   gbppolitico:
-    image: siswebgm/gbp-politico:2.9.45
+    image: siswebgm/gbp-politico:2.9.47
     networks:
       - network_public
     healthcheck:
@@ -46,7 +46,7 @@ services:
           memory: 128M
 
   push-api:
-    image: siswebgm/gbp-politico-push:1.1
+    image: siswebgm/gbp-politico-push:1.2
     networks:
       - network_public
     environment:

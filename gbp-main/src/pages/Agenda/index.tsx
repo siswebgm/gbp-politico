@@ -775,6 +775,62 @@ export default function AgendaPage() {
                 </TabsTrigger>
               </TabsList>
 
+              <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                {/* Status da conexão Google Agenda */}
+                {googleStatus !== null && (
+                  googleStatus.connected ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isAdmin) return;
+                        if (googleStatus.needs_reconnect) conectarGoogle();
+                        else setShowDisconnectModal(true);
+                      }}
+                      title={
+                        googleStatus.needs_reconnect
+                          ? (isAdmin ? 'Sem permissão de agenda — clique para reconectar' : 'Sem permissão de agenda — peça ao admin para reconectar')
+                          : isAdmin
+                            ? `Google Agenda conectado${googleStatus.google_email ? ` — ${googleStatus.google_email}` : ''} (clique para desconectar)`
+                            : `Google Agenda conectado${googleStatus.google_email ? ` — ${googleStatus.google_email}` : ''}`
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border shrink-0 ${
+                        googleStatus.needs_reconnect
+                          ? `bg-amber-50 text-amber-700 border-amber-200 ${isAdmin ? 'hover:bg-amber-100 cursor-pointer' : 'cursor-default'}`
+                          : `bg-green-50 text-green-700 border-green-200 ${isAdmin ? 'hover:bg-green-100 cursor-pointer' : 'cursor-default'}`
+                      }`}
+                    >
+                      <Link2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="max-w-[150px] truncate hidden sm:inline">
+                        {googleStatus.needs_reconnect ? 'Reconectar Google' : (googleStatus.google_email || 'Google Agenda')}
+                      </span>
+                      <span className="sm:hidden">Google</span>
+                      {googleStatus.needs_reconnect && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                  ) : (
+                    isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={conectarGoogle}
+                        disabled={googleLoading}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shrink-0"
+                        title="Conectar Google Agenda"
+                      >
+                        <Link2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden sm:inline">{googleLoading ? 'Conectando...' : 'Conectar Google'}</span>
+                        <span className="sm:hidden">{googleLoading ? '...' : 'Google'}</span>
+                      </button>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200 shrink-0"
+                        title="Google Agenda não conectado"
+                      >
+                        <Unlink className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden sm:inline">Google off</span>
+                      </span>
+                    )
+                  )
+                )}
+
               <Select value={selectedPeriod} onValueChange={(value: any) => {
                 setSelectedPeriod(value);
                 setSelectedEventId(null); // Limpar seleção ao mudar período
@@ -855,6 +911,7 @@ export default function AgendaPage() {
                   <RefreshCw className={`w-4 h-4 ${googleLoading ? 'animate-spin' : ''}`} />
                 </button>
               )}
+              </div>
             </div>
             )}
 

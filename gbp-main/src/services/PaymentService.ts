@@ -102,7 +102,7 @@ export class PaymentService {
   }
 
   // Gera um novo pagamento
-  static async generatePayment(assinaturaId: string, tipoPagamento: 'pix' | 'boleto') {
+  static async generatePayment(assinaturaId: string, tipoPagamento: 'pix' | 'boleto', descontoPercentual: number = 0) {
     try {
       // Busca dados da assinatura
       const { data: assinatura } = await supabaseAdmin
@@ -113,13 +113,21 @@ export class PaymentService {
 
       if (!assinatura) throw new Error('Assinatura não encontrada');
 
+      // Calcula valor com desconto
+      const valorOriginal = assinatura.gbp_planos.valor;
+      const valorComDesconto = descontoPercentual > 0 
+        ? valorOriginal * (1 - descontoPercentual / 100)
+        : valorOriginal;
+
       // Cria cobrança no Asaas
       const paymentData = {
         customer: assinatura.gbp_empresas.asaas_customer_id,
         billingType: tipoPagamento === 'pix' ? 'PIX' : 'BOLETO',
-        value: assinatura.gbp_planos.valor,
+        value: valorComDesconto,
         dueDate: assinatura.data_vencimento,
-        description: `Assinatura ${assinatura.gbp_planos.nome}`,
+        description: descontoPercentual > 0 
+          ? `Assinatura ${assinatura.gbp_planos.nome} (${descontoPercentual}% de desconto)`
+          : `Assinatura ${assinatura.gbp_planos.nome}`,
         postalService: false
       };
 
@@ -130,7 +138,7 @@ export class PaymentService {
         .from('gbp_pagamentos')
         .insert({
           assinatura_id: assinaturaId,
-          valor: assinatura.gbp_planos.valor,
+          valor: valorComDesconto,
           tipo_pagamento: tipoPagamento,
           status: 'pending',
           gateway_id: asaasPayment.id,
@@ -158,17 +166,50 @@ export class PaymentService {
   static async handlePaymentWebhook(event: any) {
     try {
       const { payment } = event;
-      
+
       // Atualiza o status do pagamento
-      const { error: updateError } = await supabaseAdmin
+      const { data: pagamentoData, error: updateError } = await supabaseAdmin
         .from('gbp_pagamentos')
         .update({
           status: payment.status === 'CONFIRMED' ? 'paid' : 'failed',
           data_pagamento: payment.status === 'CONFIRMED' ? new Date().toISOString() : null
         })
-        .eq('gateway_id', payment.id);
+        .eq('gateway_id', payment.id)
+        .select()
+        .single();
 
       if (updateError) throw updateError;
+
+      // Se pagamento foi confirmado, verifica se há indicação de afiliado
+      if (payment.status === 'CONFIRMED' && pagamentoData) {
+        const { AffiliateService } = await import('./AffiliateService');
+
+        // Busca a assinatura do pagamento
+        const { data: assinatura } = await supabaseAdmin
+          .from('gbp_assinaturas')
+          .select('*, gbp_empresas(*)')
+          .eq('id', pagamentoData.assinatura_id)
+          .single();
+
+        if (assinatura?.gbp_empresas?.afiliado_codigo) {
+          // Busca a indicação pendente
+          const { data: indicacao } = await supabaseAdmin
+            .from('gbp_indicacoes')
+            .select('*')
+            .eq('empresa_uid', assinatura.gbp_empresas.uid)
+            .eq('status', 'pending')
+            .single();
+
+          if (indicacao) {
+            // Confirma a indicação e credita comissão
+            await AffiliateService.confirmIndication(
+              indicacao.id,
+              pagamentoData.valor
+            );
+            console.log('Indicação confirmada e comissão creditada');
+          }
+        }
+      }
 
       // O trigger atualizar_status_empresa cuidará de atualizar o status da empresa
     } catch (error) {
@@ -176,4 +217,4 @@ export class PaymentService {
       throw error;
     }
   }
-} 
+}

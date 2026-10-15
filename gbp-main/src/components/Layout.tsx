@@ -12,6 +12,7 @@ import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { useToast } from "./ui/use-toast";
 import { UserProfileModal } from './UserProfileModal';
 import { AppAssistant } from './AppAssistant';
+import { WhatsAppStatusAlert } from './WhatsAppStatusAlert';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useThemeStore } from '../store/useThemeStore';
 
@@ -409,6 +410,9 @@ export function Layout() {
       />
 
       {['admin', 'coordenador'].includes((user?.nivel_acesso || '').toLowerCase()) && <AppAssistant />}
+
+      {/* Alerta global de WhatsApp desconectado (somente admin) */}
+      <WhatsAppStatusAlert />
     </div>
   );
 }

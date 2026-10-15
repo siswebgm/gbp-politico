@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import React from 'react';
-import { supabaseClient } from './lib/supabase';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { Dashboard } from './pages/Dashboard';
@@ -63,7 +62,6 @@ import EmendaParlamentarForm from './pages/Documents/EmendasParlamentares/Form';
 import NovoOficio from './pages/Documents/Oficios/NovoOficio';
 import ListaAnualOficios from './pages/Documents/Oficios/ListaAnual';
 import EditarOficio from './pages/Documents/Oficios/EditarOficio';
-import { PlanosPage } from './pages/app/Planos';
 import WhatsAppPage from './pages/WhatsApp/index';
 import { Suspense, lazy } from 'react';
 import { PessoasReport } from './pages/PessoasReport';
@@ -306,11 +304,6 @@ export function AppRoutes() {
             </AmbienteRoute>
           }
         />
-        <Route path="planos" element={
-          <Suspense fallback={<div>Carregando...</div>}>
-            <PlanosPage />
-          </Suspense>
-        } />
         <Route path="pessoas">
           <Route index element={<Pessoas />} />
           <Route path=":id" element={<PessoaDetalhes />} />

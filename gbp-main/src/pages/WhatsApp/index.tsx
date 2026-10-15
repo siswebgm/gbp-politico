@@ -241,7 +241,7 @@ export default function WhatsAppPage() {
         <div className="p-6 flex items-center">
           <div className="flex items-center text-white gap-2">
             <img
-              src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/512px-WhatsApp.svg.png"
+              src="/whatsapp-icon.png"
               alt="WhatsApp"
               className="w-7 h-7"
             />

@@ -19,6 +19,7 @@ import { Toaster as HotToaster } from 'react-hot-toast';
 import { NovaDemanda } from './pages/public/NovaDemanda';
 import { DemandaSucesso } from './pages/public/DemandaSucesso';
 import { TermosUso } from './pages/public/TermosUso';
+import { AffiliateRedirect } from './components/AffiliateRedirect';
 
 // Inicializa o Stripe com sua chave pública
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || '');
@@ -66,49 +67,53 @@ export function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <ThemeProvider>
-            <AuthProvider>
-              <CompanyProvider>
-                <EditModeProvider>
-                  <PlanoProvider>
-                    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-                      <Toaster />
-                      <HotToaster position="top-right" />
-                      <Routes>
-                      {/* Rotas públicas */}
-                      <Route path="/demanda/:empresa_uid" element={
-                        <div className="min-h-screen bg-gray-50">
-                          <NovaDemanda />
-                        </div>
-                      } />
-                      <Route path="/demanda-sucesso/:id" element={
-                        <div className="min-h-screen bg-gray-50">
-                          <DemandaSucesso />
-                        </div>
-                      } />
-                      <Route path="/termos-uso" element={
-                        <div className="min-h-screen bg-gray-50">
-                          <TermosUso />
-                        </div>
-                      } />
-                      
-                      {/* Rotas protegidas */}
-                      <Route path="/vendas" element={<VendasPage />} />
-                      <Route path="/clientes" element={<ClientesPage />} />
-                      <Route path="/*" element={
-                        <Elements stripe={stripePromise}>
-                          <PesquisaProvider>
-                            <AppRoutes />
-                          </PesquisaProvider>
-                        </Elements>
-                      } />
-                    </Routes>
-                    <PWAWrapper />
-                    <UpdateAlert />
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+              <Toaster />
+              <HotToaster position="top-right" />
+              <AffiliateRedirect />
+              <Routes>
+                {/* Rota pública para redirecionamento de afiliado */}
+                <Route path="/ref/:code" element={<AffiliateRedirect />} />
+                
+                {/* Rotas públicas */}
+                <Route path="/demanda/:empresa_uid" element={
+                  <div className="min-h-screen bg-gray-50">
+                    <NovaDemanda />
                   </div>
-                </PlanoProvider>
-              </EditModeProvider>
-            </CompanyProvider>
-          </AuthProvider>
+                } />
+                <Route path="/demanda-sucesso/:id" element={
+                  <div className="min-h-screen bg-gray-50">
+                    <DemandaSucesso />
+                  </div>
+                } />
+                <Route path="/termos-uso" element={
+                  <div className="min-h-screen bg-gray-50">
+                    <TermosUso />
+                  </div>
+                } />
+                
+                {/* Rotas protegidas */}
+                <Route path="/vendas" element={<VendasPage />} />
+                <Route path="/clientes" element={<ClientesPage />} />
+                <Route path="/*" element={
+                  <AuthProvider>
+                    <CompanyProvider>
+                      <EditModeProvider>
+                        <PlanoProvider>
+                          <Elements stripe={stripePromise}>
+                            <PesquisaProvider>
+                              <AppRoutes />
+                            </PesquisaProvider>
+                          </Elements>
+                          <PWAWrapper />
+                          <UpdateAlert />
+                        </PlanoProvider>
+                      </EditModeProvider>
+                    </CompanyProvider>
+                  </AuthProvider>
+                } />
+              </Routes>
+            </div>
           </ThemeProvider>
         </BrowserRouter>
       </QueryClientProvider>

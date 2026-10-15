@@ -6,26 +6,29 @@ import { BirthdaySettings } from './components/BirthdaySettings';
 import { ExtensaoSettings } from './components/ExtensaoSettings';
 import { MessageSettings } from './components/MessageSettings';
 import { CompanySettings } from './components/CompanySettings';
-import { 
-  Cog, 
-  Users, 
-  Gift, 
-  Upload, 
-  FormInput, 
-  CreditCard, 
-  MessageSquare, 
-  ChevronLeft, 
-  Chrome, 
-  Send, 
+import { FinancialSettings } from './components/FinancialSettings';
+import AffiliateDashboard from './components/AffiliateDashboard';
+import {
+  Cog,
+  Users,
+  Gift,
+  Upload,
+  FormInput,
+  MessageSquare,
+  ChevronLeft,
+  Chrome,
+  Send,
   ExternalLink,
-  Building2
+  Building2,
+  DollarSign,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { useNavigate } from 'react-router-dom';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
 
-type SettingsTab = 'categorias' | 'indicados' | 'aniversario' | 'whatsapp' | 'upload' | 'form' | 'planos' | 'extensao' | 'mensagens' | 'empresa';
+type SettingsTab = 'categorias' | 'indicados' | 'aniversario' | 'whatsapp' | 'upload' | 'form' | 'extensao' | 'mensagens' | 'empresa' | 'financeiro' | 'afiliados';
 
 // Helper para adicionar scroll horizontal com touch (comprovado no projeto)
 const setupHorizontalScroll = (el: HTMLDivElement | null) => {
@@ -96,11 +99,11 @@ export function Settings() {
       navigate('/app/whatsapp');
       return;
     }
-    if (tab === 'planos') {
-      navigate('/app/planos');
+    if (tab === 'upload') {
+      navigate('/app/pessoas/importar');
       return;
     }
-    if (tab === 'upload') {
+    if (tab === 'extensao') {
       navigate('/app/pessoas/importar');
       return;
     }
@@ -162,7 +165,8 @@ export function Settings() {
     { id: 'empresa', label: 'Empresa', icon: Building2, desc: 'Edite os dados da empresa atual' },
     { id: 'extensao', label: 'Extensão', icon: Chrome, desc: 'Integração com extensão do navegador' },
     { id: 'upload', label: 'Upload', icon: Upload, isExternal: true, desc: 'Importação em massa de contatos' },
-    { id: 'planos', label: 'Planos', icon: CreditCard, isExternal: true, desc: 'Assinatura e limites da conta' }
+    { id: 'financeiro', label: 'Financeiro', icon: DollarSign, adminOnly: true, desc: 'Gestão de pagamentos e cobranças' },
+    { id: 'afiliados', label: 'Afiliados', icon: TrendingUp, desc: 'Programa de indicações e comissões' }
   ];
 
   const abasDisponiveis = tabs.filter((tab) => {
@@ -306,6 +310,8 @@ export function Settings() {
                   {activeTab === 'aniversario' && <BirthdaySettings />}
                   {activeTab === 'extensao' && <ExtensaoSettings />}
                   {activeTab === 'mensagens' && <MessageSettings />}
+                  {activeTab === 'financeiro' && <FinancialSettings />}
+                  {activeTab === 'afiliados' && <AffiliateDashboard />}
                 </div>
               </div>
             </main>

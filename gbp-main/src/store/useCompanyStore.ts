@@ -10,6 +10,7 @@ interface Company {
   instancia: string | null;
   porta: string | null;
   plano?: string | null;
+  status_wpp?: string | null;
   mensagens_ativadas?: boolean;
   mensagem_padrao_atendimento?: string;
   mensagem_delay_minutos?: number;
