@@ -35,6 +35,8 @@ import { RegisterInvite } from './pages/RegisterInvite';
 import { FormularioPublico } from './pages/FormularioPublico';
 import GerenciarFormulario from './pages/app/configuracoes/GerenciarFormulario';
 import { PublicAtendimento } from './pages/public/atendimento';
+import Blocked from './pages/Blocked';
+import Encerrado from './pages/Encerrado';
 import { CadastroMoradores } from './pages/CadastroMoradores';
 import { GerenciarEmpreendimentos } from './pages/GerenciarEmpreendimentos';
 import Oficios from './pages/Documents/Oficios';
@@ -77,6 +79,9 @@ import ResponderPesquisa from './pages/PesquisaEleitoral/ResponderPesquisa';
 import ObrigadoPesquisa from './pages/PesquisaEleitoral/ObrigadoPesquisa';
 import { SelectCompany } from './pages/SelectCompany';
 import { GerenciamentoAmbientes } from './pages/GerenciamentoAmbientes';
+import Credenciados from './pages/Admin/Credenciados';
+import EmpresaDetalhes from './pages/Admin/Credenciados/EmpresaDetalhes';
+import RelatorioPagamentos from './pages/Admin/Credenciados/RelatorioPagamentos';
 import { OwnerRoute } from './components/OwnerRoute';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -89,6 +94,22 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   // Verifica se o usuário está autenticado e tem nível de acesso admin
   if (!user || user.nivel_acesso?.toLowerCase() !== 'admin') {
     console.log('[AdminRoute] Acesso negado - Redirecionando para /app');
+    return <Navigate to="/app" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+// Guard exclusivo: administração de credenciados (admin da plataforma)
+function CredenciadoRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+
+  if (
+    !user ||
+    user.nivel_acesso?.toLowerCase() !== 'admin' ||
+    user.adm_empresa !== true
+  ) {
+    console.log('[CredenciadoRoute] Acesso negado - Redirecionando para /app');
     return <Navigate to="/app" replace />;
   }
 
@@ -278,6 +299,12 @@ export function AppRoutes() {
         } 
       />
 
+      {/* Tela de bloqueio por pagamento — pública, fora do Layout */}
+      <Route path="/bloqueado" element={<Blocked />} />
+
+      {/* Vínculo encerrado (empresa não é mais cliente) — pública, fora do Layout */}
+      <Route path="/encerrado" element={<Encerrado />} />
+
       {/* Rotas Protegidas */}
       <Route 
         path="/app" 
@@ -390,6 +417,9 @@ export function AppRoutes() {
           </Suspense>
         } />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
+        <Route path="admin/credenciados" element={<CredenciadoRoute><Credenciados /></CredenciadoRoute>} />
+        <Route path="admin/credenciados/relatorio/pagamentos" element={<CredenciadoRoute><RelatorioPagamentos /></CredenciadoRoute>} />
+        <Route path="admin/credenciados/:uid" element={<CredenciadoRoute><EmpresaDetalhes /></CredenciadoRoute>} />
         <Route path="reconhecimento-facial" element={<ReconhecimentoFacial />} />
         
         {/* Rotas de Pesquisa Eleitoral */}

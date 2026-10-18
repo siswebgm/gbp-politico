@@ -5,9 +5,9 @@ export interface Company {
   id: string;
   nome: string;
   cnpj: string;
-  telefone?: string | null;
+  contato?: string | null;
   website?: string | null;
-  endereco?: string | null;
+  logradouro?: string | null;
   cidade?: string | null;
   estado?: string | null;
   cep?: string | null;
@@ -23,17 +23,11 @@ export interface Company {
 export const companyService = {
   create: async (company: Omit<Company, 'id' | 'created_at'>): Promise<Company> => {
     try {
-      // Gerar próximo ID
-      const { data: nextId, error: idError } = await supabaseClient
-        .rpc('next_id', { table_name: 'gbp_empresas' });
-      
-      if (idError) throw idError;
-
+      // id é identity — o banco gera automaticamente
       const { data, error } = await supabaseClient
         .from('gbp_empresas')
         .insert({
           ...company,
-          id: nextId,
           created_at: new Date().toISOString()
         })
         .select()

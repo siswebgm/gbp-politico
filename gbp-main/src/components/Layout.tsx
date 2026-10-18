@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Menu, User, Settings, LogOut, Building, CheckCircle2, Sun, Moon } from 'lucide-react';
@@ -19,44 +19,103 @@ import { useThemeStore } from '../store/useThemeStore';
 // Hook personalizado para verificar o status da empresa
 const useCheckCompanyStatus = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const warnedRef = useRef(false);
+  // Auth do app é customizada (gbp_user) — não há sessão supabase.auth
+  const { user } = useAuth();
 
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user?.id) return;
+        if (!user?.uid) {
+          console.log('[status-check] sem usuário autenticado');
+          return;
+        }
 
         // Busca o usuário para obter o empresa_uid
         const { data: userData, error: userError } = await supabaseClient
           .from('gbp_usuarios')
-          .select('empresa_uid')
-          .eq('uid', user.id)
+          .select('empresa_uid, nivel_acesso')
+          .eq('uid', user.uid)
           .single();
 
-        if (userError) throw userError;
-        if (!userData?.empresa_uid) return;
+        if (userError) {
+          console.warn('[status-check] erro ao buscar usuário:', userError);
+        }
+
+        // Empresa ativa: seleção multi-empresa > login > vínculo do usuário
+        const empresaUid =
+          localStorage.getItem('active_empresa_uid') ||
+          localStorage.getItem('empresa_uid') ||
+          userData?.empresa_uid;
+        if (!empresaUid) {
+          console.log('[status-check] sem empresaUid', userData);
+          return;
+        }
 
         // Verifica o status da empresa
         const { data: empresaData, error: empresaError } = await supabaseClient
           .from('gbp_empresas')
-          .select('status, nome')
-          .eq('uid', userData.empresa_uid)
+          .select('status, nome, data_expiracao, ativa')
+          .eq('uid', empresaUid)
           .single();
 
-        if (empresaError) throw empresaError;
+        if (empresaError) {
+          console.warn('[status-check] erro ao buscar empresa:', empresaError);
+          return;
+        }
+        console.log('[status-check]', empresaUid, empresaData?.status, empresaData?.data_expiracao);
+
+        // Empresa inativa (vínculo encerrado): bloqueio silencioso,
+        // sem página de regularização — vai para /encerrado
+        if (empresaData?.ativa === false || empresaData?.status === 'inactive') {
+          localStorage.removeItem('gbp_user');
+          localStorage.removeItem('empresa_uid');
+          localStorage.removeItem('active_empresa_uid');
+          localStorage.removeItem('user_uid');
+          await supabaseClient.auth.signOut().catch(() => {});
+          navigate('/encerrado', { replace: true });
+          return;
+        }
 
         // Se o status for 'suspended', faz logout e redireciona
         if (empresaData?.status === 'suspended') {
           toast({
             title: "Acesso Suspenso",
             description: `O acesso à empresa ${empresaData.nome || ''} foi suspenso. Entre em contato com o suporte para mais informações.`,
-            variant: "warning",
-            duration: 5000
+            variant: 'destructive',
+            duration: 8000,
           });
           
           await supabaseClient.auth.signOut();
           navigate('/login');
+          return;
+        }
+
+        // Empresa bloqueada ou com assinatura vencida (data_expiracao no passado)
+        const expirada =
+          !!empresaData?.data_expiracao &&
+          new Date(empresaData.data_expiracao).getTime() < Date.now();
+        const vencida = empresaData?.status === 'blocked' || expirada;
+
+        if (vencida) {
+          if (!warnedRef.current) {
+            warnedRef.current = true;
+            toast({
+              title: 'Acesso bloqueado',
+              description: `A assinatura da empresa ${empresaData?.nome || ''} está vencida. Regularize o pagamento para liberar o acesso.`,
+              variant: 'warning',
+              duration: 8000,
+            });
+          }
+
+          // Tela dedicada de bloqueio/renovação — todos os usuários saem do app
+          if (location.pathname !== '/bloqueado') {
+            navigate('/bloqueado', { replace: true });
+          }
+        } else {
+          warnedRef.current = false;
         }
       } catch (error) {
         console.error('Erro ao verificar status da empresa:', error);
@@ -68,7 +127,7 @@ const useCheckCompanyStatus = () => {
     const interval = setInterval(checkStatus, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [navigate, toast]);
+  }, [navigate, location.pathname, toast, user?.uid]);
 };
 
 function ErrorFallback({ error }: { error: Error }) {

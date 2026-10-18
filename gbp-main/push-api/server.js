@@ -104,6 +104,18 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // Integração Google Calendar (conexão por empresa)
 require('./google')(app, { supabaseUrl: SUPABASE_URL, requireAuth });
 
+// Integração Asaas — cobranças de assinatura (PIX/Boleto) + webhook
+require('./payments')(app, { requireAuth });
+
+// Integração n8n — clonagem de workflow ao criar empresa
+require('./n8n')(app, {
+  supabaseUrl: SUPABASE_URL,
+  serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || localEnv.SUPABASE_SERVICE_ROLE_KEY,
+});
+
+// Rotinas agendadas — bloqueio automático por inadimplência
+require('./jobs').startJobs();
+
 // FCM limita sendEachForMulticast a 500 tokens por chamada
 const FCM_BATCH_SIZE = 500;
 

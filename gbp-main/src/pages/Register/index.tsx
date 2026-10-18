@@ -64,9 +64,9 @@ export function Register() {
         .insert([{
           nome: data.companyName,
           cnpj: data.cnpj,
-          telefone: data.companyPhone,
+          contato: data.companyPhone,
           website: data.website,
-          endereco: data.address,
+          logradouro: data.address,
           cidade: data.city,
           estado: data.state,
           cep: data.zipCode,

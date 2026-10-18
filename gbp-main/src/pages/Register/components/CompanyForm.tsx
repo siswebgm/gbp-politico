@@ -45,13 +45,13 @@ export function CompanyForm({ onCompanyCreated }: CompanyFormProps) {
         .insert([{
           nome: formData.nome,
           cnpj: formData.cnpj,
-          telefone: formData.telefone,
+          contato: formData.telefone,
           website: formData.website,
-          endereco: formData.endereco,
+          logradouro: formData.endereco,
           cidade: formData.cidade,
           estado: formData.estado,
           cep: formData.cep,
-          status: 'ativo'
+          status: 'active'
         }])
         .select()
         .single();

@@ -42,21 +42,15 @@ CREATE TABLE gbp_pagamentos (
 CREATE OR REPLACE FUNCTION atualizar_status_empresa()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Se o pagamento foi confirmado
+  -- Se o pagamento foi confirmado, ativa a empresa e
+  -- estende a expiração até o fim da assinatura
   IF NEW.status = 'paid' THEN
-    -- Busca a assinatura e empresa
-    WITH assinatura AS (
-      SELECT a.*, e.uid as empresa_uid
-      FROM gbp_assinaturas a
-      JOIN gbp_empresas e ON e.uid = a.empresa_uid
-      WHERE a.id = NEW.assinatura_id
-    )
-    -- Atualiza o status da empresa
-    UPDATE gbp_empresas
-    SET 
-      status = 'active',
-      data_expiracao = (SELECT data_fim FROM assinatura)
-    WHERE uid = (SELECT empresa_uid FROM assinatura);
+    UPDATE gbp_empresas e
+    SET status = 'active',
+        data_expiracao = a.data_fim
+    FROM gbp_assinaturas a
+    WHERE a.id = NEW.assinatura_id
+      AND e.uid = a.empresa_uid;
   END IF;
   RETURN NEW;
 END;
@@ -86,4 +80,9 @@ $$ LANGUAGE plpgsql;
 
 -- Adiciona coluna para ID do cliente no Asaas
 ALTER TABLE gbp_empresas
-ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(255); 
+ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(255);
+
+-- Dia fixo de vencimento das cobranças da empresa
+-- (5 → janela 5–10; 20 → janela 20–30; padrão 20)
+ALTER TABLE gbp_empresas
+ADD COLUMN IF NOT EXISTS dia_vencimento INTEGER DEFAULT 20;

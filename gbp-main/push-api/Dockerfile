@@ -5,8 +5,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 
-COPY server.js ./
-COPY google.js ./
+COPY server.js google.js payments.js jobs.js n8n.js ./
 
 ENV PORT=3400
 EXPOSE 3400

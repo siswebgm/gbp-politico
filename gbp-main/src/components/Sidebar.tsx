@@ -16,6 +16,7 @@ import {
   Search,
   AlertTriangle,
   Megaphone,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider';
@@ -376,6 +377,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const filteredNavigation = useMemo(() => {
     let filtered = navigation;
 
+    // Item exclusivo: admin + adm_empresa (gestão de credenciados)
+    if (isAdmin && user?.adm_empresa === true) {
+      filtered = [
+        ...filtered,
+        { name: 'Credenciados', href: '/app/admin/credenciados', icon: ShieldCheck },
+      ];
+    }
+
     if (canSwitchCompany && canSeeAmbiente) {
       const alreadyExists = filtered.some((i) => i.href === '/app/select-company');
       if (!alreadyExists) {
@@ -413,7 +422,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     });
     
     return filtered;
-  }, [isAdmin, user?.nivel_acesso, temAcessoDemandasRuas, canSwitchCompany, canSeeAmbiente]);
+  }, [isAdmin, user?.nivel_acesso, user?.adm_empresa, temAcessoDemandasRuas, canSwitchCompany, canSeeAmbiente]);
 
   const handleMobileClose = useCallback(() => {
     // Recolhe submenus expandidos ao navegar

@@ -5,6 +5,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { authService, AuthError } from '../../services/auth';
 import { useToast } from '../../components/ui/use-toast'; // Importação corrigida
 import { CreateCompanyModal } from './components/CreateCompanyModal';
+import { supabaseClient } from '../../lib/supabase';
 
 import {
   Dialog,
@@ -227,6 +228,56 @@ export function Login() {
       const result = await auth.login(data.email, data.password);
       
       if (result) {
+        // Valida status da empresa antes de liberar o acesso ao sistema
+        // (auth customizada: authService gravou user_uid/empresa_uid no localStorage)
+        try {
+          const empresaUid =
+            localStorage.getItem('empresa_uid') ||
+            localStorage.getItem('active_empresa_uid');
+
+          if (empresaUid) {
+            const { data: empresa } = await supabaseClient
+              .from('gbp_empresas')
+              .select('status, data_expiracao, ativa')
+              .eq('uid', empresaUid)
+              .single();
+
+            const expirada =
+              !!empresa?.data_expiracao &&
+              new Date(empresa.data_expiracao).getTime() < Date.now();
+
+            // Empresa inativa (não é mais cliente): bloqueio silencioso —
+            // página dedicada de vínculo encerrado, sem /bloqueado
+            if (empresa?.ativa === false || empresa?.status === 'inactive') {
+              localStorage.removeItem('gbp_user');
+              localStorage.removeItem('empresa_uid');
+              localStorage.removeItem('active_empresa_uid');
+              localStorage.removeItem('user_uid');
+              await supabaseClient.auth.signOut().catch(() => {});
+              navigate('/encerrado', { replace: true });
+              return;
+            }
+
+            if (empresa?.status === 'suspended') {
+              localStorage.removeItem('gbp_user');
+              localStorage.removeItem('empresa_uid');
+              localStorage.removeItem('active_empresa_uid');
+              localStorage.removeItem('user_uid');
+              await supabaseClient.auth.signOut().catch(() => {});
+              setErrorMessage('O acesso da empresa foi suspenso. Entre em contato com o suporte para mais informações.');
+              setIsErrorModalOpen(true);
+              return;
+            }
+
+            if (empresa?.status === 'blocked' || expirada) {
+              navigate('/bloqueado', { replace: true });
+              return;
+            }
+          }
+        } catch (checkError) {
+          console.error('Erro ao validar status da empresa:', checkError);
+        }
+
         // Navega diretamente para a página principal após o login bem-sucedido.
         navigate('/app', { replace: true });
       }
