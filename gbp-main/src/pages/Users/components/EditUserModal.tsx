@@ -65,6 +65,7 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
   const [unlocking, setUnlocking] = useState(false);
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [adminPassword, setAdminPassword] = useState('');
   const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
@@ -159,17 +160,41 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
 
   const handleConfirmUnlock = async () => {
     if (!user) return;
+
+    // uid do admin logado — a RPC valida a senha dele no servidor
+    let adminUid: string | null = null;
+    try {
+      adminUid = JSON.parse(localStorage.getItem('gbp_user') || '{}')?.uid || null;
+    } catch { /* ignora */ }
+
+    if (!adminUid) {
+      toast.error('Sessão inválida. Faça login novamente.');
+      return;
+    }
+    if (!adminPassword) {
+      toast.error('Informe sua senha de administrador para confirmar.');
+      return;
+    }
+
     setUnlocking(true);
     try {
       const newPassword = generateRandomPassword();
 
-      await supabaseClient
-        .from('gbp_usuarios')
-        .update({ status: 'active', tentativas_login: 0, senha: newPassword })
-        .eq('uid', user.uid);
+      const { error } = await supabaseClient.rpc('admin_reset_senha', {
+        p_admin_uid: adminUid,
+        p_admin_senha: adminPassword,
+        p_user_uid: user.uid,
+        p_nova_senha: newPassword,
+      });
+
+      if (error) {
+        toast.error(error.message || 'Erro ao desbloquear. Tente novamente.');
+        return;
+      }
 
       setGeneratedPassword(newPassword);
       setShowUnlockConfirm(false);
+      setAdminPassword('');
       toast.success('Conta desbloqueada! Nova senha gerada com sucesso.');
     } catch (err) {
       toast.error('Erro ao desbloquear. Tente novamente.');
@@ -535,6 +560,19 @@ export function EditUserModal({ isOpen, onClose, onSuccess, user }: EditUserModa
               A senha atual deixará de funcionar. Deseja continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="px-6 pb-2">
+            <Label htmlFor="admin-password" className="text-sm font-medium">
+              Confirme com a sua senha de administrador
+            </Label>
+            <Input
+              id="admin-password"
+              type="password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              placeholder="Sua senha"
+              className="mt-1.5"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={unlocking}>Cancelar</AlertDialogCancel>
             <AlertDialogAction

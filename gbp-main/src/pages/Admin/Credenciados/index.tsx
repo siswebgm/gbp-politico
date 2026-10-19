@@ -656,6 +656,7 @@ export default function Credenciados() {
     const ass = assinaturaByEmpresa[emp.uid];
     setEditando(emp);
     setForm({
+      ...formVazio,
       nome: emp.nome || '',
       cpf_cnpj: emp.cpf_cnpj || emp.cnpj || '',
       contato: emp.contato || '',

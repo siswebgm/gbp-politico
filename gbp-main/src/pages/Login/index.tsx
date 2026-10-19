@@ -6,6 +6,7 @@ import { authService, AuthError } from '../../services/auth';
 import { useToast } from '../../components/ui/use-toast'; // Importação corrigida
 import { CreateCompanyModal } from './components/CreateCompanyModal';
 import { supabaseClient } from '../../lib/supabase';
+import { checkCompanyStatus } from '../../services/companyStatus';
 
 import {
   Dialog,
@@ -236,19 +237,15 @@ export function Login() {
             localStorage.getItem('active_empresa_uid');
 
           if (empresaUid) {
-            const { data: empresa } = await supabaseClient
-              .from('gbp_empresas')
-              .select('status, data_expiracao, ativa')
-              .eq('uid', empresaUid)
-              .single();
-
-            const expirada =
-              !!empresa?.data_expiracao &&
-              new Date(empresa.data_expiracao).getTime() < Date.now();
+            const empresaStatus = await checkCompanyStatus(empresaUid);
 
             // Empresa inativa (não é mais cliente): bloqueio silencioso —
             // página dedicada de vínculo encerrado, sem /bloqueado
-            if (empresa?.ativa === false || empresa?.status === 'inactive') {
+            if (empresaStatus.status === 'inactive') {
+              if (empresaStatus.nome) {
+                localStorage.setItem('encerrado_empresa', empresaStatus.nome);
+              }
+              localStorage.setItem('encerrado_empresa_uid', empresaUid);
               localStorage.removeItem('gbp_user');
               localStorage.removeItem('empresa_uid');
               localStorage.removeItem('active_empresa_uid');
@@ -258,7 +255,7 @@ export function Login() {
               return;
             }
 
-            if (empresa?.status === 'suspended') {
+            if (empresaStatus.status === 'suspended') {
               localStorage.removeItem('gbp_user');
               localStorage.removeItem('empresa_uid');
               localStorage.removeItem('active_empresa_uid');
@@ -269,7 +266,7 @@ export function Login() {
               return;
             }
 
-            if (empresa?.status === 'blocked' || expirada) {
+            if (empresaStatus.status === 'blocked') {
               navigate('/bloqueado', { replace: true });
               return;
             }

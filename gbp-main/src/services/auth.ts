@@ -38,53 +38,82 @@ export interface AuthData {
 export const authService = {
   async login(email: string, password: string): Promise<AuthData> {
     try {
-      // Busca o usuário na tabela gbp_usuarios pelo email e senha
-      const { data: user, error } = await supabaseClient
-        .from('gbp_usuarios')
-        .select(`
-          id,
-          uid,
-          nome,
-          email,
-          cargo,
-          nivel_acesso,
-          permissoes,
-          empresa_uid,
-          cota_criar_empresas,
-          contato,
-          status,
-          ultimo_acesso,
-          created_at,
-          foto,
-          notification_token,
-          notification_status,
-          notification_updated_at
-        `)
-        .eq('email', email)
-        .eq('senha', password)
-        .single();
+      // Login seguro: a senha é verificada no servidor pela RPC login_seguro
+      // (bcrypt via pgcrypto). A função nunca devolve senha nem senha_hash.
+      let user: AuthData | null = null;
+      const { data: rpcUser, error: rpcError } = await supabaseClient.rpc(
+        'login_seguro',
+        { p_email: email, p_senha: password }
+      );
 
-      if (error) {
-        console.error('Error fetching user:', error);
-        if (error.code === 'PGRST116') {
-          throw new AuthError('Email ou senha incorretos');
+      if (rpcError) {
+        // Fallback temporário: se a RPC ainda não existir no ambiente,
+        // usa o método legado para não bloquear o login.
+        const rpcMissing =
+          rpcError.code === 'PGRST202' ||
+          String(rpcError.message || '').includes('login_seguro');
+
+        if (!rpcMissing) {
+          console.error('login_seguro error:', rpcError);
+          if (String(rpcError.message || '').includes('Email ou senha')) {
+            throw new AuthError('Email ou senha incorretos');
+          }
+          throw new AuthError('Erro ao buscar usuário');
         }
-        throw new AuthError('Erro ao buscar usuário');
+
+        const { data: legacyUser, error } = await supabaseClient
+          .from('gbp_usuarios')
+          .select(`
+            id,
+            uid,
+            nome,
+            email,
+            cargo,
+            nivel_acesso,
+            permissoes,
+            empresa_uid,
+            cota_criar_empresas,
+            contato,
+            status,
+            ultimo_acesso,
+            created_at,
+            foto,
+            notification_token,
+            notification_status,
+            notification_updated_at
+          `)
+          .eq('email', email)
+          .eq('senha', password)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user:', error);
+          if (error.code === 'PGRST116') {
+            throw new AuthError('Email ou senha incorretos');
+          }
+          throw new AuthError('Erro ao buscar usuário');
+        }
+
+        user = (legacyUser as AuthData) || null;
+
+        if (user) {
+          // Atualiza o último acesso (caminho legado)
+          const { error: updateError } = await supabaseClient
+            .from('gbp_usuarios')
+            .update({ ultimo_acesso: new Date().toISOString() })
+            .eq('uid', user.uid);
+
+          if (updateError) {
+            console.error('Error updating last access:', updateError);
+          }
+        }
+      } else {
+        user = (rpcUser as AuthData) || null;
       }
 
       if (!user) {
         console.error('User not found');
         throw new AuthError('Email ou senha incorretos');
-      }
-
-      // Atualiza o último acesso
-      const { error: updateError } = await supabaseClient
-        .from('gbp_usuarios')
-        .update({ ultimo_acesso: new Date().toISOString() })
-        .eq('uid', user.uid);
-
-      if (updateError) {
-        console.error('Error updating last access:', updateError);
       }
 
       // Armazena os dados do usuário no localStorage
@@ -104,6 +133,25 @@ export const authService = {
 
   async validateRecoveryContact(email: string, digits: string): Promise<void> {
     try {
+      // Validação no servidor: contato e tentativas não ficam expostos.
+      const { error: rpcError } = await supabaseClient.rpc(
+        'recuperacao_validar_contato',
+        { p_email: email, p_digitos: digits }
+      );
+
+      if (!rpcError) {
+        return;
+      }
+
+      const rpcMissing =
+        rpcError.code === 'PGRST202' ||
+        String(rpcError.message || '').includes('recuperacao_validar_contato');
+
+      if (!rpcMissing) {
+        throw new AuthError(rpcError.message || 'Erro ao validar contato. Tente novamente.');
+      }
+
+      // Fallback legado (apenas se a RPC não existir no ambiente)
       const { data: user, error } = await supabaseClient
         .from('gbp_usuarios')
         .select('uid, contato, status, tentativas_login')

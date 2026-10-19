@@ -69,11 +69,9 @@ export function FinancialSettings() {
   const [qrCode, setQrCode] = useState<{ encodedImage: string; payload: string } | null>(null);
   const [boleto, setBoleto] = useState<{ url: string } | null>(null);
   const [checkingId, setCheckingId] = useState<string | null>(null);
-  const [desconto, setDesconto] = useState<number>(0);
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [empresaCpfCnpj, setEmpresaCpfCnpj] = useState<string | null>(null);
   const [diaVencimento, setDiaVencimento] = useState<number>(20);
-  const [savingDia, setSavingDia] = useState(false);
   const [empresaStatus, setEmpresaStatus] = useState<string | null>(null);
   const [empresaExpiracao, setEmpresaExpiracao] = useState<string | null>(null);
 
@@ -220,7 +218,7 @@ export function FinancialSettings() {
       const result = await PaymentService.generatePayment(
         assinatura.id,
         tipo,
-        desconto,
+        0,
         doc || undefined,
         diaVencimento
       );
@@ -235,9 +233,7 @@ export function FinancialSettings() {
         setQrCode({ encodedImage: result.qrCode, payload: result.pixCopyPaste || '' });
         toast({
           title: 'Cobrança gerada',
-          description: desconto > 0
-            ? `QR Code PIX gerado com desconto de ${desconto}%`
-            : 'QR Code PIX gerado com sucesso',
+          description: 'QR Code PIX gerado com sucesso',
         });
       } else if (tipo === 'boleto' && result.paymentUrl) {
         setBoleto({ url: result.paymentUrl });
@@ -259,32 +255,6 @@ export function FinancialSettings() {
       });
     } finally {
       setGeneratingPayment(false);
-    }
-  };
-
-  const handleDiaVencimentoChange = async (dia: number) => {
-    if (!company?.uid) return;
-    setDiaVencimento(dia);
-    setSavingDia(true);
-    try {
-      const { error } = await supabase
-        .from('gbp_empresas')
-        .update({ dia_vencimento: dia })
-        .eq('uid', company.uid);
-      if (error) throw error;
-      toast({
-        title: 'Dia de vencimento atualizado',
-        description: `Próximas cobranças vencem todo dia ${dia} (janela até dia ${dia + 10}).`,
-      });
-    } catch (error) {
-      console.error('Erro ao salvar dia de vencimento:', error);
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Execute o SQL add_dia_vencimento_empresas.sql se a coluna não existir.',
-        variant: 'destructive',
-      });
-    } finally {
-      setSavingDia(false);
     }
   };
 
@@ -583,7 +553,7 @@ export function FinancialSettings() {
         )}
 
         {isAdmin && (
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-wrap gap-3 justify-end">
             <button
               onClick={() => handleGeneratePayment('pix')}
               disabled={generatingPayment || semPlano}
@@ -620,34 +590,6 @@ export function FinancialSettings() {
                 </>
               )}
             </button>
-          </div>
-        )}
-
-        {isAdmin && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Desconto (%):</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={desconto}
-                onChange={(e) => setDesconto(Math.min(100, Math.max(0, Number(e.target.value))))}
-                className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Dia de vencimento:</label>
-              <select
-                value={diaVencimento}
-                disabled={savingDia}
-                onChange={(e) => handleDiaVencimentoChange(Number(e.target.value))}
-                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50"
-              >
-                <option value={20}>Dia 20 (pagável até 30)</option>
-                <option value={5}>Dia 5 (pagável até 10)</option>
-              </select>
-            </div>
           </div>
         )}
       </div>

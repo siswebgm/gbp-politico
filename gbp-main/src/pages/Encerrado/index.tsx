@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -20,12 +21,56 @@ const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent
 // informa o encerramento e oferece contato direto via WhatsApp.
 export default function Encerrado() {
   const navigate = useNavigate();
+  // Nome da empresa gravado no momento do redirecionamento para cá
+  // (Layout/Blocked/Login persistem antes de limpar a sessão)
+  const [empresaNome, setEmpresaNome] = useState(
+    () => localStorage.getItem('encerrado_empresa') || ''
+  );
+
+  // Fallback: se o nome não foi gravado, tenta recuperar pelo UID da empresa
+  useEffect(() => {
+    if (empresaNome) return;
+
+    let empresaUid =
+      localStorage.getItem('encerrado_empresa_uid') ||
+      localStorage.getItem('empresa_uid') ||
+      localStorage.getItem('active_empresa_uid');
+
+    if (!empresaUid) {
+      try {
+        const user = JSON.parse(localStorage.getItem('gbp_user') || 'null');
+        empresaUid = user?.empresa_uid || null;
+      } catch {
+        empresaUid = null;
+      }
+    }
+
+    if (!empresaUid) return;
+
+    (async () => {
+      try {
+        const { data } = await supabaseClient
+          .from('gbp_empresas')
+          .select('nome')
+          .eq('uid', empresaUid)
+          .single();
+        if (data?.nome) {
+          localStorage.setItem('encerrado_empresa', data.nome);
+          setEmpresaNome(data.nome);
+        }
+      } catch {
+        // Sem fallback — exibe texto genérico
+      }
+    })();
+  }, [empresaNome]);
 
   const handleVoltar = async () => {
     localStorage.removeItem('gbp_user');
     localStorage.removeItem('empresa_uid');
     localStorage.removeItem('active_empresa_uid');
     localStorage.removeItem('user_uid');
+    localStorage.removeItem('encerrado_empresa');
+    localStorage.removeItem('encerrado_empresa_uid');
     await supabaseClient.auth.signOut().catch(() => {});
     navigate('/login', { replace: true });
     window.location.reload();
@@ -49,21 +94,21 @@ export default function Encerrado() {
           </div>
 
           {/* Conteúdo central distribuído na altura disponível */}
-          <div className="flex-1 flex flex-col justify-center gap-4 md:gap-10 mt-4 md:mt-0">
-            <div className="space-y-3 md:space-y-4">
+          <div className="flex-1 flex flex-col justify-center gap-8 md:gap-10 mt-8 md:mt-0">
+            <div className="space-y-4 md:space-y-4">
               <h2 className="text-sm sm:text-xl md:text-xl lg:text-2xl font-bold tracking-tight whitespace-nowrap">
                 Foi uma honra fazer parte da sua{' '}
                 <span className="text-cyan-300">gestão.</span>
               </h2>
 
               <p className="text-sm text-blue-100 leading-relaxed max-w-sm">
-                O vínculo desta empresa com a plataforma foi encerrado.
-                Se desejar retornar ou tiver alguma dúvida, nossa equipe está à
-                disposição para atendê-lo.
+                O vínculo {empresaNome ? `de ${empresaNome}` : 'desta empresa'}{' '}
+                com a plataforma foi encerrado. Se desejar retornar ou tiver
+                alguma dúvida, nossa equipe está à disposição para atendê-lo.
               </p>
             </div>
 
-            <ul className="space-y-4 md:space-y-6 text-sm">
+            <ul className="space-y-6 md:space-y-6 text-sm">
             {[
               {
                 icon: ShieldCheck,
@@ -89,7 +134,7 @@ export default function Encerrado() {
             </ul>
           </div>
 
-          <div className="pt-6 md:pt-8">
+          <div className="pt-8 md:pt-8">
             <div className="border border-white/15 rounded-xl p-4 flex items-center gap-3 text-xs text-blue-100">
               <ShieldCheck className="h-4 w-4 shrink-0 text-cyan-300" />
               <div className="flex flex-wrap gap-x-6 gap-y-1">
@@ -109,11 +154,13 @@ export default function Encerrado() {
                 <Building2 className="h-5 w-5 text-slate-600" />
               </span>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">
+                <h1 className="text-lg font-bold text-red-600 leading-tight">
                   Vínculo encerrado
                 </h1>
                 <p className="text-sm font-semibold text-slate-600">
-                  Esta empresa não é mais cliente da GBP Político
+                  {empresaNome
+                    ? `${empresaNome} não é mais cliente da GBP Político`
+                    : 'Esta empresa não é mais cliente da GBP Político'}
                 </p>
                 <p className="mt-2 text-sm text-gray-600">
                   O acesso ao sistema foi encerrado e não está mais disponível

@@ -436,13 +436,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" 
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed lg:sticky left-0 bg-white dark:bg-gray-800 shadow-lg z-30 transition-all duration-300 ease-in-out ${
+        className={`fixed lg:sticky left-0 bg-white dark:bg-gray-800 shadow-lg z-50 transition-all duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'lg:w-20' : 'w-64'}`}
         style={{

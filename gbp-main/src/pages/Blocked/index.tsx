@@ -24,6 +24,10 @@ import {
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import { PaymentService } from '../../services/PaymentService';
+import {
+  resolveEmpresaStatus,
+  setCachedCompanyStatus,
+} from '../../services/companyStatus';
 import { useToast } from '../../components/ui/use-toast';
 import { Button } from '../../components/ui/button';
 import {
@@ -49,6 +53,7 @@ interface AssinaturaInfo {
 
 interface PagamentoInfo {
   id: string;
+  assinatura_id?: string;
   status: string;
   tipo_pagamento: string;
   valor: number;
@@ -74,6 +79,8 @@ export default function Blocked() {
   const [pixCopyPaste, setPixCopyPaste] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState<'pix' | 'boleto' | null>(null);
+  const [gerandoItem, setGerandoItem] = useState<string | null>(null); // "pagId:tipo"
+  const [pixRef, setPixRef] = useState<string | null>(null); // mês do QR exibido
   const [checking, setChecking] = useState(false);
   const [liberada, setLiberada] = useState(false);
 
@@ -81,7 +88,17 @@ export default function Blocked() {
   const [modalDoc, setModalDoc] = useState(false);
   const [docInput, setDocInput] = useState('');
   const [tipoPendente, setTipoPendente] = useState<'pix' | 'boleto' | null>(null);
+  const [docPagamentoId, setDocPagamentoId] = useState<string | null>(null);
   const [salvandoDoc, setSalvandoDoc] = useState(false);
+
+  // "setembro de 2026" a partir do vencimento da cobrança
+  const mesRef = (p: PagamentoInfo) =>
+    p.data_vencimento
+      ? new Date(p.data_vencimento).toLocaleDateString('pt-BR', {
+          month: 'long',
+          year: 'numeric',
+        })
+      : '—';
 
   const carregar = useCallback(async () => {
     if (!user?.uid) {
@@ -111,9 +128,22 @@ export default function Blocked() {
       .eq('uid', empresaUid)
       .single();
 
+    // Mantém o cache de status consistente com a leitura mais recente
+    if (emp) {
+      setCachedCompanyStatus({
+        empresaUid,
+        status: resolveEmpresaStatus(emp),
+        nome: (emp as any).nome ?? null,
+      });
+    }
+
     // Vínculo encerrado: esta tela de regularização não se aplica —
     // desconecta e vai para a página dedicada /encerrado
     if (emp && ((emp as any).ativa === false || emp.status === 'inactive')) {
+      if ((emp as any).nome) {
+        localStorage.setItem('encerrado_empresa', (emp as any).nome);
+      }
+      localStorage.setItem('encerrado_empresa_uid', empresaUid);
       localStorage.removeItem('gbp_user');
       localStorage.removeItem('empresa_uid');
       localStorage.removeItem('active_empresa_uid');
@@ -136,13 +166,12 @@ export default function Blocked() {
       }
     }
 
-    const { data: ass } = await supabaseClient
+    const { data: assList } = await supabaseClient
       .from('gbp_assinaturas')
       .select('id, plano_id, status, data_vencimento')
       .eq('empresa_uid', empresaUid)
-      .order('data_inicio', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('data_inicio', { ascending: false });
+    const ass = assList?.[0];
     if (ass) {
       setAssinatura(ass as AssinaturaInfo);
       if (ass.plano_id) {
@@ -156,12 +185,17 @@ export default function Blocked() {
           setPlanoValor(plano.valor ?? null);
         }
       }
+    }
 
-      // Todas as pendências (pending + overdue), do mais antigo ao mais recente
+    // Todas as pendências (pending + overdue) de QUALQUER assinatura da empresa,
+    // do mais antigo ao mais recente — evita lista vazia quando a cobrança está
+    // vinculada a uma assinatura anterior
+    const assIds = (assList || []).map((a: { id: string }) => a.id);
+    if (assIds.length > 0) {
       const { data: pags } = await supabaseClient
         .from('gbp_pagamentos')
-        .select('id, status, tipo_pagamento, valor, gateway_url, data_vencimento')
-        .eq('assinatura_id', ass.id)
+        .select('id, assinatura_id, status, tipo_pagamento, valor, gateway_url, data_vencimento')
+        .in('assinatura_id', assIds)
         .in('status', ['pending', 'overdue'])
         .order('data_vencimento', { ascending: true });
       const lista = (pags || []) as PagamentoInfo[];
@@ -204,10 +238,18 @@ export default function Blocked() {
       toast({ title: 'Assinatura não encontrada', variant: 'destructive' });
       return;
     }
+    // Com pendência em aberto, gera a cobrança daquela linha específica
+    // (mesmo valor/vencimento, sem duplicar no banco)
+    const alvo = pagamentos[0] || pagamento;
+    if (alvo) {
+      await handleGerarItem(alvo, tipo);
+      return;
+    }
     // Sem CPF/CNPJ válido o Asaas não cria a cobrança — pede antes
     if (!docValido(cpfCnpj)) {
       setDocInput(cpfCnpj || '');
       setTipoPendente(tipo);
+      setDocPagamentoId(null);
       setModalDoc(true);
       return;
     }
@@ -249,6 +291,72 @@ export default function Blocked() {
     }
   };
 
+  // Cobrança de UMA pendência específica (mês escolhido na lista)
+  const gerarPagamentoItem = async (
+    pag: PagamentoInfo,
+    tipo: 'pix' | 'boleto',
+    doc: string,
+  ) => {
+    if (!assinatura) return;
+    setGerandoItem(`${pag.id}:${tipo}`);
+    try {
+      const result = await PaymentService.generatePayment(
+        assinatura.id,
+        tipo,
+        0,
+        doc || undefined,
+        undefined,
+        pag.id,
+      );
+      if (tipo === 'pix') {
+        setQrCode(result.qrCode || null);
+        setPixCopyPaste(result.pixCopyPaste || null);
+        setPixRef(mesRef(pag));
+      } else {
+        setQrCode(null);
+        setPixCopyPaste(null);
+        setPixRef(null);
+        if (result.paymentUrl) window.open(result.paymentUrl, '_blank');
+      }
+      toast({
+        title: result.existing ? 'Cobrança reaberta' : `Cobrança de ${mesRef(pag)} gerada`,
+        description:
+          tipo === 'pix'
+            ? 'Escaneie o QR Code para pagar esta mensalidade.'
+            : 'Boleto aberto em nova aba.',
+      });
+      await carregar();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao gerar cobrança',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGerandoItem(null);
+    }
+  };
+
+  const handleGerarItem = async (pag: PagamentoInfo, tipo: 'pix' | 'boleto') => {
+    if (!assinatura && !pag.assinatura_id) {
+      toast({ title: 'Assinatura não encontrada', variant: 'destructive' });
+      return;
+    }
+    // Cobrança já gerada no Asaas → abre a fatura/boleto direto
+    if (pag.gateway_url && tipo !== 'pix') {
+      window.open(pag.gateway_url, '_blank');
+      return;
+    }
+    if (!docValido(cpfCnpj)) {
+      setDocInput(cpfCnpj || '');
+      setTipoPendente(tipo);
+      setDocPagamentoId(pag.id);
+      setModalDoc(true);
+      return;
+    }
+    await gerarPagamentoItem(pag, tipo, cpfCnpj);
+  };
+
   // Salva o documento na empresa e segue com a cobrança que estava pendente
   const confirmarDoc = async () => {
     if (!empresa) return;
@@ -269,7 +377,14 @@ export default function Blocked() {
       if (error) throw error;
       setCpfCnpj(docInput.trim());
       setModalDoc(false);
-      if (tipoPendente) await gerarPagamento(tipoPendente, docInput.trim());
+      if (tipoPendente) {
+        const alvo = docPagamentoId
+          ? pagamentos.find((x) => x.id === docPagamentoId)
+          : undefined;
+        if (alvo) await gerarPagamentoItem(alvo, tipoPendente, docInput.trim());
+        else await gerarPagamento(tipoPendente, docInput.trim());
+      }
+      setDocPagamentoId(null);
     } catch (e: any) {
       toast({
         title: 'Erro ao salvar dados',
@@ -357,7 +472,7 @@ export default function Blocked() {
     <div className="h-dvh overflow-y-auto bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 flex flex-col">
       <div className="w-full flex-1 bg-white grid md:grid-cols-5">
         {/* Painel institucional */}
-        <aside className="order-2 md:order-1 md:col-span-2 bg-gradient-to-b from-blue-950 via-blue-900 to-blue-700 text-white p-6 md:p-10 flex flex-col">
+        <aside className="order-2 md:order-1 md:col-span-2 bg-gradient-to-b from-blue-950 via-blue-900 to-blue-700 text-white p-6 md:p-10 flex flex-col md:justify-center">
           <div className="flex items-center gap-3">
             <img
               src="https://8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png"
@@ -370,7 +485,7 @@ export default function Blocked() {
             </div>
           </div>
 
-          <h2 className="mt-6 md:mt-10 text-xl md:text-3xl font-bold leading-snug">
+          <h2 className="mt-6 md:mt-24 text-xl md:text-3xl font-bold leading-snug">
             Seu acesso é importante para continuar{' '}
             <span className="text-cyan-300">fazendo a diferença.</span>
           </h2>
@@ -424,6 +539,11 @@ export default function Blocked() {
                 <div>
                   <h1 className="text-lg font-bold text-gray-900 leading-tight">Acesso bloqueado</h1>
                   <p className="text-sm font-semibold text-red-600">Assinatura vencida</p>
+                  {empresa?.nome && (
+                    <p className="mt-0.5 text-xs font-medium text-gray-500">
+                      Empresa: {empresa.nome}
+                    </p>
+                  )}
                   <p className="mt-2 text-sm text-gray-600">
                     Olá{primeiroNome ? `, ${primeiroNome}` : ''}. Efetue o pagamento da sua
                     assinatura para liberar o acesso à plataforma e continuar utilizando todos os recursos.
@@ -451,9 +571,15 @@ export default function Blocked() {
                   <Calendar className="h-5 w-5 mx-auto text-red-500" />
                   <p className="mt-1.5 text-xs text-gray-500">Vencimento</p>
                   <p className="text-sm font-bold text-red-600">
-                    {empresa?.data_expiracao
-                      ? new Date(empresa.data_expiracao).toLocaleDateString('pt-BR')
-                      : '—'}
+                    {(() => {
+                      const venc =
+                        empresa?.data_expiracao ||
+                        pagamentos[0]?.data_vencimento ||
+                        assinatura?.data_vencimento;
+                      return venc
+                        ? new Date(venc).toLocaleDateString('pt-BR')
+                        : '—';
+                    })()}
                   </p>
                 </div>
               </div>
@@ -464,6 +590,11 @@ export default function Blocked() {
                   <p className="text-sm font-medium text-gray-700 flex items-center justify-center gap-2">
                     <QrCode className="h-4 w-4 text-blue-600" /> Escaneie ou copie o código PIX
                   </p>
+                  {pixRef && (
+                    <p className="text-xs text-gray-500 capitalize">
+                      referente a {pixRef}
+                    </p>
+                  )}
                   {qrCode && (
                     <img
                       src={`data:image/png;base64,${qrCode}`}
@@ -498,42 +629,75 @@ export default function Blocked() {
                   </div>
                   <div className="divide-y divide-amber-100">
                     {pagamentos.map((p) => {
-                      const mes = p.data_vencimento
-                        ? new Date(p.data_vencimento).toLocaleDateString('pt-BR', {
-                            month: 'long',
-                            year: 'numeric',
-                          })
-                        : '—';
+                      const mes = mesRef(p);
+                      const gerandoPix = gerandoItem === `${p.id}:pix`;
+                      const gerandoBoleto = gerandoItem === `${p.id}:boleto`;
+                      const ocupado = gerandoItem !== null || generating !== null;
                       return (
-                        <a
-                          key={p.id}
-                          href={p.gateway_url || '#'}
-                          target={p.gateway_url ? '_blank' : undefined}
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between py-2 text-sm hover:bg-amber-50 rounded px-1 transition-colors"
-                        >
-                          <span className="flex items-center gap-2 text-gray-700">
-                            {p.tipo_pagamento === 'pix' ? (
-                              <QrCode className="h-4 w-4 text-blue-500" />
-                            ) : (
-                              <Barcode className="h-4 w-4 text-gray-500" />
-                            )}
-                            <span className="capitalize">{mes}</span>
-                            <span className="text-xs uppercase text-gray-400">
-                              {p.tipo_pagamento}
+                        <div key={p.id} className="py-3 px-1 text-sm sm:flex sm:items-center sm:gap-3">
+                          {/* linha 1: mês + valor */}
+                          <div className="flex flex-1 items-center justify-between gap-2">
+                            <span className="flex items-center gap-2 text-gray-700 min-w-0">
+                              {p.tipo_pagamento === 'pix' ? (
+                                <QrCode className="h-4 w-4 text-blue-500 shrink-0" />
+                              ) : (
+                                <Barcode className="h-4 w-4 text-gray-500 shrink-0" />
+                              )}
+                              <span className="capitalize truncate">{mes}</span>
+                              {p.status === 'overdue' && (
+                                <span className="text-xs font-medium text-red-600">vencido</span>
+                              )}
                             </span>
-                            {p.status === 'overdue' && (
-                              <span className="text-xs font-medium text-red-600">vencido</span>
+                            <span className="font-medium text-gray-900 shrink-0">
+                              {p.valor.toLocaleString('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              })}
+                            </span>
+                          </div>
+                          {/* ações — full width no mobile, inline no desktop */}
+                          <div className="mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
+                            {/* Já gerada no Asaas → link direto pra fatura */}
+                            {p.gateway_url ? (
+                              <a
+                                href={p.gateway_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-2 transition-colors"
+                              >
+                                Pagar <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleGerarItem(p, 'pix')}
+                                  disabled={ocupado}
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                >
+                                  {gerandoPix ? (
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <QrCode className="h-3.5 w-3.5" />
+                                  )}
+                                  Pagar PIX
+                                </button>
+                                <button
+                                  onClick={() => handleGerarItem(p, 'boleto')}
+                                  disabled={ocupado}
+                                  title="Gerar boleto para esta mensalidade"
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:border-blue-300 hover:text-blue-700 disabled:opacity-60"
+                                >
+                                  {gerandoBoleto ? (
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Barcode className="h-3.5 w-3.5" />
+                                  )}
+                                  Boleto
+                                </button>
+                              </>
                             )}
-                          </span>
-                          <span className="flex items-center gap-2 font-medium text-gray-900">
-                            {p.valor.toLocaleString('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            })}
-                            {p.gateway_url && <ExternalLink className="h-3.5 w-3.5 text-gray-400" />}
-                          </span>
-                        </a>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>

@@ -22,6 +22,11 @@ export interface RegistrationToken {
 
 const FIXED_GOAL = 1000;
 
+// Colunas seguras de gbp_usuarios (nunca incluir senha/senha_hash —
+// essas colunas não são mais legíveis pela anon key)
+const SAFE_USER_COLUMNS =
+  'uid, nome, email, contato, nivel_acesso, cargo, status, tentativas_login, empresa_uid, ultimo_acesso, created_at, foto, adm_empresa, permissoes, cota_criar_empresas, notification_status, notification_updated_at';
+
 export const userService = {
   async getNextId() {
     const { data, error } = await supabaseClient
@@ -63,7 +68,7 @@ export const userService = {
           notification_status: 'enabled',
           notification_updated_at: new Date().toISOString()
         }])
-        .select()
+        .select(SAFE_USER_COLUMNS)
         .single();
 
       if (error) {
@@ -123,7 +128,7 @@ export const userService = {
         .from('gbp_usuarios')
         .update(userData)
         .eq('uid', id)
-        .select()
+        .select(SAFE_USER_COLUMNS)
         .single();
 
       if (error) {
@@ -163,7 +168,7 @@ export const userService = {
           ultimo_acesso: timestamptz
         })
         .eq('id', userId)
-        .select();
+        .select('uid');
 
       if (error) {
         console.error('Erro ao atualizar último acesso:', error);
@@ -195,15 +200,14 @@ export const userService = {
 
   async completeRegistration(userId: string, password: string) {
     try {
-      const { error: updateError } = await supabaseClient
-        .from('gbp_usuarios')
-        .update({
-          senha: password,
-          status: 'active'
-        })
-        .eq('id', userId);
+      // Senha definida no servidor (bcrypt) — a coluna senha não é
+      // mais gravável diretamente pela anon key
+      const { error } = await supabaseClient.rpc('definir_senha_por_id', {
+        p_user_id: Number(userId),
+        p_nova_senha: password,
+      });
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       return true;
     } catch (error) {

@@ -187,8 +187,8 @@ export function MessageSettings() {
                   {mensagensAtivadas ? 'Ativo' : 'Inativo'}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 leading-relaxed whitespace-nowrap">
-                Ao cadastrar atendimento, o eleitor recebe mensagem automática no WhatsApp.
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                Envia mensagem no WhatsApp ao cadastrar atendimento.
               </p>
             </div>
             <Switch

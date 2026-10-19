@@ -60,6 +60,7 @@ export class PaymentService {
     descontoPercentual: number = 0,
     cpfCnpj?: string,
     diaVencimento?: number,
+    pagamentoId?: string,
   ) {
     try {
       return await callApi<{
@@ -68,7 +69,7 @@ export class PaymentService {
         qrCode: string | null;
         pixCopyPaste: string | null;
         existing?: boolean;
-      }>('/pagamentos/gerar', { assinaturaId, tipoPagamento, descontoPercentual, cpfCnpj, diaVencimento });
+      }>('/pagamentos/gerar', { assinaturaId, tipoPagamento, descontoPercentual, cpfCnpj, diaVencimento, pagamentoId });
     } catch (error) {
       console.error('Erro ao gerar pagamento:', error);
       throw error;

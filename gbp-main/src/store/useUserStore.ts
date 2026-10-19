@@ -46,7 +46,7 @@ export const useUserStore = create<UserStore>((set) => ({
 
       const { data: userData, error: userError } = await supabaseClient
         .from('gbp_usuarios')
-        .select('*')
+        .select('id, uid, auth_id, nome, email, cargo, nivel_acesso, permissoes, empresa_uid, cota_criar_empresas, contato, status, ultimo_acesso, created_at, foto, notification_token, notification_status, notification_updated_at, adm_empresa')
         .eq('auth_id', authUser.id)
         .single();
 

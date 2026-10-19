@@ -345,7 +345,7 @@ module.exports = function registerPayments(app, { requireAuth }) {
   // Gera cobrança no Asaas + registra em gbp_pagamentos
   app.post('/pagamentos/gerar', requireAuth, asaasConfigurado, async (req, res) => {
     try {
-      const { assinaturaId, tipoPagamento, descontoPercentual = 0, cpfCnpj, diaVencimento } = req.body || {};
+      const { assinaturaId, tipoPagamento, descontoPercentual = 0, cpfCnpj, diaVencimento, pagamentoId } = req.body || {};
       if (!assinaturaId || !tipoPagamento) {
         return res.status(400).json({ error: 'assinaturaId e tipoPagamento são obrigatórios' });
       }
@@ -364,6 +364,91 @@ module.exports = function registerPayments(app, { requireAuth }) {
       const plano = await sbOne(`gbp_planos?id=eq.${assinatura.plano_id}&select=*`);
       if (!plano) {
         return res.status(404).json({ error: 'Plano não encontrado' });
+      }
+
+      // Pagamento específico: vincula a cobrança Asaas a uma linha já
+      // existente de gbp_pagamentos (ex.: mensalidades lançadas manualmente
+      // sem gateway_id, ou uma cobrança PIX que o cliente quer pagar em boleto)
+      if (pagamentoId) {
+        const alvo = await sbOne(`gbp_pagamentos?id=eq.${pagamentoId}&select=*`);
+        if (!alvo || alvo.assinatura_id !== assinaturaId) {
+          return res.status(404).json({ error: 'Pagamento não encontrado' });
+        }
+        if (!['pending', 'overdue'].includes(alvo.status)) {
+          return res.status(400).json({ error: `Cobrança já está ${alvo.status}` });
+        }
+
+        // Já tem cobrança no Asaas → reexibe (QR PIX ou link da fatura)
+        if (alvo.gateway_id) {
+          let qrCode = null;
+          let pixCopyPaste = null;
+          if (alvo.tipo_pagamento === 'pix') {
+            try {
+              const pix = await asaas(`/payments/${alvo.gateway_id}/pixQrCode`);
+              qrCode = pix.encodedImage || null;
+              pixCopyPaste = pix.payload || null;
+            } catch (e) {
+              console.warn('[payments] Falha ao buscar pixQrCode:', e.message);
+            }
+          }
+          return res.json({
+            pagamento: alvo,
+            paymentUrl: alvo.gateway_url,
+            qrCode,
+            pixCopyPaste,
+            existing: true,
+          });
+        }
+
+        // Linha sem gateway (lançada manualmente): cria no Asaas usando
+        // o valor e o vencimento da própria pendência
+        const customerId = await ensureCustomer(assinatura.gbp_empresas, cpfCnpj);
+        const hoje = new Date().toISOString().slice(0, 10);
+        const vencAlvo = alvo.data_vencimento ? String(alvo.data_vencimento).slice(0, 10) : hoje;
+        const dueDate = vencAlvo >= hoje ? vencAlvo : hoje;
+
+        const asaasPayment = await asaas('/payments', {
+          method: 'POST',
+          body: {
+            customer: customerId,
+            billingType: tipoPagamento === 'pix' ? 'PIX' : 'BOLETO',
+            value: alvo.valor,
+            dueDate,
+            description: `Assinatura ${plano.nome} - ${vencAlvo}`,
+            postalService: false,
+          },
+        });
+
+        let qrCode = null;
+        let pixCopyPaste = null;
+        if (tipoPagamento === 'pix') {
+          try {
+            const pix = await asaas(`/payments/${asaasPayment.id}/pixQrCode`);
+            qrCode = pix.encodedImage || null;
+            pixCopyPaste = pix.payload || null;
+          } catch (e) {
+            console.warn('[payments] Falha ao buscar pixQrCode:', e.message);
+          }
+        }
+
+        // Vincula na MESMA linha — não cria duplicata em gbp_pagamentos
+        const rows = await sb(`gbp_pagamentos?id=eq.${alvo.id}`, {
+          method: 'PATCH',
+          body: {
+            gateway_id: asaasPayment.id,
+            gateway_url:
+              tipoPagamento === 'pix' ? asaasPayment.invoiceUrl : asaasPayment.bankSlipUrl,
+            tipo_pagamento: tipoPagamento,
+          },
+          prefer: 'return=representation',
+        });
+        const pagamento = Array.isArray(rows) ? rows[0] : alvo;
+        return res.json({
+          pagamento,
+          paymentUrl: pagamento.gateway_url,
+          qrCode,
+          pixCopyPaste,
+        });
       }
 
       // Não duplica cobrança do mesmo tipo (PIX e boleto são independentes)

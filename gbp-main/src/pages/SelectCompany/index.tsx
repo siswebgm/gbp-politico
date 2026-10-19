@@ -9,6 +9,11 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { toast } from '../../components/ui/use-toast';
+import {
+  checkCompanyStatus,
+  clearCompanyStatusCache,
+  setCachedCompanyStatus,
+} from '../../services/companyStatus';
 
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -457,12 +462,37 @@ export function SelectCompany() {
     }
   };
 
-  const handleSelectCompany = (companyUid: string) => {
+  const handleSelectCompany = async (companyUid: string) => {
     const selected = companies.find((c) => c.uid === companyUid);
     if (!selected) return;
 
     setSelectingCompanyUid(companyUid);
     try {
+      // Valida o status antes de entrar — evita o ciclo entrar → ser expulso
+      const status = await checkCompanyStatus(companyUid);
+      if (status.status === 'inactive') {
+        toast({
+          title: 'Ambiente indisponível',
+          description: `O vínculo da empresa ${status.nome || selected.nome || ''} foi encerrado.`,
+          variant: 'destructive',
+          duration: 6000,
+        });
+        return;
+      }
+      if (status.status === 'suspended') {
+        toast({
+          title: 'Acesso suspenso',
+          description: `O acesso à empresa ${status.nome || selected.nome || ''} está suspenso.`,
+          variant: 'destructive',
+          duration: 6000,
+        });
+        return;
+      }
+
+      // Garante que o cache reflita a empresa recém-selecionada
+      clearCompanyStatusCache();
+      setCachedCompanyStatus(status);
+
       setCompany(selected as any);
       localStorage.setItem('empresa_uid', companyUid);
       localStorage.setItem('active_empresa_uid', companyUid);

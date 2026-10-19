@@ -15,119 +15,166 @@ import { AppAssistant } from './AppAssistant';
 import { WhatsAppStatusAlert } from './WhatsAppStatusAlert';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useThemeStore } from '../store/useThemeStore';
+import {
+  checkCompanyStatus,
+  getCachedCompanyStatus,
+  CompanyStatusResult,
+} from '../services/companyStatus';
 
-// Hook personalizado para verificar o status da empresa
+// Hook personalizado para verificar o status da empresa.
+// Gate: retorna `ready` — o Layout só renderiza o app após o primeiro check.
+// Fail-open: em erro/timeout o acesso é liberado (evita travar por instabilidade).
 const useCheckCompanyStatus = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const warnedRef = useRef(false);
+  const [ready, setReady] = useState(false);
+  const checkRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
   // Auth do app é customizada (gbp_user) — não há sessão supabase.auth
   const { user } = useAuth();
 
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        if (!user?.uid) {
-          console.log('[status-check] sem usuário autenticado');
-          return;
+    let cancelled = false;
+
+    const applyVerdict = async (result: CompanyStatusResult) => {
+      if (cancelled) return;
+
+      // Vínculo encerrado: bloqueio silencioso — vai para /encerrado
+      if (result.status === 'inactive') {
+        if (result.nome) {
+          localStorage.setItem('encerrado_empresa', result.nome);
         }
+        localStorage.setItem('encerrado_empresa_uid', result.empresaUid);
+        localStorage.removeItem('gbp_user');
+        localStorage.removeItem('empresa_uid');
+        localStorage.removeItem('active_empresa_uid');
+        localStorage.removeItem('user_uid');
+        await supabaseClient.auth.signOut().catch(() => {});
+        navigate('/encerrado', { replace: true });
+        return;
+      }
 
-        // Busca o usuário para obter o empresa_uid
-        const { data: userData, error: userError } = await supabaseClient
-          .from('gbp_usuarios')
-          .select('empresa_uid, nivel_acesso')
-          .eq('uid', user.uid)
-          .single();
+      if (result.status === 'suspended') {
+        toast({
+          title: 'Acesso Suspenso',
+          description: `O acesso à empresa ${result.nome || ''} foi suspenso. Entre em contato com o suporte para mais informações.`,
+          variant: 'destructive',
+          duration: 8000,
+        });
+        await supabaseClient.auth.signOut();
+        navigate('/login');
+        return;
+      }
 
-        if (userError) {
-          console.warn('[status-check] erro ao buscar usuário:', userError);
-        }
-
-        // Empresa ativa: seleção multi-empresa > login > vínculo do usuário
-        const empresaUid =
-          localStorage.getItem('active_empresa_uid') ||
-          localStorage.getItem('empresa_uid') ||
-          userData?.empresa_uid;
-        if (!empresaUid) {
-          console.log('[status-check] sem empresaUid', userData);
-          return;
-        }
-
-        // Verifica o status da empresa
-        const { data: empresaData, error: empresaError } = await supabaseClient
-          .from('gbp_empresas')
-          .select('status, nome, data_expiracao, ativa')
-          .eq('uid', empresaUid)
-          .single();
-
-        if (empresaError) {
-          console.warn('[status-check] erro ao buscar empresa:', empresaError);
-          return;
-        }
-        console.log('[status-check]', empresaUid, empresaData?.status, empresaData?.data_expiracao);
-
-        // Empresa inativa (vínculo encerrado): bloqueio silencioso,
-        // sem página de regularização — vai para /encerrado
-        if (empresaData?.ativa === false || empresaData?.status === 'inactive') {
-          localStorage.removeItem('gbp_user');
-          localStorage.removeItem('empresa_uid');
-          localStorage.removeItem('active_empresa_uid');
-          localStorage.removeItem('user_uid');
-          await supabaseClient.auth.signOut().catch(() => {});
-          navigate('/encerrado', { replace: true });
-          return;
-        }
-
-        // Se o status for 'suspended', faz logout e redireciona
-        if (empresaData?.status === 'suspended') {
+      if (result.status === 'blocked') {
+        if (!warnedRef.current) {
+          warnedRef.current = true;
           toast({
-            title: "Acesso Suspenso",
-            description: `O acesso à empresa ${empresaData.nome || ''} foi suspenso. Entre em contato com o suporte para mais informações.`,
-            variant: 'destructive',
+            title: 'Acesso bloqueado',
+            description: `A assinatura da empresa ${result.nome || ''} está vencida. Regularize o pagamento para liberar o acesso.`,
+            variant: 'warning',
             duration: 8000,
           });
-          
-          await supabaseClient.auth.signOut();
-          navigate('/login');
+        }
+        if (location.pathname !== '/bloqueado') {
+          navigate('/bloqueado', { replace: true });
+        }
+        return;
+      }
+
+      // active | unknown (fail-open): libera o app
+      warnedRef.current = false;
+      setReady(true);
+    };
+
+    const checkStatus = async (forceFresh = false) => {
+      try {
+        if (!user?.uid) {
+          setReady(true);
           return;
         }
 
-        // Empresa bloqueada ou com assinatura vencida (data_expiracao no passado)
-        const expirada =
-          !!empresaData?.data_expiracao &&
-          new Date(empresaData.data_expiracao).getTime() < Date.now();
-        const vencida = empresaData?.status === 'blocked' || expirada;
+        let empresaUid =
+          localStorage.getItem('active_empresa_uid') ||
+          localStorage.getItem('empresa_uid');
 
-        if (vencida) {
-          if (!warnedRef.current) {
-            warnedRef.current = true;
-            toast({
-              title: 'Acesso bloqueado',
-              description: `A assinatura da empresa ${empresaData?.nome || ''} está vencida. Regularize o pagamento para liberar o acesso.`,
-              variant: 'warning',
-              duration: 8000,
-            });
-          }
-
-          // Tela dedicada de bloqueio/renovação — todos os usuários saem do app
-          if (location.pathname !== '/bloqueado') {
-            navigate('/bloqueado', { replace: true });
-          }
-        } else {
-          warnedRef.current = false;
+        // Fallback: vínculo do usuário quando não há seleção em storage
+        if (!empresaUid) {
+          const { data: userData } = await supabaseClient
+            .from('gbp_usuarios')
+            .select('empresa_uid')
+            .eq('uid', user.uid)
+            .single();
+          empresaUid = userData?.empresa_uid || null;
         }
+
+        if (!empresaUid) {
+          setReady(true);
+          return;
+        }
+
+        // Fast path: cache válido dizendo "active" → libera na hora e
+        // revalida em background (sem bloquear a tela)
+        if (!forceFresh) {
+          const cached = getCachedCompanyStatus(empresaUid);
+          if (cached?.status === 'active') {
+            setReady(true);
+            const fresh = await checkCompanyStatus(empresaUid);
+            await applyVerdict(fresh);
+            return;
+          }
+          // Cache não-ativo NÃO é confiável para expulsar — revalida antes
+        }
+
+        const result = await checkCompanyStatus(empresaUid);
+        await applyVerdict(result);
       } catch (error) {
         console.error('Erro ao verificar status da empresa:', error);
+        setReady(true); // fail-open
       }
     };
 
-    // Verifica imediatamente e a cada 5 minutos
+    checkRef.current = checkStatus;
     checkStatus();
-    const interval = setInterval(checkStatus, 5 * 60 * 1000);
+    const interval = setInterval(() => checkStatus(), 5 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [navigate, location.pathname, toast, user?.uid]);
+
+  // Realtime: bloqueio instantâneo quando o admin altera a empresa —
+  // não depende do polling de 5 min
+  useEffect(() => {
+    const empresaUid =
+      localStorage.getItem('active_empresa_uid') ||
+      localStorage.getItem('empresa_uid');
+    if (!user?.uid || !empresaUid) return;
+
+    const channel = supabaseClient
+      .channel(`empresa-status-${empresaUid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'gbp_empresas',
+          filter: `uid=eq.${empresaUid}`,
+        },
+        () => {
+          void checkRef.current(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, [user?.uid]);
+
+  return ready;
 };
 
 function ErrorFallback({ error }: { error: Error }) {
@@ -142,7 +189,7 @@ function ErrorFallback({ error }: { error: Error }) {
 }
 
 export function Layout() {
-  useCheckCompanyStatus();
+  const statusReady = useCheckCompanyStatus();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [companyPlan, setCompanyPlan] = useState<string | null>(null);
@@ -269,6 +316,73 @@ export function Layout() {
       });
     }
   };
+
+  // Gate: não renderiza o app (nem dispara queries das páginas filhas)
+  // até a primeira verificação de status da empresa concluir.
+  if (!statusReady) {
+    return (
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-blue-950 via-blue-900 to-blue-700">
+        {/* Marca d'água decorativa */}
+        <img
+          src="https://8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png"
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -bottom-24 h-96 w-96 rounded-full object-cover opacity-[0.07] blur-sm"
+        />
+        <img
+          src="https://8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png"
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full object-cover opacity-[0.05] blur-sm"
+        />
+
+        <div className="relative flex flex-col items-center gap-6 px-6">
+          {/* Logo com anel pulsante */}
+          <div className="relative">
+            <span className="absolute inset-0 rounded-full bg-cyan-400/30 animate-ping" />
+            <span className="absolute -inset-2 rounded-full border border-white/20" />
+            <img
+              src="https://8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png"
+              alt="GBP Político"
+              className="relative h-20 w-20 rounded-full object-cover ring-4 ring-white/25 shadow-2xl shadow-blue-950/50"
+            />
+          </div>
+
+          {/* Marca */}
+          <div className="text-center">
+            <p className="text-2xl font-bold tracking-tight text-white">
+              GBP <span className="text-cyan-300">Político</span>
+            </p>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.25em] text-blue-200/80">
+              Gestão política inteligente
+            </p>
+          </div>
+
+          {/* Barra shimmer */}
+          <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15">
+            <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent [animation:gbp-slide_1.2s_ease-in-out_infinite]" />
+          </div>
+
+          {/* Texto com pontos animados */}
+          <p className="flex items-center gap-1.5 text-sm font-medium text-blue-100">
+            Verificando seu acesso
+            <span className="flex gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-300" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-300" style={{ animationDelay: '0.15s' }} />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-300" style={{ animationDelay: '0.3s' }} />
+            </span>
+          </p>
+        </div>
+
+        <style>{`
+          @keyframes gbp-slide {
+            0% { transform: translateX(-150%); }
+            100% { transform: translateX(450%); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
