@@ -1,4 +1,5 @@
 import { supabaseClient } from '../lib/supabase';
+import { getSessaoToken } from '../lib/session';
 // Firebase desabilitado
 // import { messaging } from '../lib/firebase';
 // import { getMessaging, getToken } from 'firebase/messaging';
@@ -278,6 +279,7 @@ class NotificationService {
     icon_url?: string;
     badge_url?: string;
     empresa_nome?: string;
+    cor?: string;
     link?: string;
     data?: Record<string, string>;
   }): Promise<Array<{ token: string; success: boolean; invalid_token?: boolean; error?: string }>> {
@@ -292,7 +294,8 @@ class NotificationService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-uid': userUid
+        'x-user-uid': userUid,
+        'x-session-token': getSessaoToken()
       },
       body: JSON.stringify(params)
     });

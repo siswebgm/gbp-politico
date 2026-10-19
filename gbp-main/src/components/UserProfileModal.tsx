@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Camera, Loader2 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider';
 import { supabaseClient } from '../lib/supabase';
+import { getSessaoToken } from '../lib/session';
 import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCompanyStore } from '../store/useCompanyStore';
@@ -41,6 +42,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     foto: ''
   });
   const [senha, setSenha] = useState('');
+  const [senhaAtual, setSenhaAtual] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -205,48 +207,33 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         }
       }
 
-      // Preparar dados para atualização (removendo formatação do contato)
-      const updateData: {
-        nome?: string | null;
-        contato?: string | null;
-        foto?: string | null;
-        email: string;
-        senha?: string | null;
-      } = {
-        email: userData.email,
-      };
-
-      // Adicionar campos opcionais apenas se tiverem valor
-      if (userData.nome?.trim()) updateData.nome = userData.nome.trim();
-      if (userData.contato) updateData.contato = unformatPhone(userData.contato);
-      if (photoUrl?.trim()) updateData.foto = photoUrl.trim();
-
       try {
-        // Adicionar senha ao updateData se fornecida
-        if (senha?.trim()) {
-          updateData.senha = senha.trim();
+        // Troca de senha exige a senha atual (verificada no servidor)
+        if (senha?.trim() && !senhaAtual?.trim()) {
+          toast.showToast({
+            type: 'error',
+            title: 'Senha atual obrigatória',
+            description: 'Informe sua senha atual para definir uma nova senha',
+          });
+          return;
         }
 
-        // Atualizar os dados no Supabase
-        const { error: updateError } = await supabaseClient
-          .from('gbp_usuarios')
-          .update(updateData)
-          .eq('uid', user.uid)
-          .single();
+        // Atualização via RPC com sessão (UPDATE direto foi revogado)
+        const { data: updatedUserData, error: updateError } = await supabaseClient.rpc(
+          'atualizar_meu_perfil',
+          {
+            p_sessao_token: getSessaoToken(),
+            p_nome: userData.nome?.trim() || null,
+            p_contato: userData.contato ? unformatPhone(userData.contato) : null,
+            p_foto: photoUrl?.trim() || null,
+            p_email: userData.email || null,
+            p_senha_atual: senha?.trim() ? senhaAtual.trim() : null,
+            p_nova_senha: senha?.trim() || null,
+          }
+        );
 
         if (updateError) {
-          throw new Error(`Erro ao atualizar dados: ${updateError.message}`);
-        }
-
-        // Buscar dados atualizados do usuário
-        const { data: updatedUserData, error: fetchError } = await supabaseClient
-          .from('gbp_usuarios')
-          .select('*')
-          .eq('uid', user.uid)
-          .single();
-
-        if (fetchError) {
-          throw new Error(`Erro ao buscar dados atualizados: ${fetchError.message}`);
+          throw new Error(updateError.message || 'Erro ao atualizar dados');
         }
 
         // Atualizar estado global apenas com informações não sensíveis
@@ -501,7 +488,19 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="senha" className="text-xs font-medium text-gray-700">Senha</Label>
+              <Label htmlFor="senha-atual" className="text-xs font-medium text-gray-700">Senha atual</Label>
+              <Input
+                id="senha-atual"
+                type="password"
+                value={senhaAtual}
+                onChange={(e) => setSenhaAtual(e.target.value)}
+                placeholder="Obrigatória para alterar a senha"
+                className="h-7 px-2 text-sm border-gray-200 rounded focus:ring-1 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="senha" className="text-xs font-medium text-gray-700">Nova senha</Label>
               <Input
                 id="senha"
                 type="password"

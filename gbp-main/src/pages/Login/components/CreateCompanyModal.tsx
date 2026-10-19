@@ -105,63 +105,35 @@ export function CreateCompanyModal({ isOpen, onClose, onSuccess }: CreateCompany
     try {
       setIsLoading(true);
 
-      // Criar empresa
-      const { data: company, error: companyError } = await supabaseClient
-        .from('gbp_empresas')
-        .insert([
-          {
-            nome: data.nomeEmpresa,
-            status: 'active',
-            created_at: new Date().toISOString(),
-            plano: 'basic'
-          },
-        ])
-        .select()
-        .single();
+      // Cadastro atômico via RPC (INSERT direto em gbp_usuarios foi revogado)
+      const { error: contaError } = await supabaseClient.rpc('registrar_conta', {
+        p_empresa: {
+          nome: data.nomeEmpresa,
+          plano: 'basic',
+        },
+        p_usuario: {
+          nome: data.nomeAdmin,
+          email: data.email,
+          senha: data.senha,
+          contato: data.telefoneAdmin,
+          permissoes: [
+            'view_projetos_lei',
+            'create_projetos_lei',
+            'edit_projetos_lei',
+            'delete_projetos_lei',
+            'view_oficios',
+            'create_oficios',
+            'edit_oficios',
+            'delete_oficios',
+            'view_dashboard',
+            'manage_users',
+            'manage_roles',
+            'manage_settings'
+          ],
+        },
+      });
 
-      if (companyError) throw companyError;
-
-      // Criar usuário administrador
-      const { data: user, error: userError } = await supabaseClient
-        .from('gbp_usuarios')
-        .insert([
-          {
-            nome: data.nomeAdmin,
-            email: data.email,
-            senha: data.senha,
-            contato: data.telefoneAdmin,
-            empresa_uid: company.uid,
-            nivel_acesso: 'admin',
-            cargo: 'admin',
-            status: 'active',
-            permissoes: [
-              'view_projetos_lei',
-              'create_projetos_lei',
-              'edit_projetos_lei',
-              'delete_projetos_lei',
-              'view_oficios',
-              'create_oficios',
-              'edit_oficios',
-              'delete_oficios',
-              'view_dashboard',
-              'manage_users',
-              'manage_roles',
-              'manage_settings'
-            ],
-            created_at: new Date().toISOString()
-          },
-        ])
-        .select()
-        .single();
-
-      if (userError) {
-        // Se falhar ao criar usuário, remove a empresa
-        await supabaseClient
-          .from('gbp_empresas')
-          .delete()
-          .eq('uid', company.uid);
-        throw userError;
-      }
+      if (contaError) throw contaError;
 
       reset();
       onSuccess(data.email); // Retorna o email para preencher o campo de login

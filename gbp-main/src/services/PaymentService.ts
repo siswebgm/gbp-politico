@@ -1,4 +1,5 @@
 import { supabaseClient as supabaseAdmin } from '../lib/supabase';
+import { getSessaoToken } from '../lib/session';
 
 // A chave do Asaas NÃO fica no frontend — todas as chamadas passam
 // pelo push-api (mesmo host em produção: app.gbppolitico.com/push).
@@ -23,6 +24,7 @@ async function callApi<T>(path: string, body: unknown): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       'x-user-uid': getUserUid(),
+      'x-session-token': getSessaoToken(),
     },
     body: JSON.stringify(body),
   });

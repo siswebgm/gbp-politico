@@ -98,14 +98,29 @@ self.addEventListener('push', (event) => {
   const notification = payload.notification || {};
   const title = notification.title || data.title || 'GBP Politico';
   const body = notification.body || data.body || 'Nova notificação';
+  // Uma tag por empresa: notificações da mesma empresa se agrupam em uma
+  // única entrada que mostra "N mensagens" (estilo WhatsApp recolhido)
+  const grupoTag = `gbp-${String(data.empresa_nome || 'geral').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`;
 
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: notification.icon || data.icon_url || data.badge_url || undefined,
-      image: notification.image || undefined,
-      badge: notification.icon || data.badge_url || data.icon_url || undefined,
-      tag: data.id || 'gbp-notification',
+  event.waitUntil((async () => {
+    // Conta mensagens ativas do grupo para exibir "N mensagens"
+    let count = 1;
+    try {
+      const ativas = await self.registration.getNotifications();
+      const anterior = ativas.find(n => n.tag === grupoTag);
+      if (anterior) {
+        count = (anterior.data && Number(anterior.data.msg_count)) ? Number(anterior.data.msg_count) + 1 : 2;
+      }
+    } catch (e) {
+      console.warn('[Service Worker] getNotifications indisponível:', e);
+    }
+
+    await self.registration.showNotification(title, {
+      body: count > 1 ? `${count} mensagens` : body,
+      icon: notification.icon || data.icon_url || data.badge_url || '/icons/icon-512x512.png',
+      image: count > 1 ? undefined : (notification.image || undefined),
+      badge: notification.icon || data.badge_url || data.icon_url || '/icons/icon-512x512.png',
+      tag: grupoTag,
       renotify: true,
       requireInteraction: true,
       vibrate: [200, 100, 200],
@@ -114,14 +129,14 @@ self.addEventListener('push', (event) => {
       ],
       data: {
         ...data,
+        msg_count: String(count),
         link: data.link || (payload.fcmOptions && payload.fcmOptions.link) || ''
       }
-    }).then(() => {
-      console.log('[Service Worker] Notificação exibida');
-    }).catch((err) => {
-      console.error('[Service Worker] Erro ao exibir notificação:', err);
-    })
-  );
+    });
+    console.log('[Service Worker] Notificação exibida');
+  })().catch((err) => {
+    console.error('[Service Worker] Erro ao exibir notificação:', err);
+  }));
 });
 
 // Tratamento de mensagens em background
@@ -129,22 +144,34 @@ messaging.onBackgroundMessage(async (payload) => {
   console.log('[Service Worker] Mensagem recebida em background:', payload);
 
   try {
-    const defaultLogo = '//8a9fa808ea18d066080b81b1741b3afc.cdn.bubble.io/f1683656885399x827876060621908000/gbp%20politico.png';
+    const defaultLogo = '/icons/icon-512x512.png';
     const data = payload.data || {};
     const empresaNome = data.empresa_nome || 'GBP Politico';
     // Logo da empresa enviado como icon_url/badge_url; fallback para imagem da notificação
     const companyIcon =
       data.badge_url || data.icon_url || payload.notification?.icon || defaultLogo;
 
+    // Mesma tag do handler push: agrupa por empresa e mostra "N mensagens"
+    const grupoTag = `gbp-${String(empresaNome).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`;
+    let count = 1;
+    try {
+      const ativas = await self.registration.getNotifications();
+      const anterior = ativas.find(n => n.tag === grupoTag);
+      if (anterior) {
+        count = (anterior.data && Number(anterior.data.msg_count)) ? Number(anterior.data.msg_count) + 1 : 2;
+      }
+    } catch (e) { /* getNotifications indisponível */ }
+
     const notificationData = {
       title: payload.notification?.title || empresaNome,
       options: {
-        body: payload.notification?.body || data.message || 'Nova notificação',
+        body: count > 1 ? `${count} mensagens` : (payload.notification?.body || data.message || 'Nova notificação'),
         icon: companyIcon,
         badge: companyIcon,
-        tag: data.id || 'notification',
+        tag: grupoTag,
         data: {
           ...data,
+          msg_count: String(count),
           link: data.link || payload.fcmOptions?.link || '',
           dateOfArrival: Date.now(),
           primaryKey: 1

@@ -934,16 +934,8 @@ class EleitorService {
   async getResponsaveisOptions(empresa_uid: string) {
     try {
       console.log('[DEBUG] Service - Buscando responsáveis para empresa:', empresa_uid);
-      
-      // Primeiro, vamos verificar se existem usuários sem filtros
-      const checkQuery = await supabaseClient
-        .from('gbp_usuarios')
-        .select('count')
-        .eq('empresa_uid', empresa_uid);
-      
-      console.log('[DEBUG] Service - Total de usuários na empresa:', checkQuery.data?.[0]?.count);
 
-      // Agora fazemos a query com os filtros
+      // Query com os filtros
       const { data, error } = await supabaseClient
         .from('gbp_usuarios')
         .select('uid, nome')

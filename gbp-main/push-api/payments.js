@@ -180,6 +180,7 @@ async function ensureCustomer(empresa, cpfCnpj) {
       state: empresa.estado || '',
       country: 'BR',
       observations: 'Cliente criado via API',
+      notificationDisabled: true,
     },
   });
 
@@ -452,11 +453,13 @@ module.exports = function registerPayments(app, { requireAuth }) {
       }
 
       // Não duplica cobrança do mesmo tipo (PIX e boleto são independentes)
-      const pendente = await sbOne(
+      // Fetch em array: sbOne (single object) retorna 406 quando há 0 linhas
+      const pendentes = await sb(
         `gbp_pagamentos?assinatura_id=eq.${assinaturaId}` +
           `&tipo_pagamento=eq.${tipoPagamento}` +
           `&status=in.(pending,overdue)&order=data_vencimento.desc&limit=1&select=*`,
       );
+      const pendente = Array.isArray(pendentes) ? pendentes[0] : null;
       if (pendente) {
         // Reexibe o QR do PIX pendente em vez de gerar nova cobrança
         let qrCode = null;

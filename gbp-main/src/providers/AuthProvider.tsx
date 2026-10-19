@@ -195,6 +195,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
+      // Valida a sessão no servidor (tokens expirados/revogados → logout)
+      const sessaoToken = safeGetLocalStorageItem('sessao_token');
+      if (sessaoToken) {
+        try {
+          const { error: sessaoError } = await supabaseClient.rpc('sessao_validar', {
+            p_token: sessaoToken,
+          });
+          if (sessaoError && String(sessaoError.message || '').includes('sessao_invalida')) {
+            console.error('[AuthProvider] Sessão inválida/expirada. Forçando logout.');
+            signOut();
+            return false;
+          }
+        } catch (sessaoErr) {
+          // Falha de rede na validação não derruba a sessão
+          console.warn('[AuthProvider] Falha ao validar sessão:', sessaoErr);
+        }
+      }
+
       const activeEmpresaUid = safeGetLocalStorageItem('active_empresa_uid') || userData.empresa_uid;
       const userWithActiveEmpresa = {
         ...userData,
@@ -315,6 +333,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       safeSetLocalStorageItem('gbp_user', JSON.stringify(userWithActiveEmpresa));
       safeSetLocalStorageItem('empresa_uid', activeEmpresaUid);
       safeSetLocalStorageItem('user_uid', user.uid);
+      if (user.sessao_token) {
+        safeSetLocalStorageItem('sessao_token', user.sessao_token);
+      }
 
       // Carrega dados da empresa se existir
       if (activeEmpresaUid) {
@@ -335,9 +356,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = () => {
+    // Revoga a sessão no servidor (melhor esforço)
+    const sessaoToken = safeGetLocalStorageItem('sessao_token');
+    if (sessaoToken) {
+      supabaseClient
+        .rpc('logout_seguro', { p_token: sessaoToken })
+        .catch((e: unknown) => console.warn('[AuthProvider] logout_seguro falhou:', e));
+    }
+
     authStore.logout();
     setCompany(null);
     setCompanyUser(null);
+    safeRemoveLocalStorageItem('sessao_token');
     safeRemoveLocalStorageItem('gbp_user');
     safeRemoveLocalStorageItem('empresa_uid');
     safeRemoveLocalStorageItem('active_empresa_uid');

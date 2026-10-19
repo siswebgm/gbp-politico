@@ -58,20 +58,52 @@ app.use(
   cors({
     origin: ALLOWED_ORIGINS.split(',').map((o) => o.trim()),
     methods: ['POST', 'GET', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-user-uid'],
+    allowedHeaders: ['Content-Type', 'x-user-uid', 'x-session-token'],
   }),
 );
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // O app usa login próprio (tabela gbp_usuarios), sem sessão do Supabase Auth.
-// Confirma que o uid enviado pertence a um usuário cadastrado.
+// Preferência: header x-session-token → validado no servidor via RPC
+// sessao_validar (prova criptográfica real). Fallback legado: x-user-uid
+// (verifica só a existência do usuário — fraco, remover na próxima etapa).
 async function requireAuth(req, res, next) {
+  const token = String(req.headers['x-session-token'] || '');
   const uid = String(req.headers['x-user-uid'] || '');
-  if (!UUID_REGEX.test(uid)) {
-    return res.status(401).json({ error: 'Não autenticado' });
-  }
+
   try {
+    // Caminho novo: sessão criptográfica
+    if (token) {
+      const rpc = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sessao_validar`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ p_token: token }),
+      });
+
+      if (rpc.ok) {
+        const u = await rpc.json();
+        req.user = {
+          uid: u.uid,
+          empresa_uid: u.empresa_uid || null,
+          nivel_acesso: u.nivel_acesso || null,
+          cargo: u.cargo || null,
+        };
+        return next();
+      }
+      // Token presente mas inválido → não cai pro fallback (evita bypass)
+      return res.status(401).json({ error: 'Sessão inválida' });
+    }
+
+    // Caminho legado (remover quando o app antigo sair de circulação)
+    if (!UUID_REGEX.test(uid)) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/gbp_usuarios?uid=eq.${uid}&select=uid,empresa_uid,nivel_acesso,cargo&limit=1`,
       {
@@ -120,7 +152,7 @@ require('./jobs').startJobs();
 const FCM_BATCH_SIZE = 500;
 
 app.post('/enviar', requireAuth, async (req, res) => {
-  const { tokens, envios, title, body, imagem_url, icon_url, badge_url, empresa_nome, link, data = {} } = req.body || {};
+  const { tokens, envios, title, body, imagem_url, icon_url, badge_url, empresa_nome, link, cor, data = {} } = req.body || {};
 
   // Dois formatos aceitos:
   // - tokens[] + data compartilhado (legado)
@@ -148,6 +180,10 @@ app.post('/enviar', requireAuth, async (req, res) => {
   });
 
   const icon = badge_url || icon_url || undefined;
+  // Cor de destaque da notificação no Android (tinge ícone pequeno + nome do app).
+  // Aceita #rrggbb; padrão = azul da marca.
+  const corDestaque = /^#[0-9a-fA-F]{6}$/.test(String(cor || '')) ? String(cor) : '#1E40AF';
+  const timestampMs = Date.now();
 
   const buildMessage = (destino) => {
     // Mescla data compartilhado com o data individual do destinatário
@@ -172,7 +208,10 @@ app.post('/enviar', requireAuth, async (req, res) => {
         ...(imagem_url ? { image: imagem_url } : {}),
         requireInteraction: true,
         renotify: true,
-        tag: 'gbp-notification',
+        // Tag por conversa/log: mensagens da mesma conversa se agrupam
+        // (estilo WhatsApp) em vez de uma apagar a anterior.
+        tag: `gbp-${msgData.id || msgData.empresa_nome || 'geral'}`,
+        timestamp: timestampMs,
         vibrate: [200, 100, 200],
       },
       ...(link ? { fcmOptions: { link } } : {}),
@@ -181,6 +220,7 @@ app.post('/enviar', requireAuth, async (req, res) => {
       priority: 'high',
       notification: {
         channelId: 'default',
+        color: corDestaque,
         ...(icon ? { icon } : {}),
         ...(imagem_url ? { imageUrl: imagem_url } : {}),
       },

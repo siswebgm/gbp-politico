@@ -5,6 +5,8 @@
 // Tokens NUNCA passam pelo frontend: tudo via push-api + service_role.
 // ============================================================
 
+import { getSessaoToken } from '../lib/session';
+
 export interface GoogleConnectionStatus {
   connected: boolean;
   /** true quando o token salvo não tem escopo de escrita na agenda → precisa reconectar */
@@ -58,6 +60,7 @@ async function call<T>(
     headers: {
       'Content-Type': 'application/json',
       'x-user-uid': userUid,
+      'x-session-token': getSessaoToken(),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

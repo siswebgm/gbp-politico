@@ -58,48 +58,36 @@ export function Register() {
         }
       }
 
-      // 1. Criar empresa
-      const { data: companyData, error: companyError } = await supabasePublicClient
-        .from('gbp_empresas')
-        .insert([{
-          nome: data.companyName,
-          cnpj: data.cnpj,
-          contato: data.companyPhone,
-          website: data.website,
-          logradouro: data.address,
-          cidade: data.city,
-          estado: data.state,
-          cep: data.zipCode,
-          afiliado_codigo: affiliateCode || null,
-          created_at: new Date().toISOString(),
-        }])
-        .select()
-        .single();
+      // Cadastro atômico via RPC (INSERT direto em gbp_usuarios foi revogado)
+      const { data: conta, error: contaError } = await supabasePublicClient.rpc(
+        'registrar_conta',
+        {
+          p_empresa: {
+            nome: data.companyName,
+            cnpj: data.cnpj,
+            contato: data.companyPhone,
+            website: data.website,
+            logradouro: data.address,
+            cidade: data.city,
+            estado: data.state,
+            cep: data.zipCode,
+            afiliado_codigo: affiliateCode || null,
+          },
+          p_usuario: {
+            nome: data.userName,
+            email: data.email,
+            senha: data.password,
+            contato: data.phone,
+          },
+        }
+      );
 
-      if (companyError) {
-        console.error('Erro ao criar empresa:', companyError);
-        throw companyError;
+      if (contaError) {
+        console.error('Erro ao registrar conta:', contaError);
+        throw contaError;
       }
 
-      // 2. Criar usuário na tabela gbp_usuarios
-      const { error: userError } = await supabasePublicClient
-        .from('gbp_usuarios')
-        .insert([{
-          nome: data.userName,
-          email: data.email,
-          senha: data.password,
-          contato: data.phone,
-          cargo: 'admin',
-          nivel_acesso: 'admin',
-          empresa_uid: companyData.uid,
-          created_at: new Date().toISOString(),
-          status: 'active',
-        }]);
-
-      if (userError) {
-        console.error('Erro ao criar usuário:', userError);
-        throw userError;
-      }
+      const companyData = { uid: conta.empresa_uid };
 
       // 3. Se houver afiliado, registra a indicação
       if (afiliadoId && affiliateCode) {

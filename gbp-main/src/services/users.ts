@@ -1,4 +1,5 @@
 import { supabaseClient } from '../lib/supabase';
+import { getSessaoToken } from '../lib/session';
 
 export interface User {
   uid: string;
@@ -47,36 +48,16 @@ export const userService = {
 
       // Remove a confirmação de senha antes de enviar
       const { confirmarSenha, ...userDataToSend } = userData as any;
-      
-      // Verifica se o email já existe
-      const { data: existingUser } = await supabaseClient
-        .from('gbp_usuarios')
-        .select('email')
-        .eq('email', userData.email)
-        .single();
 
-      if (existingUser) {
-        throw new Error('Este email já está cadastrado');
-      }
-      
-      const { data, error } = await supabaseClient
-        .from('gbp_usuarios')
-        .insert([{
-          ...userDataToSend,
-          created_at: new Date().toISOString(),
-          status: 'active',
-          notification_status: 'enabled',
-          notification_updated_at: new Date().toISOString()
-        }])
-        .select(SAFE_USER_COLUMNS)
-        .single();
+      // Criação via RPC com sessão de admin (INSERT direto foi revogado)
+      const { data, error } = await supabaseClient.rpc('admin_criar_usuario', {
+        p_sessao_token: getSessaoToken(),
+        p_dados: userDataToSend,
+      });
 
       if (error) {
         console.error('Erro ao criar usuário:', error);
-        if (error.code === '23505') {
-          throw new Error('Este email já está cadastrado');
-        }
-        throw new Error('Erro ao criar usuário no banco de dados');
+        throw new Error(error.message || 'Erro ao criar usuário no banco de dados');
       }
 
       return data;
@@ -124,12 +105,12 @@ export const userService = {
 
   async update(id: string, userData: Partial<Omit<User, 'uid' | 'empresa_uid'>>) {
     try {
-      const { data, error } = await supabaseClient
-        .from('gbp_usuarios')
-        .update(userData)
-        .eq('uid', id)
-        .select(SAFE_USER_COLUMNS)
-        .single();
+      // Edição via RPC com sessão de admin (UPDATE direto foi revogado)
+      const { data, error } = await supabaseClient.rpc('admin_atualizar_usuario', {
+        p_sessao_token: getSessaoToken(),
+        p_user_uid: id,
+        p_dados: userData,
+      });
 
       if (error) {
         throw new Error(error.message);
@@ -185,10 +166,11 @@ export const userService = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabaseClient
-        .from('gbp_usuarios')
-        .delete()
-        .eq('uid', id);
+      // Exclusão via RPC com sessão de admin (DELETE direto foi revogado)
+      const { error } = await supabaseClient.rpc('admin_excluir_usuario', {
+        p_sessao_token: getSessaoToken(),
+        p_user_uid: id,
+      });
 
       if (error) throw error;
       return true;

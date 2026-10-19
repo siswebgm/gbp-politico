@@ -33,6 +33,7 @@ import {
   YAxis,
 } from 'recharts';
 import { supabaseClient } from '../../../lib/supabase';
+import { getSessaoToken } from '../../../lib/session';
 import { PaymentService } from '../../../services/PaymentService';
 import { useToast } from '../../../components/ui/use-toast';
 import { Button } from '../../../components/ui/button';
@@ -719,12 +720,12 @@ export default function Credenciados() {
           .single();
         if (error) throw error;
         empresaUid = data.uid;
-
-        // Cria o usuário admin vinculado à nova empresa
+        // Cria o usuário admin vinculado à nova empresa (via RPC com sessão —
+        // INSERT direto em gbp_usuarios é revogado pelo script 03b)
         if (isCriandoUsuario && empresaUid) {
-          const { error: userError } = await supabaseClient
-            .from('gbp_usuarios')
-            .insert({
+          const { error: userError } = await supabaseClient.rpc('admin_criar_usuario', {
+            p_sessao_token: getSessaoToken(),
+            p_dados: {
               nome: (form.usuario_nome.trim() || 'Josuel Mendes').toUpperCase(),
               email: form.usuario_email.trim().toLowerCase(),
               senha: form.usuario_senha.trim(),
@@ -733,7 +734,6 @@ export default function Credenciados() {
               cargo: 'admin',
               nivel_acesso: 'admin',
               adm_empresa: true,
-              status: 'active',
               empresa_uid: empresaUid,
               permissoes: [
                 'view_projetos_lei',
@@ -749,8 +749,8 @@ export default function Credenciados() {
                 'manage_roles',
                 'manage_settings',
               ],
-              created_at: new Date().toISOString(),
-            });
+            },
+          });
           if (userError) {
             // rollback: remove a empresa recém-criada para não ficar órfã
             await supabaseClient
