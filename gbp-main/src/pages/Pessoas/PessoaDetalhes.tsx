@@ -4,7 +4,7 @@ import {
   ArrowLeft, User, Phone, MapPin, Vote, Calendar, Mail, Edit, MessageCircle, 
   Pencil, Printer, Users, PlusSquare, Trash2, AlertTriangle, Tag, Save, X,
   ChevronDown, FileText, UserCircle, Calendar as CalendarIcon, Users2, UserRound,
-  Paperclip, Upload, Camera, SwitchCamera
+  Paperclip, Upload, Camera, SwitchCamera, Plus, Send, Check, MoreVertical
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -17,6 +17,7 @@ import { toast } from "../../components/ui/use-toast";
 import { DocumentosAnexados } from './components/DocumentosAnexados';
 import PrintPessoa from './PrintPessoa';
 import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
+import { useAuth } from '../../providers/AuthProvider';
 import { categoryService } from '../../services/categories';
 
 interface Eleitor {
@@ -111,6 +112,13 @@ interface StatusConfig {
   icon: React.ReactNode;
 }
 
+// "Josuel Mendes Queiroz" → "Josuel Queiroz"
+const nomeCurto = (nome?: string | null) => {
+  const partes = (nome || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return 'Sistema';
+  return partes.length === 1 ? partes[0] : `${partes[0]} ${partes[partes.length - 1]}`;
+};
+
 const statusConfigs: Record<StatusType, StatusConfig> = {
   'Pendente': {
     label: 'Pendente',
@@ -153,8 +161,10 @@ export const PessoaDetalhes: FC = () => {
   // 1. Hooks básicos
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const company = useCompanyStore((state) => state.company);
+  const { user } = useAuth();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // 2. Estados
@@ -199,6 +209,15 @@ export const PessoaDetalhes: FC = () => {
   const [uploadingAnexo, setUploadingAnexo] = useState<{ [key: string]: boolean }>({});
   const [deleteAnexoModalOpen, setDeleteAnexoModalOpen] = useState(false);
   const [anexoToDelete, setAnexoToDelete] = useState<{ atendimentoUid: string; anexo: any; index: number } | null>(null);
+  const [novaObservacao, setNovaObservacao] = useState<{ [key: string]: string }>({});
+  const [obsComposerOpen, setObsComposerOpen] = useState<{ [key: string]: boolean }>({});
+  const [savingObservacao, setSavingObservacao] = useState<{ [key: string]: boolean }>({});
+  const [editingObservacaoUid, setEditingObservacaoUid] = useState<string | null>(null);
+  const [observacaoEditTemp, setObservacaoEditTemp] = useState('');
+  const [observacaoToDelete, setObservacaoToDelete] = useState<{ atendimentoUid: string; observacaoUid: string; texto: string } | null>(null);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfOptions, setPdfOptions] = useState({ incluirAtendimentos: true, incluirDemandas: true });
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [indicados, setIndicados] = useState<Indicado[]>([]);
   const [editandoCategoria, setEditandoCategoria] = useState(false);
@@ -988,15 +1007,22 @@ export const PessoaDetalhes: FC = () => {
   }, [eleitor]);
 
   // 6. Handlers
-  const handleBack = () => navigate('/app/pessoas');
+  const handleBack = () => {
+    if (location.state?.fromAttendanceList) {
+      navigate('/app/atendimentos');
+    } else {
+      navigate('/app/pessoas');
+    }
+  };
   const toggleModal = (modalKey: keyof ModalState) => {
     setModalState(prev => ({ ...prev, [modalKey]: !prev[modalKey] }));
   };
 
-  const handlePrint = useCallback(async () => {
+  const handlePrint = useCallback(async (options: { incluirAtendimentos: boolean; incluirDemandas: boolean }) => {
     if (!eleitor) return;
     
     try {
+      setGeneratingPdf(true);
       // Importar jsPDF e jspdf-autotable dinamicamente
       const { default: jsPDF } = await import('jspdf');
       await import('jspdf-autotable');
@@ -1154,7 +1180,7 @@ export const PessoaDetalhes: FC = () => {
       yPosition += 12;
       
       // Atendimentos
-      if (atendimentos && atendimentos.length > 0) {
+      if (options.incluirAtendimentos && atendimentos && atendimentos.length > 0) {
         checkNewPage(50);
         doc.setFontSize(12);
         doc.setTextColor(30, 64, 175);
@@ -1164,13 +1190,22 @@ export const PessoaDetalhes: FC = () => {
         (doc as any).autoTable({
           startY: yPosition,
           head: [['Nº', 'Data', 'Categoria', 'Descrição', 'Status']],
-          body: atendimentos.map(a => [
-            `#${a.numero}`,
-            a.data_atendimento ? new Date(a.data_atendimento).toLocaleDateString('pt-BR') : '-',
-            a.gbp_categorias?.nome || '-',
-            a.descricao || '-',
-            a.status
-          ]),
+          body: atendimentos.map(a => {
+            let descricaoCompleta = a.descricao || '-';
+            if (a.observacoes && a.observacoes.length > 0) {
+              const obsTexto = a.observacoes
+                .map(o => `• ${o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : ''} ${o.responsavel_nome || ''}: ${o.observacao}`)
+                .join('\n');
+              descricaoCompleta += `\n\nObservações:\n${obsTexto}`;
+            }
+            return [
+              `#${a.numero}`,
+              a.data_atendimento ? new Date(a.data_atendimento).toLocaleDateString('pt-BR') : '-',
+              a.gbp_categorias?.nome || '-',
+              descricaoCompleta,
+              a.status
+            ];
+          }),
           styles: { 
             fontSize: 8, 
             cellPadding: 3,
@@ -1195,50 +1230,120 @@ export const PessoaDetalhes: FC = () => {
         yPosition = (doc as any).lastAutoTable.finalY + 10;
       }
       
-      // Ofícios
-      if (oficios && oficios.length > 0) {
-        checkNewPage(50);
+      // Ofícios (Demandas) — blocos detalhados com fotos
+      if (options.incluirDemandas && oficios && oficios.length > 0) {
+        // Pré-carrega as fotos das demandas como base64 (máx. 8 por demanda)
+        const fotosCarregadas: Record<string, string[]> = {};
+        await Promise.all(oficios.map(async (o) => {
+          const urls = (Array.isArray(o.fotos_do_problema) ? o.fotos_do_problema : [])
+            .filter((u): u is string => typeof u === 'string' && !!u)
+            .slice(0, 8);
+          const carregadas: string[] = [];
+          for (const url of urls) {
+            try {
+              const resp = await fetch(url);
+              const blob = await resp.blob();
+              const dataUrl = await new Promise<string>((res, rej) => {
+                const reader = new FileReader();
+                reader.onloadend = () => res(reader.result as string);
+                reader.onerror = rej;
+                reader.readAsDataURL(blob);
+              });
+              carregadas.push(dataUrl);
+            } catch {
+              // foto indisponível — ignora
+            }
+          }
+          if (carregadas.length) fotosCarregadas[o.uid] = carregadas;
+        }));
+
+        checkNewPage(40);
         doc.setFontSize(12);
         doc.setTextColor(30, 64, 175);
         doc.text(`Demandas Relacionadas (${oficios.length})`, margin, yPosition);
-        yPosition += 8;
-        
-        (doc as any).autoTable({
-          startY: yPosition,
-          head: [['Protocolo', 'Data', 'Tipo', 'Descrição', 'Status']],
-          body: oficios.map(o => {
-            let descricaoCompleta = o.descricao || o.titulo || '-';
-            if (o.descricao_do_problema) {
-              descricaoCompleta += `\n\nProblema: ${o.descricao_do_problema}`;
+        yPosition += 10;
+
+        const thumbW = 40;
+        const thumbH = 30;
+        const thumbGap = 4;
+        const fotosPorLinha = 4;
+
+        for (const o of oficios) {
+          const fotos = fotosCarregadas[o.uid] || [];
+          const descricao = o.descricao || o.titulo || '-';
+          const descricaoLines = doc.splitTextToSize(descricao, 170);
+          const linhasFotos = Math.ceil(fotos.length / fotosPorLinha);
+          const espacoNecessario = 14 + (descricaoLines.length * 4.2) + (o.url_oficio_protocolado ? 6 : 0) + (linhasFotos * (thumbH + thumbGap)) + 10;
+          checkNewPage(Math.min(espacoNecessario, pageHeight - 2 * margin));
+
+          // Título: protocolo + tipo
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(17, 24, 39);
+          doc.text(`${o.numero_oficio || 'Sem protocolo'} — ${o.tipo_de_demanda || 'Demanda'}`, margin, yPosition, { maxWidth: 140 });
+
+          // Status à direita
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(30, 64, 175);
+          doc.text(o.status_solicitacao || o.status || '-', 190, yPosition, { align: 'right' });
+          yPosition += 5;
+
+          // Data
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(107, 114, 128);
+          doc.text(`Data: ${o.data_solicitacao ? new Date(o.data_solicitacao).toLocaleDateString('pt-BR') : '-'}${o.responsavel_nome ? `   •   ${o.responsavel_nome}` : ''}`, margin, yPosition);
+          yPosition += 5;
+
+          // Descrição
+          doc.setFontSize(9);
+          doc.setTextColor(55, 65, 81);
+          doc.text(descricaoLines, margin, yPosition);
+          yPosition += descricaoLines.length * 4.2 + 2;
+
+          // Link do documento protocolado
+          if (o.url_oficio_protocolado) {
+            doc.setFontSize(8);
+            doc.setTextColor(37, 99, 235);
+            (doc as any).textWithLink('Ver documento protocolado', margin, yPosition, { url: o.url_oficio_protocolado });
+            yPosition += 6;
+          }
+
+          // Fotos em grade (4 por linha, mantendo proporção)
+          if (fotos.length) {
+            yPosition += 2;
+            for (let idx = 0; idx < fotos.length; idx++) {
+              if (idx > 0 && idx % fotosPorLinha === 0) {
+                yPosition += thumbH + thumbGap;
+              }
+              if (idx % fotosPorLinha === 0) {
+                checkNewPage(thumbH + thumbGap + 6);
+              }
+              const x = margin + (idx % fotosPorLinha) * (thumbW + thumbGap);
+              try {
+                const props = (doc as any).getImageProperties(fotos[idx]);
+                const ratio = Math.min(thumbW / props.width, thumbH / props.height);
+                const w = props.width * ratio;
+                const h = props.height * ratio;
+                const fmt = fotos[idx].includes('image/png') ? 'PNG' : 'JPEG';
+                doc.addImage(fotos[idx], fmt, x + (thumbW - w) / 2, yPosition + (thumbH - h) / 2, w, h);
+                doc.setDrawColor(229, 231, 235);
+                doc.setLineWidth(0.3);
+                doc.rect(x, yPosition, thumbW, thumbH);
+              } catch {
+                // imagem inválida — ignora
+              }
             }
-            return [
-              o.numero_oficio || '-',
-              o.data_solicitacao ? new Date(o.data_solicitacao).toLocaleDateString('pt-BR') : '-',
-              o.tipo_de_demanda || '-',
-              descricaoCompleta,
-              o.status_solicitacao || o.status || '-'
-            ];
-          }),
-          styles: { 
-            fontSize: 8, 
-            cellPadding: 3,
-            overflow: 'linebreak',
-            cellWidth: 'wrap'
-          },
-          headStyles: { 
-            fillColor: [59, 130, 246], 
-            textColor: 255,
-            fontStyle: 'bold'
-          },
-          columnStyles: {
-            0: { cellWidth: 25 },  // Nº Ofício
-            1: { cellWidth: 22 },  // Data
-            2: { cellWidth: 35 },  // Tipo
-            3: { cellWidth: 60 },  // Descrição (maior)
-            4: { cellWidth: 20 }   // Status
-          },
-          margin: { left: margin, right: margin }
-        });
+            yPosition += thumbH + 6;
+          }
+
+          // Divisor entre demandas
+          doc.setDrawColor(229, 231, 235);
+          doc.setLineWidth(0.3);
+          doc.line(margin, yPosition, 190, yPosition);
+          yPosition += 8;
+        }
       }
       
       // Rodapé em todas as páginas
@@ -1258,6 +1363,7 @@ export const PessoaDetalhes: FC = () => {
       // Salvar PDF
       doc.save(`eleitor_${eleitor.nome.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       
+      setPdfModalOpen(false);
       toast({
         title: "PDF gerado com sucesso!",
         description: "O arquivo foi baixado para o seu computador.",
@@ -1270,6 +1376,8 @@ export const PessoaDetalhes: FC = () => {
         description: "Não foi possível gerar o arquivo PDF.",
         variant: "destructive",
       });
+    } finally {
+      setGeneratingPdf(false);
     }
   }, [eleitor, atendimentos, oficios, toast]);
 
@@ -1498,6 +1606,7 @@ export const PessoaDetalhes: FC = () => {
         return atendimento;
       }));
 
+      setObservacaoToDelete(null);
       toast({
         description: "Observação excluída",
         variant: "success"
@@ -1508,6 +1617,77 @@ export const PessoaDetalhes: FC = () => {
         variant: "destructive",
         description: "Erro ao excluir"
       });
+    }
+  };
+
+  const handleAddObservacao = async (atendimentoUid: string) => {
+    const texto = (novaObservacao[atendimentoUid] || '').trim();
+    if (!texto || !company?.uid) return;
+
+    const responsavelUid = user?.uid || (user?.id != null ? String(user.id) : '');
+    if (!responsavelUid) {
+      toast({ variant: 'destructive', description: 'Usuário não identificado' });
+      return;
+    }
+
+    try {
+      setSavingObservacao(prev => ({ ...prev, [atendimentoUid]: true }));
+
+      const { data: created, error } = await supabaseClient
+        .from('gbp_observacoes')
+        .insert({
+          atendimento_uid: atendimentoUid,
+          observacao: texto,
+          responsavel: responsavelUid,
+          empresa_uid: company.uid,
+        })
+        .select('uid, observacao, created_at, responsavel')
+        .single();
+
+      if (error) throw error;
+
+      const nova = { ...created, responsavel_nome: user?.nome || 'Você' };
+      setAtendimentos(prev => prev.map(a =>
+        a.uid === atendimentoUid
+          ? { ...a, observacoes: [...(a.observacoes || []), nova] }
+          : a
+      ));
+      setNovaObservacao(prev => ({ ...prev, [atendimentoUid]: '' }));
+      toast({ description: 'Observação adicionada', variant: 'success' });
+    } catch (error) {
+      console.error('Erro ao adicionar observação:', error);
+      toast({ variant: 'destructive', description: 'Erro ao salvar observação' });
+    } finally {
+      setSavingObservacao(prev => ({ ...prev, [atendimentoUid]: false }));
+    }
+  };
+
+  const handleSaveObservacaoEdit = async (atendimentoUid: string, observacaoUid: string) => {
+    const texto = observacaoEditTemp.trim();
+    if (!texto || !company?.uid) return;
+
+    try {
+      setSavingObservacao(prev => ({ ...prev, [atendimentoUid]: true }));
+      const { error } = await supabaseClient
+        .from('gbp_observacoes')
+        .update({ observacao: texto })
+        .match({ uid: observacaoUid, empresa_uid: company.uid });
+
+      if (error) throw error;
+
+      setAtendimentos(prev => prev.map(a =>
+        a.uid === atendimentoUid
+          ? { ...a, observacoes: a.observacoes.map(o => o.uid === observacaoUid ? { ...o, observacao: texto } : o) }
+          : a
+      ));
+      setEditingObservacaoUid(null);
+      setObservacaoEditTemp('');
+      toast({ description: 'Observação atualizada', variant: 'success' });
+    } catch (error) {
+      console.error('Erro ao editar observação:', error);
+      toast({ variant: 'destructive', description: 'Erro ao editar observação' });
+    } finally {
+      setSavingObservacao(prev => ({ ...prev, [atendimentoUid]: false }));
     }
   };
 
@@ -1789,7 +1969,7 @@ export const PessoaDetalhes: FC = () => {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Erro ao carregar dados da pessoa</h2>
           <p className="mt-2 text-gray-500 dark:text-gray-400">Tente novamente mais tarde</p>
           <button
-            onClick={() => navigate('/app/pessoas')}
+            onClick={handleBack}
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1807,7 +1987,7 @@ export const PessoaDetalhes: FC = () => {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pessoa não encontrada</h2>
           <p className="mt-2 text-gray-500 dark:text-gray-400">A pessoa solicitada não foi encontrada</p>
           <button
-            onClick={() => navigate('/app/pessoas')}
+            onClick={handleBack}
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1839,11 +2019,11 @@ export const PessoaDetalhes: FC = () => {
               <div className="w-full mx-auto px-3 md:px-4 py-3 md:py-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-2 md:gap-4 min-w-0">
-                    <button 
-                      onClick={() => navigate('/app/pessoas')}
+                    <button
+                      onClick={handleBack}
                       className="p-1.5 md:p-2 -ml-1 md:ml-0 flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-                      title="Voltar para lista de eleitores"
-                      aria-label="Voltar para lista de eleitores"
+                      title="Voltar"
+                      aria-label="Voltar"
                     >
                       <ArrowLeft className="w-5 h-5" />
                     </button>
@@ -1954,7 +2134,10 @@ export const PessoaDetalhes: FC = () => {
                       </button>
                     )}
                     <button
-                      onClick={handlePrint}
+                      onClick={() => {
+                        setPdfOptions({ incluirAtendimentos: true, incluirDemandas: true });
+                        setPdfModalOpen(true);
+                      }}
                       className="hidden md:inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                     >
                       <FileText className="w-4 h-4 mr-2" />
@@ -2380,6 +2563,11 @@ export const PessoaDetalhes: FC = () => {
                           <MessageCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Histórico de Atendimentos</h2>
+                        {atendimentos.length > 0 && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+                            {atendimentos.length}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -2404,17 +2592,12 @@ export const PessoaDetalhes: FC = () => {
                             <li key={atendimento.uid} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
                               <div className="px-4 md:px-6 py-5">
                                 <div className="flex items-start space-x-4">
-                                  <div className="flex-shrink-0 hidden md:block">
-                                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-100 to-blue-100 dark:from-indigo-900/50 dark:to-blue-900/50 flex items-center justify-center border-2 border-indigo-200 dark:border-indigo-800">
-                                      <Tag className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
-                                    </div>
-                                  </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0">
                                       <div className="flex-1">
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-4">
-                                            <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2.5 flex-wrap">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-sm font-bold tracking-wide">
                                               #{atendimento.numero}
                                             </span>
                                             <Menu as="div" className="relative inline-block text-left">
@@ -2448,137 +2631,211 @@ export const PessoaDetalhes: FC = () => {
                                               setAtendimentoToDelete(atendimento);
                                               toggleModal('deleteOpen');
                                             }}
-                                            className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                            className="flex-shrink-0 p-1.5 text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                                             title="Excluir atendimento"
                                           >
-                                            <Trash2 className="w-5 h-5" />
+                                            <Trash2 className="w-4 h-4" />
                                           </button>
                                         </div>
-                                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 mt-4">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-x-4 md:gap-y-3">
-                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded">
-                                                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                              </div>
-                                              <span className="font-medium truncate">
-                                                {format(new Date(atendimento.data_atendimento), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
-                                              </span>
-                                            </div>
-                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-purple-100 dark:bg-purple-900/50 rounded">
-                                                <Tag className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                              </div>
-                                              <span className="font-medium truncate">Categoria: {atendimento.gbp_categorias?.nome}</span>
-                                            </div>
-                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-green-100 dark:bg-green-900/50 rounded">
-                                                <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                              </div>
-                                              <span className="font-medium truncate">Indicado: {atendimento.indicado || 'Nenhum'}</span>
-                                            </div>
-                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                              <div className="flex-shrink-0 mr-2 p-1.5 bg-orange-100 dark:bg-orange-900/50 rounded">
-                                                <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                                              </div>
-                                              <span className="font-medium truncate">Resp.: {atendimento.responsavel || 'Nenhum'}</span>
-                                            </div>
-                                          </div>
+                                        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <Calendar className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+                                            {format(new Date(atendimento.data_atendimento), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                                          </span>
+                                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <Tag className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
+                                            {atendimento.gbp_categorias?.nome || '-'}
+                                          </span>
+                                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <Users className="w-3.5 h-3.5 text-green-500 dark:text-green-400" />
+                                            Indicado: {atendimento.indicado || 'Nenhum'}
+                                          </span>
+                                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                            <User className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
+                                            Resp.: {atendimento.responsavel || 'Nenhum'}
+                                          </span>
                                         </div>
                                         {/* Descrição do Atendimento */}
                                         <div className="mt-4">
-                                          <div className="flex items-start space-x-3">
-                                            <div className="flex-shrink-0 p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
-                                              <MessageCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                                            </div>
-                                            <div className="flex-1">
-                                              <span className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                Descrição
-                                              </span>
-                                              <div className="bg-white dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 group relative">
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pr-10">
-                                                  {atendimento.descricao || 'Sem descrição'}
-                                                </p>
-                                                <button
-                                                  onClick={() => handleEditDescricao(atendimento)}
-                                                  className="absolute top-2 right-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200"
-                                                  title="Editar descrição"
-                                                >
-                                                  <Pencil className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                                                </button>
-                                              </div>
-                                            </div>
+                                          <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">
+                                            Descrição
+                                          </span>
+                                          <div className="relative rounded-lg border-l-4 border-indigo-300 dark:border-indigo-600 bg-gray-50 dark:bg-gray-700/30 px-4 py-3">
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pr-8">
+                                              {atendimento.descricao || 'Sem descrição'}
+                                            </p>
+                                            <button
+                                              onClick={() => handleEditDescricao(atendimento)}
+                                              className="absolute top-2 right-2 p-1.5 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                                              title="Editar descrição"
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
                                           </div>
                                         </div>
                                         {/* Observações do Atendimento */}
-                                        <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                                          <div className="flex items-start space-x-3">
-                                            <div className="flex-shrink-0 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                              <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                        <div className="mt-5 border-t border-gray-100 dark:border-gray-700 pt-4">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center space-x-2">
+                                              <div className="p-1.5 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
+                                                <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                              </div>
+                                              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                                Observações
+                                              </span>
+                                              <span className="inline-flex items-center justify-center min-w-[1.5rem] px-1.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                                {atendimento.observacoes?.length || 0}
+                                              </span>
                                             </div>
-                                            <div className="flex-1">
+                                            <button
+                                              onClick={() => setObsComposerOpen(prev => ({ ...prev, [atendimento.uid]: !prev[atendimento.uid] }))}
+                                              className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              <span>Adicionar</span>
+                                            </button>
+                                          </div>
+
+                                          {/* Nova observação */}
+                                          {obsComposerOpen[atendimento.uid] && (
+                                            <div className="flex items-start space-x-2 mt-3">
+                                              <textarea
+                                                rows={2}
+                                                value={novaObservacao[atendimento.uid] || ''}
+                                                onChange={(e) => setNovaObservacao(prev => ({ ...prev, [atendimento.uid]: e.target.value }))}
+                                                placeholder="Escreva uma nova observação..."
+                                                autoFocus
+                                                className="flex-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                                              />
                                               <button
-                                                onClick={() => setExpandedObservations(prev => ({
-                                                  ...prev,
-                                                  [atendimento.uid]: !prev[atendimento.uid]
-                                                }))}
-                                                className="w-full flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg group transition-colors"
+                                                onClick={() => handleAddObservacao(atendimento.uid)}
+                                                disabled={!(novaObservacao[atendimento.uid] || '').trim() || savingObservacao[atendimento.uid]}
+                                                className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white text-sm font-medium transition-colors disabled:cursor-not-allowed"
                                               >
-                                                <span className="text-base font-semibold text-gray-700 dark:text-gray-300">
-                                                  Observações ({atendimento.observacoes?.length || 0})
-                                                </span>
-                                                <div className={`p-1 rounded-full bg-gray-100 dark:bg-gray-700 transform transition-transform ${
-                                                  expandedObservations[atendimento.uid] ? 'rotate-180' : ''
-                                                }`}>
-                                                  <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                                                </div>
+                                                {savingObservacao[atendimento.uid] ? (
+                                                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                                ) : (
+                                                  <Send className="w-4 h-4" />
+                                                )}
+                                                <span className="hidden sm:inline">Salvar</span>
                                               </button>
-                                              {expandedObservations[atendimento.uid] && atendimento.observacoes && atendimento.observacoes.length > 0 ? (
-                                                <div className="mt-3 space-y-3">
-                                                  {atendimento.observacoes.map((obs) => (
-                                                    <div key={obs.uid} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                                                      <div className="flex items-start space-x-3">
-                                                        <div className="flex-shrink-0">
-                                                          <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
-                                                            <UserCircle className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                                                          </div>
+                                            </div>
+                                          )}
+
+                                          {/* Lista de observações — 3 mais recentes sempre visíveis */}
+                                          {atendimento.observacoes && atendimento.observacoes.length > 0 ? (
+                                            <div className="mt-3">
+                                              <div className="space-y-2.5">
+                                                {(expandedObservations[atendimento.uid]
+                                                  ? atendimento.observacoes
+                                                  : atendimento.observacoes.slice(-3)
+                                                ).map((obs) => (
+                                                  <div key={obs.uid} className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-700/40 px-3.5 py-3">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                      <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="h-6 w-6 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center flex-shrink-0">
+                                                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
+                                                            {nomeCurto(obs.responsavel_nome).split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                                                          </span>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                          <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                                              {obs.responsavel_nome}
-                                                            </span>
-                                                            <div className="flex items-center space-x-2">
-                                                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                {format(new Date(obs.created_at), "dd 'de' MMM 'às' HH:mm", { locale: ptBR })}
-                                                              </span>
-                                                              <button
-                                                                onClick={() => handleDeleteObservation(atendimento.uid, obs.uid)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                                title="Excluir observação"
-                                                              >
-                                                                <Trash2 className="w-4 h-4" />
-                                                              </button>
-                                                            </div>
-                                                          </div>
-                                                          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                                                            {obs.observacao}
-                                                          </p>
-                                                        </div>
+                                                        <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                                          {nomeCurto(obs.responsavel_nome)}
+                                                        </span>
+                                                        <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
+                                                          {format(new Date(obs.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                                        </span>
                                                       </div>
+                                                        {editingObservacaoUid !== obs.uid && (
+                                                          <Menu as="div" className="relative inline-block text-left flex-shrink-0">
+                                                            <Menu.Button
+                                                              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors"
+                                                              title="Opções"
+                                                            >
+                                                              <MoreVertical className="w-4 h-4" />
+                                                            </Menu.Button>
+                                                            <Menu.Items className="absolute right-0 z-10 mt-1 w-36 origin-top-right rounded-lg bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-600 focus:outline-none overflow-hidden">
+                                                              <div className="py-1">
+                                                                <Menu.Item>
+                                                                  {({ active }) => (
+                                                                    <button
+                                                                      onClick={() => { setEditingObservacaoUid(obs.uid); setObservacaoEditTemp(obs.observacao); }}
+                                                                      className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''} w-full text-left px-3.5 py-2 text-sm text-gray-700 dark:text-gray-200 flex items-center space-x-2`}
+                                                                    >
+                                                                      <Pencil className="w-3.5 h-3.5" />
+                                                                      <span>Editar</span>
+                                                                    </button>
+                                                                  )}
+                                                                </Menu.Item>
+                                                                <Menu.Item>
+                                                                  {({ active }) => (
+                                                                    <button
+                                                                      onClick={() => setObservacaoToDelete({ atendimentoUid: atendimento.uid, observacaoUid: obs.uid, texto: obs.observacao })}
+                                                                      className={`${active ? 'bg-red-50 dark:bg-red-900/20' : ''} w-full text-left px-3.5 py-2 text-sm text-red-600 dark:text-red-400 flex items-center space-x-2`}
+                                                                    >
+                                                                      <Trash2 className="w-3.5 h-3.5" />
+                                                                      <span>Excluir</span>
+                                                                    </button>
+                                                                  )}
+                                                                </Menu.Item>
+                                                              </div>
+                                                            </Menu.Items>
+                                                          </Menu>
+                                                        )}
+                                                      </div>
+                                                      {editingObservacaoUid === obs.uid ? (
+                                                        <div className="mt-2.5 space-y-2">
+                                                          <textarea
+                                                            rows={2}
+                                                            value={observacaoEditTemp}
+                                                            onChange={(e) => setObservacaoEditTemp(e.target.value)}
+                                                            autoFocus
+                                                            className="w-full rounded-lg border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                                                          />
+                                                          <div className="flex items-center justify-end space-x-2">
+                                                            <button
+                                                              onClick={() => { setEditingObservacaoUid(null); setObservacaoEditTemp(''); }}
+                                                              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                                            >
+                                                              <X className="w-3.5 h-3.5" />
+                                                              <span>Cancelar</span>
+                                                            </button>
+                                                            <button
+                                                              onClick={() => handleSaveObservacaoEdit(atendimento.uid, obs.uid)}
+                                                              disabled={!observacaoEditTemp.trim() || savingObservacao[atendimento.uid]}
+                                                              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white text-xs font-medium transition-colors disabled:cursor-not-allowed"
+                                                            >
+                                                              <Check className="w-3.5 h-3.5" />
+                                                              <span>Salvar</span>
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      ) : (
+                                                        <p className="mt-2 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pl-8">
+                                                          {obs.observacao}
+                                                        </p>
+                                                      )}
                                                     </div>
                                                   ))}
                                                 </div>
-                                              ) : !expandedObservations[atendimento.uid] && atendimento.observacoes?.length > 0 ? (
-                                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                                                  Clique para ver as observações
-                                                </p>
-                                              ) : (
-                                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                                                  Nenhuma observação registrada
-                                                </p>
-                                              )}
-                                            </div>
-                                          </div>
+                                                {atendimento.observacoes.length > 3 && (
+                                                  <button
+                                                    onClick={() => setExpandedObservations(prev => ({ ...prev, [atendimento.uid]: !prev[atendimento.uid] }))}
+                                                    className="mt-2.5 inline-flex items-center space-x-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                                                  >
+                                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedObservations[atendimento.uid] ? 'rotate-180' : ''}`} />
+                                                    <span>
+                                                      {expandedObservations[atendimento.uid]
+                                                        ? 'Ver menos'
+                                                        : `Ver mais ${atendimento.observacoes.length - 3} ${atendimento.observacoes.length - 3 === 1 ? 'observação' : 'observações'}`}
+                                                    </span>
+                                                  </button>
+                                                )}
+                                              </div>
+                                          ) : (
+                                            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500 pl-1">
+                                              Nenhuma observação registrada ainda.
+                                            </p>
+                                          )}
                                         </div>
                                         {/* Anexos do Atendimento */}
                                         <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
@@ -3911,6 +4168,200 @@ export const PessoaDetalhes: FC = () => {
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Excluir
+                      </button>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Modal de confirmação de exclusão de observação */}
+      <Transition appear show={!!observacaoToDelete} as={Fragment}>
+        <Dialog as="div" className="relative z-[10000]" onClose={() => setObservacaoToDelete(null)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 text-left align-middle shadow-xl transition-all">
+                  <div className="relative">
+                    {/* Cabeçalho */}
+                    <div className="px-6 pt-6">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50">
+                        <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                      </div>
+                      <Dialog.Title className="mt-4 text-lg font-semibold text-gray-900 dark:text-white text-center">
+                        Excluir Observação
+                      </Dialog.Title>
+                    </div>
+
+                    {/* Prévia da observação */}
+                    <div className="px-6 mt-4">
+                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 break-words">
+                          "{observacaoToDelete?.texto}"
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Mensagem de Confirmação */}
+                    <div className="px-6 py-4 mt-2">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                        Tem certeza que deseja excluir esta observação?
+                        <br />
+                        <span className="font-medium">Esta ação não pode ser desfeita.</span>
+                      </p>
+                    </div>
+
+                    {/* Botões */}
+                    <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/30 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-colors duration-200"
+                        onClick={() => setObservacaoToDelete(null)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 transition-colors duration-200"
+                        onClick={() => {
+                          if (observacaoToDelete) {
+                            handleDeleteObservation(observacaoToDelete.atendimentoUid, observacaoToDelete.observacaoUid);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Modal de opções do PDF */}
+      <Transition appear show={pdfModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-[10000]" onClose={() => !generatingPdf && setPdfModalOpen(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 text-left align-middle shadow-xl transition-all">
+                  <div className="relative">
+                    {/* Cabeçalho */}
+                    <div className="px-6 pt-6">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/50">
+                        <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <Dialog.Title className="mt-4 text-lg font-semibold text-gray-900 dark:text-white text-center">
+                        Baixar PDF
+                      </Dialog.Title>
+                    </div>
+
+                    {/* Opções */}
+                    <div className="px-6 mt-4 space-y-3">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                        Os dados pessoais sempre serão incluídos. Escolha o que mais deseja no relatório:
+                      </p>
+
+                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-3">
+                        <label className="flex items-center space-x-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={pdfOptions.incluirAtendimentos}
+                            onChange={(e) => setPdfOptions(prev => ({ ...prev, incluirAtendimentos: e.target.checked }))}
+                            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-700"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                              Histórico de Atendimentos
+                            </span>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Inclui as observações de cada atendimento
+                            </p>
+                          </div>
+                        </label>
+
+                        <label className="flex items-center space-x-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={pdfOptions.incluirDemandas}
+                            onChange={(e) => setPdfOptions(prev => ({ ...prev, incluirDemandas: e.target.checked }))}
+                            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-700"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                              Demandas
+                            </span>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Demandas de rua vinculadas a esta pessoa
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Botões */}
+                    <div className="px-6 py-4 mt-4 bg-gray-50 dark:bg-gray-700/30 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        disabled={generatingPdf}
+                        className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-colors duration-200 disabled:opacity-50"
+                        onClick={() => setPdfModalOpen(false)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={generatingPdf}
+                        className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-colors duration-200 disabled:opacity-50"
+                        onClick={() => handlePrint(pdfOptions)}
+                      >
+                        {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
                       </button>
                     </div>
                   </div>

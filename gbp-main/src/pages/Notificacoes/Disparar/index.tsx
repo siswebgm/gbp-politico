@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Users, CheckCircle, AlertCircle, ArrowLeft, Settings, History, FileUp, FileText, Music, PlayCircle, X, SlidersHorizontal } from 'lucide-react';
+import { Send, Users, CheckCircle, AlertCircle, ArrowLeft, Settings, History, FileUp, FileText, Music, PlayCircle, X, SlidersHorizontal, MoreVertical } from 'lucide-react';
+import { Menu } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
 import { useCompanyStore } from '../../../store/useCompanyStore';
 import { notificationLogsService, MidiaAnexo } from '../../../services/notificationLogs';
@@ -515,24 +516,44 @@ export default function DispararNotificacao() {
             </p>
           </div>
           </div>
-          <div className="grid grid-cols-2 md:flex md:items-center gap-2 sm:gap-3">
-            <button
+          <Menu as="div" className="relative inline-block text-left self-start">
+            <Menu.Button
               type="button"
-              onClick={() => navigate('/app/notificacoes/historico')}
-              className="inline-flex items-center justify-center whitespace-nowrap px-3 sm:px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
+              title="Opções"
+              aria-label="Opções"
+              className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
             >
-              <History className="h-4 w-4 mr-2" />
-              Histórico
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/app/notificacoes/configuracao')}
-              className="inline-flex items-center justify-center whitespace-nowrap px-3 sm:px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Configuração
-            </button>
-          </div>
+              <MoreVertical className="h-5 w-5" />
+            </Menu.Button>
+            <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-lg bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-600 focus:outline-none overflow-hidden">
+              <div className="py-1">
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/notificacoes/historico')}
+                      className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''} w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 flex items-center space-x-2.5`}
+                    >
+                      <History className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      <span>Histórico</span>
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/notificacoes/configuracao')}
+                      className={`${active ? 'bg-gray-100 dark:bg-gray-700' : ''} w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 flex items-center space-x-2.5`}
+                    >
+                      <Settings className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      <span>Configuração</span>
+                    </button>
+                  )}
+                </Menu.Item>
+              </div>
+            </Menu.Items>
+          </Menu>
         </header>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

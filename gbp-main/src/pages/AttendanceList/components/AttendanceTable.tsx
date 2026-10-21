@@ -52,6 +52,7 @@ interface AttendanceTableProps {
   calculateElapsedTime?: (dataAtendimento: string) => string;
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
+  onNavigateToPerson?: (eleitorUid: string) => void;
 }
 
 // Tom da coluna Tempo: sinaliza idade de atendimentos não concluídos
@@ -81,7 +82,14 @@ const elapsedIconClass: Record<ElapsedTone, string> = {
 const formatDataAtendimento = (data?: string) =>
   data ? `Data do atendimento: ${new Date(data).toLocaleDateString('pt-BR')}` : undefined;
 
-export function AttendanceTable({ atendimentos, isLoading = false, calculateElapsedTime, hasActiveFilters = false, onClearFilters }: AttendanceTableProps) {
+export const AttendanceTable: React.FC<AttendanceTableProps> = ({
+  atendimentos,
+  isLoading,
+  calculateElapsedTime,
+  hasActiveFilters,
+  onClearFilters,
+  onNavigateToPerson,
+}) => {
   const navigate = useNavigate();
   const company = useCompanyStore((state) => state.company);
   const { updateAtendimentoStatus } = useAtendimentos();
@@ -401,7 +409,11 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                           onClick={(e) => {
                             e.stopPropagation();
                             if (atendimento.eleitor_uid) {
-                              navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
+                              if (onNavigateToPerson) {
+                                onNavigateToPerson(atendimento.eleitor_uid);
+                              } else {
+                                navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
+                              }
                             }
                           }}
                           className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline cursor-pointer"
@@ -570,7 +582,11 @@ export function AttendanceTable({ atendimentos, isLoading = false, calculateElap
                         onClick={(e) => {
                           e.stopPropagation();
                           if (atendimento.eleitor_uid) {
-                            navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
+                            if (onNavigateToPerson) {
+                              onNavigateToPerson(atendimento.eleitor_uid);
+                            } else {
+                              navigate(`/app/pessoas/${atendimento.eleitor_uid}`);
+                            }
                           }
                         }}
                         className="text-base font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer truncate"

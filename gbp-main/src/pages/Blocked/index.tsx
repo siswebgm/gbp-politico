@@ -207,10 +207,33 @@ export default function Blocked() {
 
   useEffect(() => {
     carregar().finally(() => setLoading(false));
-    // Revalida a cada 20s: se o webhook confirmar o pagamento, libera sozinho
+    // Revalida a cada 20s como fallback (se o websocket realtime cair)
     const interval = setInterval(carregar, 20000);
     return () => clearInterval(interval);
   }, [carregar]);
+
+  // Realtime: quando o webhook do Asaas confirma o pagamento e o backend
+  // desbloqueia a empresa, a atualização no Postgres chega na hora —
+  // sem precisar clicar em "verificar" nem esperar o polling.
+  useEffect(() => {
+    if (!empresa?.uid) return;
+    const channel = supabaseClient
+      .channel(`blocked-empresa-${empresa.uid}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'gbp_empresas', filter: `uid=eq.${empresa.uid}` },
+        () => carregar(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gbp_pagamentos' },
+        () => carregar(),
+      )
+      .subscribe();
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, [empresa?.uid, carregar]);
 
   const docValido = (doc: string) => {
     const d = doc.replace(/\D/g, '');

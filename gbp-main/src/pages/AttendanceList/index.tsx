@@ -201,6 +201,29 @@ export function AttendanceList() {
   const [quickPeriod, setQuickPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Persistir filtros no localStorage para restaurar ao voltar da página de pessoa
+  const STORAGE_KEY = `attendance_filters_${company.uid}`;
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+        if (parsed.filters) setFilters(parsed.filters);
+        if (parsed.quickSearch) setQuickSearch(parsed.quickSearch);
+        if (parsed.quickPeriod) setQuickPeriod(parsed.quickPeriod);
+      } catch (e) {
+        console.error('Erro ao restaurar filtros:', e);
+      }
+    }
+  }, [STORAGE_KEY]);
+
+  useEffect(() => {
+    const state = { statusFilter, filters, quickSearch, quickPeriod };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [statusFilter, filters, quickSearch, quickPeriod, STORAGE_KEY]);
+
   // Fechar menu de exportação ao clicar fora
   useEffect(() => {
     const handleClickOutside = () => setShowExportMenu(false);
@@ -619,7 +642,8 @@ export function AttendanceList() {
             isLoading={isLoading} 
             calculateElapsedTime={calculateElapsedTime}
             hasActiveFilters={!!(quickSearch || quickPeriod !== 'all' || statusFilter !== 'all' || Object.keys(filters).length > 0)}
-            onClearFilters={() => { setQuickSearch(''); setQuickPeriod('all'); setStatusFilter('all'); setFilters({}); }}
+            onClearFilters={() => { setQuickSearch(''); setQuickPeriod('all'); setStatusFilter('all'); setFilters({}); localStorage.removeItem(STORAGE_KEY); }}
+            onNavigateToPerson={(eleitorUid) => navigate(`/app/pessoas/${eleitorUid}`, { state: { fromAttendanceList: true } })}
           />
         </div>
         </div>

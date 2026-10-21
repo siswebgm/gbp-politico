@@ -280,6 +280,46 @@ async function handlePaymentEvent(payment) {
         await confirmarIndicacao(indicacao.id, pagamento.valor);
       }
     }
+
+    // Desbloqueio automático: se a empresa estava bloqueada por inadimplência
+    // e não resta nenhuma pendência (em qualquer assinatura dela), reativa
+    // o acesso e empurra a expiração para o próximo ciclo de cobrança.
+    if (empresa?.uid && (empresa.status === 'blocked' || assinatura?.status === 'pending')) {
+      try {
+        const outrasAss = await sb(
+          `gbp_assinaturas?empresa_uid=eq.${empresa.uid}&select=id`,
+        );
+        const assIds = (outrasAss || []).map((a) => a.id);
+        const abertas = assIds.length
+          ? await sb(
+              `gbp_pagamentos?assinatura_id=in.(${assIds.join(',')})` +
+                `&status=in.(pending,overdue)&select=id&limit=1`,
+            )
+          : [];
+
+        if (!Array.isArray(abertas) || abertas.length === 0) {
+          const base = payment.dueDate ? new Date(payment.dueDate) : new Date();
+          const dia = diaVencimentoEmpresa(empresa);
+          const proxVenc = proximaDataVencimento(dia, new Date(base.getTime() + 86400000));
+          await sb(`gbp_empresas?uid=eq.${empresa.uid}`, {
+            method: 'PATCH',
+            body: {
+              status: 'active',
+              data_expiracao: proxVenc.toISOString(),
+            },
+            prefer: 'return=minimal',
+          });
+          await sb(`gbp_assinaturas?id=eq.${pagamento.assinatura_id}`, {
+            method: 'PATCH',
+            body: { status: 'active' },
+            prefer: 'return=minimal',
+          });
+          console.log(`[payments] Empresa desbloqueada após pagamento: ${empresa.uid}`);
+        }
+      } catch (e) {
+        console.warn('[payments] Falha ao desbloquear empresa:', e.message);
+      }
+    }
   }
 }
 
