@@ -158,7 +158,7 @@ export function useDashboardData() {
           .eq('empresa_uid', company.uid),
         supabaseClient
           .from('gbp_atendimentos')
-          .select('uid, created_at, status')
+          .select('uid, created_at, status, eleitor_uid')
           .eq('empresa_uid', company.uid)
           // Só conta atendimentos visíveis (oculto = false ou NULL — coluna nullable)
           .or('oculto.is.null,oculto.eq.false')
@@ -192,6 +192,20 @@ export function useDashboardData() {
       if (requerimentosError) throw requerimentosError;
       if (projetosLeiError) throw projetosLeiError;
       if (agendamentosError) throw agendamentosError;
+
+      // Eleitores da empresa em lotes de 1000 (evita limite do PostgREST)
+      const eleitorUidsEmpresa = new Set<string>();
+      for (let offset = 0; ; offset += 1000) {
+        const { data: lote } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('uid')
+          .eq('empresa_uid', company.uid)
+          .range(offset, offset + 999);
+        (lote || []).forEach((e: any) => eleitorUidsEmpresa.add(e.uid));
+        if (!lote || lote.length < 1000) break;
+      }
+      // Atendimentos órfãos (eleitor fora da empresa) não contam
+      const atendimentosVisiveis = (atendimentos || []).filter((a: any) => eleitorUidsEmpresa.has(a.eleitor_uid));
 
       // Filtrar demandas do usuário logado com as novas regras
       const demandasDoUsuario = (demandas || []).filter(demanda => {
@@ -242,7 +256,7 @@ export function useDashboardData() {
       console.log('Demandas filtradas:', demandasDoUsuario.map(d => ({ uid: d.uid, status: d.status, arquivado: d.arquivado })));
 
       const dashboardData = {
-        totalAtendimentos: atendimentos?.length || 0,
+        totalAtendimentos: atendimentosVisiveis.length,
         totalEleitores: eleitores?.length || 0,
         totalOficios: oficios?.length || 0,
         totalRequerimentos: requerimentos?.length || 0,
@@ -254,7 +268,7 @@ export function useDashboardData() {
         atendimentosPorStatus: {},
         distribuicaoBairro: [],
         eleitoresStats: processarEstatisticas(eleitores || [], sevenDaysAgo),
-        atendimentosStats: processarEstatisticas(atendimentos || [], sevenDaysAgo),
+        atendimentosStats: processarEstatisticas(atendimentosVisiveis, sevenDaysAgo),
         oficiosStats: processarEstatisticas(oficios || [], sevenDaysAgo),
         requerimentosStats: processarEstatisticas(requerimentos || [], sevenDaysAgo),
         projetosLeiStats: processarEstatisticas(projetosLei || [], sevenDaysAgo),

@@ -13,7 +13,8 @@ import {
   Mail,
   Phone,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Label } from '../../../components/ui/label';
@@ -150,7 +151,7 @@ export function CompanySettings() {
         .from('gbp_empresas')
         .update({
           nome,
-          logo,
+          logo: logo || null,
           contato,
           email,
           cep: cepClean,
@@ -222,34 +223,51 @@ export function CompanySettings() {
           <Label htmlFor="logo" className="text-sm font-semibold text-gray-900 dark:text-white">
             Logo da Empresa
           </Label>
-          <div className="flex items-start gap-4">
-            {logo && (
-              <div className="h-24 w-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-                <img 
-                  src={logo} 
-                  alt="Logo" 
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="h-16 w-16 sm:h-24 sm:w-24 rounded-lg overflow-hidden border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+              {logo ? (
+                <img
+                  src={logo}
+                  alt="Logo"
                   className="h-full w-full object-contain"
                 />
-              </div>
-            )}
-            <div className="flex-1">
-              <div className="relative">
+              ) : (
+                <ImageIcon className="h-8 w-8 text-gray-400" />
+              )}
+            </div>
+            <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-row flex-wrap items-center gap-2">
+                <label
+                  htmlFor="logo"
+                  className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${uploadingLogo ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingLogo ? 'Enviando...' : 'Arquivo'}
+                </label>
                 <Input
                   id="logo"
                   type="file"
                   accept="image/*"
                   onChange={handleLogoUpload}
                   disabled={uploadingLogo}
-                  className="cursor-pointer"
+                  className="hidden"
                 />
-                {uploadingLogo && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-800/80 rounded-md">
-                    <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
-                  </div>
+                {logo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLogo('')}
+                    disabled={uploadingLogo}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remover
+                  </Button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                Formatos aceitos: PNG, JPG, JPEG. Tamanho máximo: 5MB.
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                PNG, JPG ou JPEG até 5MB.
               </p>
             </div>
           </div>

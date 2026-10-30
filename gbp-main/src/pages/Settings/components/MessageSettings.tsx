@@ -107,11 +107,12 @@ export function MessageSettings() {
     try {
       setIsSaving(true);
       setError(null);
+      setMensagensAtivadas(true);
 
       const { error } = await supabaseClient
         .from('gbp_empresas')
         .update({
-          mensagens_ativadas: mensagensAtivadas,
+          mensagens_ativadas: true,
           mensagem_padrao_atendimento: mensagemPadrao,
           mensagem_delay_minutos: mensagemDelayMinutos,
         })
@@ -123,7 +124,7 @@ export function MessageSettings() {
       useCompanyStore.setState({
         company: {
           ...company,
-          mensagens_ativadas: mensagensAtivadas,
+          mensagens_ativadas: true,
           mensagem_padrao_atendimento: mensagemPadrao,
           mensagem_delay_minutos: mensagemDelayMinutos,
         }
@@ -223,6 +224,9 @@ export function MessageSettings() {
                 <option value={15}>Aguardar 15 minutos</option>
                 <option value={30}>Aguardar 30 minutos</option>
                 <option value={60}>Aguardar 1 hora</option>
+                <option value={120}>Aguardar 2 horas</option>
+                <option value={240}>Aguardar 4 horas</option>
+                <option value={360}>Aguardar 6 horas</option>
               </select>
             </div>
           </div>

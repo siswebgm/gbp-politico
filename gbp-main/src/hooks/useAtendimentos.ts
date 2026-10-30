@@ -67,23 +67,38 @@ export function useAtendimentos() {
       // Alternativa estável: paginar por empresa_uid (coluna indexada),
       // 1000 linhas por vez — query simples que o servidor aguenta.
       const buscarEleitoresDaEmpresa = async (select: string) => {
-        const linhas: any[] = [];
-        let erro: any = null;
         const PAGINA = 1000;
-        for (let offset = 0; ; offset += PAGINA) {
-          const resp = await supabaseClient
-            .from('gbp_eleitores')
-            .select(select)
-            .eq('empresa_uid', companyUid)
-            .range(offset, offset + PAGINA - 1);
+        const primeira = await supabaseClient
+          .from('gbp_eleitores')
+          .select(select, { count: 'exact' })
+          .eq('empresa_uid', companyUid)
+          .range(0, PAGINA - 1);
+        if (primeira.error) {
+          console.error('[gbp_eleitores] página 1 falhou:', primeira.error);
+          return { data: [] as any[], error: primeira.error };
+        }
+        const total = primeira.count || 0;
+        const offsets: number[] = [];
+        for (let offset = PAGINA; offset < total; offset += PAGINA) offsets.push(offset);
+        const demais = await Promise.all(
+          offsets.map(offset =>
+            supabaseClient
+              .from('gbp_eleitores')
+              .select(select)
+              .eq('empresa_uid', companyUid)
+              .range(offset, offset + PAGINA - 1)
+          )
+        );
+        const linhas: any[] = [...(primeira.data || [])];
+        let erro: any = null;
+        demais.forEach((resp, i) => {
           if (resp.error) {
             erro = resp.error;
-            console.error(`[gbp_eleitores] página ${offset / PAGINA + 1} falhou:`, resp.error);
-            break;
+            console.error(`[gbp_eleitores] página ${i + 2} falhou:`, resp.error);
+            return;
           }
           linhas.push(...(resp.data || []));
-          if ((resp.data || []).length < PAGINA) break;
-        }
+        });
         return { data: linhas, error: erro };
       };
 
@@ -104,19 +119,22 @@ export function useAtendimentos() {
       }
 
       // .in() em listas pequenas (indicados/categorias/usuários) é seguro
-      const buscarPorLotes = async (tabela: string, select: string, uids: string[], tamanhoLote = 100) => {
+      const buscarPorLotes = async (tabela: string, select: string, uids: string[], tamanhoLote = 30) => {
         const linhas: any[] = [];
         let erro: any = null;
-        for (let i = 0; i < uids.length; i += tamanhoLote) {
-          const lote = uids.slice(i, i + tamanhoLote);
-          const resp = await supabaseClient.from(tabela).select(select).in('uid', lote);
+        const lotes: string[][] = [];
+        for (let i = 0; i < uids.length; i += tamanhoLote) lotes.push(uids.slice(i, i + tamanhoLote));
+        const respostas = await Promise.all(
+          lotes.map(lote => supabaseClient.from(tabela).select(select).in('uid', lote))
+        );
+        respostas.forEach((resp, i) => {
           if (resp.error) {
             erro = resp.error;
-            console.error(`[${tabela}] lote ${i / tamanhoLote + 1} falhou:`, resp.error);
-            continue; // continua nos demais lotes — dado parcial > nada
+            console.error(`[${tabela}] lote ${i + 1} falhou:`, resp.error);
+            return; // continua nos demais lotes — dado parcial > nada
           }
           linhas.push(...(resp.data || []));
-        }
+        });
         return { data: linhas, error: erro };
       };
 
@@ -165,7 +183,10 @@ export function useAtendimentos() {
       console.log('Indicados resolvidos:', indicadosAtendResponse.data, 'erro:', indicadosAtendResponse.error);
       console.log('Erro das categorias do eleitor:', categoriasEleitorResponse.error);
 
-      const atendimentosCompletos = atendimentosData?.map(atendimento => {
+      const eleitorUidsDaEmpresa = new Set((eleitoresData || []).map((e: any) => e.uid));
+      const atendimentosCompletos = atendimentosData?.filter(atendimento =>
+        eleitorUidsDaEmpresa.has(atendimento.eleitor_uid)
+      ).map(atendimento => {
         // indicado (texto): uuid → resolve no gbp_indicado; texto → usa direto
         const indicadoNome =
           typeof atendimento.indicado === 'string' && REGEX_UUID.test(atendimento.indicado)
@@ -173,11 +194,12 @@ export function useAtendimentos() {
               || eleitoresData.find((e: any) => e.uid === atendimento.indicado)?.nome // pode apontar p/ eleitor
               || null
             : atendimento.indicado || null;
+        const eleitorRelacionado = eleitoresData.find(e => e.uid === atendimento.eleitor_uid) || null;
         return {
           ...atendimento,
-          eleitor: atendimento.eleitor || null,
+          eleitor: eleitorRelacionado?.nome || atendimento.eleitor || null,
           indicado_nome: indicadoNome,
-          gbp_eleitores: eleitoresData.find(e => e.uid === atendimento.eleitor_uid) || null,
+          gbp_eleitores: eleitorRelacionado,
           gbp_usuarios: usuariosResponse.data?.find(u => u.uid === atendimento.usuario_uid) || null,
           gbp_categorias: atendimento.gbp_categorias || null
         };

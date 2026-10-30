@@ -1,15 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCompanyStore } from '../../store/useCompanyStore';
 import { eleitorStatsService, EleitorStats, CidadeCrescimento, IndicadoCrescimento, CategoriaCrescimento, BairroCrescimento, ZonaSecaoCrescimento, ConfiabilidadeCrescimento, UsuarioCrescimento } from '../../services/eleitorStats';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, ChevronDown, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag, TrendingUp, TrendingDown, Calendar, Search, ArrowUp, ClipboardCheck, Route, BarChart3, Table2 } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Loader2, Download, Users2, Building2, Home, MapPin, ThumbsUp, UserCircle2, FileSpreadsheet, FileText, MoreVertical, Cake, Tag, TrendingUp, TrendingDown, Calendar, Search, ArrowUp, ClipboardCheck, Route, BarChart3, Table2, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, Legend } from 'recharts';
 import * as ExcelJS from 'exceljs';
 import { TablePagination } from '../../components/TablePagination';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasRestrictedAccess } from '../../constants/accessLevels';
+import { NestedCategoryDropdown } from '../../components/NestedCategoryDropdown';
+import { Category } from '../../types/category';
 import { supabaseClient } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -92,6 +94,7 @@ const secoesNavegacao = [
   { id: 'secao-atendimentos', label: 'Atendimentos' },
   { id: 'secao-confiabilidade', label: 'Confiabilidade' },
   { id: 'secao-aniversariantes', label: 'Aniversariantes' },
+  { id: 'secao-comparativo-anual', label: 'Comparativo Anual' },
   { id: 'secao-usuarios', label: 'Usuários' },
 ];
 
@@ -158,7 +161,10 @@ export function PessoasReport() {
   const [categorias, setCategorias] = useState<Array<{
     categoria_uid: string;
     nome: string;
+    tipo_uid: string | null;
     tipo: string | null;
+    grupo_uid: string | null;
+    grupo: string | null;
     total: number;
   }>>([]);
   const [loadingCategorias, setLoadingCategorias] = useState(false);
@@ -181,7 +187,7 @@ export function PessoasReport() {
   const [confiabilidadeView, setConfiabilidadeView] = useViewState('confiabilidade');
   const [buscaIndicado, setBuscaIndicado] = useState('');
   const [indicadoView, setIndicadoView] = useViewState('indicados');
-  const [buscaCategoria, setBuscaCategoria] = useState('');
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
   const [categoriaView, setCategoriaView] = useViewState('categorias');
   const [buscaZona, setBuscaZona] = useState('');
   const [zonaView, setZonaView] = useViewState('zonas');
@@ -190,6 +196,12 @@ export function PessoasReport() {
   const [faixaEtariaView, setFaixaEtariaView] = useViewState('faixa-etaria');
   const [qualidadeView, setQualidadeView] = useViewState('qualidade');
   const [mostrarTopo, setMostrarTopo] = useState(false);
+  const [anoInicioComp, setAnoInicioComp] = useState<number | null>(null);
+  const [anoFimComp, setAnoFimComp] = useState<number | null>(null);
+  const [anoCmpA, setAnoCmpA] = useState<number | null>(null);
+  const [anoCmpB, setAnoCmpB] = useState<number | null>(null);
+  const [mandatoInicio, setMandatoInicio] = useState<number>(new Date().getFullYear());
+  const [openMenuAno, setOpenMenuAno] = useState<number | null>(null);
   
   const canAccess = hasRestrictedAccess(user?.nivel_acesso);
 
@@ -265,6 +277,126 @@ export function PessoasReport() {
     };
   }, [eleitoresBase]);
 
+  // Novos cadastros por ano (created_at), com acumulado e variação vs ano anterior
+  const comparativoAnual = useMemo(() => {
+    const contagem = new Map<number, number>();
+    eleitoresBase.forEach((e: any) => {
+      if (!e.created_at) return;
+      const ano = new Date(e.created_at).getFullYear();
+      contagem.set(ano, (contagem.get(ano) ?? 0) + 1);
+    });
+    const anosOrdenados = [...contagem.keys()].sort((a, b) => a - b);
+    if (anosOrdenados.length === 0) {
+      return { anos: [] as { ano: number; total: number; acumulado: number; variacao: number | null; variacaoPct: number | null }[], primeiro: 0, ultimo: 0 };
+    }
+    const primeiro = anosOrdenados[0];
+    const ultimo = anosOrdenados[anosOrdenados.length - 1];
+    const anos: { ano: number; total: number; acumulado: number; variacao: number | null; variacaoPct: number | null }[] = [];
+    let acumulado = 0;
+    for (let ano = primeiro; ano <= ultimo; ano++) {
+      const total = contagem.get(ano) ?? 0;
+      const anterior = contagem.get(ano - 1) ?? 0;
+      acumulado += total;
+      const temAnterior = ano > primeiro;
+      const variacao = temAnterior ? total - anterior : null;
+      const variacaoPct = temAnterior && anterior > 0 ? ((total - anterior) / anterior) * 100 : null;
+      anos.push({ ano, total, acumulado, variacao, variacaoPct });
+    }
+    return { anos, primeiro, ultimo };
+  }, [eleitoresBase]);
+
+  // Soma e destaque do período escolhido (ex.: mandato)
+  const periodoComparativo = useMemo(() => {
+    const ini = anoInicioComp ?? comparativoAnual.primeiro;
+    const fim = anoFimComp ?? comparativoAnual.ultimo;
+    const linhas = comparativoAnual.anos.filter(l => l.ano >= ini && l.ano <= fim);
+    const soma = linhas.reduce((s, l) => s + l.total, 0);
+    const maiorAlta = linhas
+      .filter(l => l.variacao !== null)
+      .reduce<typeof linhas[number] | null>(
+        (m, l) => (!m || (l.variacao as number) > (m.variacao as number) ? l : m),
+        null
+      );
+    const melhorAno = linhas.reduce<typeof linhas[number] | null>(
+      (m, l) => (!m || l.total > m.total ? l : m),
+      null
+    );
+    return {
+      ini,
+      fim,
+      soma,
+      media: linhas.length ? Math.round(soma / linhas.length) : 0,
+      maiorAlta,
+      melhorAno,
+    };
+  }, [comparativoAnual, anoInicioComp, anoFimComp]);
+
+  const totalDoAno = (ano: number) => comparativoAnual.anos.find(l => l.ano === ano)?.total ?? 0;
+
+  const buscarCadastrosDoAno = async (ano: number) => {
+    const { data, error } = await supabaseClient
+      .from('gbp_eleitores')
+      .select('*')
+      .eq('empresa_uid', company!.uid)
+      .gte('created_at', `${ano}-01-01T00:00:00`)
+      .lt('created_at', `${ano + 1}-01-01T00:00:00`)
+      .order('nome');
+    if (error) throw error;
+    return data || [];
+  };
+
+  const handleExportAnoExcel = async (ano: number) => {
+    if (!company?.uid) return;
+    try {
+      const eleitores = await buscarCadastrosDoAno(ano);
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet(`Cadastros ${ano}`);
+      sheet.columns = getExcelColumns();
+      eleitores.forEach(eleitor => sheet.addRow(formatEleitorForExcel(eleitor)));
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cadastros_${ano}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar cadastros do ano:', error);
+      alert('Erro ao gerar o arquivo Excel');
+    }
+  };
+
+  const handleExportAnoPDF = async (ano: number) => {
+    if (!company?.uid) return;
+    try {
+      const eleitores = await buscarCadastrosDoAno(ano);
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text(`Cadastros criados em ${ano}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Total: ${eleitores.length} eleitores`, 14, 22);
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+      (doc as any).autoTable({
+        startY: 32,
+        head: [['Nome', 'Cidade', 'Bairro', 'Telefone', 'Cadastrado em']],
+        body: eleitores.map((e: any) => [
+          e.nome || '',
+          e.cidade || '',
+          e.bairro || '',
+          e.whatsapp || e.telefone || '',
+          e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : ''
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+      doc.save(`cadastros_${ano}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar cadastros do ano PDF:', error);
+      alert('Erro ao gerar o arquivo PDF');
+    }
+  };
+
   // Listas filtradas pela busca rápida de cada tabela
   const cidadesFiltradas = useMemo(
     () => filtrarLista(stats?.porCidade ?? [], buscaCidade, c => c.cidade),
@@ -288,8 +420,34 @@ export function PessoasReport() {
     [stats, buscaIndicado]
   );
   const categoriasFiltradas = useMemo(
-    () => filtrarLista(categorias, buscaCategoria, c => c.nome),
-    [categorias, buscaCategoria]
+    () => categorias
+      .filter(c => !categoriaSelecionada || c.categoria_uid === categoriaSelecionada)
+      .slice()
+      .sort((a, b) => {
+        const grupoA = a.grupo || 'Sem grupo';
+        const grupoB = b.grupo || 'Sem grupo';
+        if (grupoA !== grupoB) return grupoA === 'Sem grupo' ? 1 : grupoB === 'Sem grupo' ? -1 : grupoA.localeCompare(grupoB, 'pt-BR');
+        const tipoA = a.tipo || 'Não informado';
+        const tipoB = b.tipo || 'Não informado';
+        if (tipoA !== tipoB) return tipoA === 'Não informado' ? 1 : tipoB === 'Não informado' ? -1 : tipoA.localeCompare(tipoB, 'pt-BR');
+        return a.nome.localeCompare(b.nome, 'pt-BR');
+      }),
+    [categorias, categoriaSelecionada]
+  );
+  const categoriasDropdown = useMemo<Category[]>(
+    () => categorias.map(c => ({
+      uid: c.categoria_uid,
+      nome: c.nome,
+      empresa_uid: company?.uid || '',
+      created_at: '',
+      tipo: {
+        uid: c.tipo_uid || 'sem-tipo',
+        nome: c.tipo || 'Não informado',
+        grupo_uid: c.grupo_uid,
+        grupo: c.grupo_uid && c.grupo ? { uid: c.grupo_uid, nome: c.grupo } : null
+      }
+    })),
+    [categorias, company?.uid]
   );
   const zonasFiltradas = useMemo(
     () => filtrarLista(stats?.porZonaSecao ?? [], buscaZona, z => `${z.zona} ${z.secao}`),
@@ -452,13 +610,13 @@ export function PessoasReport() {
       }
     };
     
-    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante || openMenuCategoria || openMenuFaixa || openMenuLogradouro) {
+    if (openMenuBairro || openMenuCidade || openMenuUsuario || openMenuConfiabilidade || openMenuIndicado || openMenuZona || openMenuAniversariante || openMenuCategoria || openMenuFaixa || openMenuLogradouro || openMenuAno !== null) {
       setTimeout(() => {
         document.addEventListener('click', handleClickOutside);
       }, 0);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante, openMenuCategoria, openMenuFaixa, openMenuLogradouro]);
+  }, [openMenuBairro, openMenuCidade, openMenuUsuario, openMenuConfiabilidade, openMenuIndicado, openMenuZona, openMenuAniversariante, openMenuCategoria, openMenuFaixa, openMenuLogradouro, openMenuAno]);
 
   const loadStats = async (rows?: any[]) => {
     if (!company?.uid) {
@@ -635,7 +793,13 @@ export function PessoasReport() {
         .select(`
           uid,
           nome,
-          tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(nome)
+          tipo_uid,
+          tipo:gbp_categoria_tipos!gbp_categorias_tipo_uid_fkey(
+            uid,
+            nome,
+            grupo_uid,
+            grupo:gbp_categoria_grupos!gbp_categoria_tipos_grupo_uid_fkey(uid, nome)
+          )
         `)
         .eq('empresa_uid', company.uid)
         .order('nome');
@@ -663,7 +827,10 @@ export function PessoasReport() {
       const categoriasComContagem = (data || []).map((cat: any) => ({
         categoria_uid: cat.uid,
         nome: cat.nome,
+        tipo_uid: cat.tipo_uid || null,
         tipo: cat.tipo?.nome || null,
+        grupo_uid: cat.tipo?.grupo?.uid || null,
+        grupo: cat.tipo?.grupo?.nome || null,
         total: contagem.get(cat.uid) || 0
       }));
 
@@ -3637,7 +3804,7 @@ export function PessoasReport() {
                   Total: {categorias.length} categorias · mensal/anual
                 </p>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
                   <button
                     onClick={() => setCategoriaView('tabela')}
@@ -3654,15 +3821,26 @@ export function PessoasReport() {
                     <BarChart3 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="relative flex-1 sm:w-56">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={buscaCategoria}
-                    onChange={(e) => { setBuscaCategoria(e.target.value); setCategoriaPage(1); }}
-                    placeholder="Buscar categoria..."
-                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="flex items-center gap-1 flex-1 min-w-[220px] sm:flex-none sm:w-72">
+                  <div className="flex-1 min-w-0">
+                    <NestedCategoryDropdown
+                      value={categoriaSelecionada}
+                      onChange={(uid) => { setCategoriaSelecionada(uid); setCategoriaPage(1); }}
+                      categories={categoriasDropdown}
+                      placeholder="Todas as categorias"
+                      className="!py-1.5 text-sm"
+                    />
+                  </div>
+                  {categoriaSelecionada && (
+                    <button
+                      type="button"
+                      onClick={() => { setCategoriaSelecionada(''); setCategoriaPage(1); }}
+                      className="p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Limpar filtro"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3796,8 +3974,19 @@ export function PessoasReport() {
                         const crescimento = crescimentoCategorias.find(c => c.categoria_nome === categoria.nome);
                         // Nas últimas linhas o menu abre para cima para não ficar escondido atrás do próximo card
                         const abreParaCima = index >= arr.length - 2;
+                        const tipoAtual = categoria.tipo || 'Não informado';
+                        const grupoAtual = categoria.grupo || 'Sem grupo';
+                        const mudouTipo = index === 0 || (arr[index - 1].tipo || 'Não informado') !== tipoAtual || (arr[index - 1].grupo || 'Sem grupo') !== grupoAtual;
                         return (
-                          <tr key={categoria.categoria_uid} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+                          <Fragment key={categoria.categoria_uid}>
+                          {mudouTipo && (
+                            <tr className="bg-gray-100 dark:bg-gray-800">
+                              <td colSpan={10} className="py-1.5 px-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+                                {grupoAtual} › {tipoAtual}
+                              </td>
+                            </tr>
+                          )}
+                          <tr className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${index === 0 ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                             <td className="py-2 text-gray-900 dark:text-white font-medium">
                               <div className="flex items-center gap-2">
                                 <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -3805,7 +3994,7 @@ export function PessoasReport() {
                               </div>
                             </td>
                             <td className="py-2 text-gray-600 dark:text-gray-400 text-sm">
-                              {categoria.tipo || 'Não informado'}
+                              {tipoAtual}
                             </td>
                             <td className="text-right py-2 text-gray-900 dark:text-white">{categoria.total}</td>
                             <td className="text-right py-2 text-gray-900 dark:text-white">{percentage.toFixed(1)}%</td>
@@ -3934,6 +4123,7 @@ export function PessoasReport() {
                               </div>
                             </td>
                           </tr>
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -5792,6 +5982,213 @@ export function PessoasReport() {
                   onPageChange={setAniversariantesPage}
                 />
               </>
+            )}
+          </Card>
+
+          {/* Comparativo Anual de Cadastros (created_at) */}
+          <Card id="secao-comparativo-anual" className="p-4 mb-4 dark:bg-gray-900">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                Comparativo Anual de Cadastros
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Cadastros por ano • Some períodos e compare anos
+              </p>
+            </div>
+
+            {comparativoAnual.anos.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+                Nenhum cadastro com data de criação encontrado.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Soma de intervalo */}
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Somar de</span>
+                    <select
+                      value={periodoComparativo.ini}
+                      onChange={(e) => setAnoInicioComp(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    >
+                      {comparativoAnual.anos.map(l => (
+                        <option key={l.ano} value={l.ano}>{l.ano}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">até</span>
+                    <select
+                      value={periodoComparativo.fim}
+                      onChange={(e) => setAnoFimComp(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    >
+                      {comparativoAnual.anos.map(l => (
+                        <option key={l.ano} value={l.ano}>{l.ano}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Soma do período</span>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{periodoComparativo.soma.toLocaleString('pt-BR')}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{periodoComparativo.ini} a {periodoComparativo.fim}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800 dark:to-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Média por ano</span>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{periodoComparativo.media.toLocaleString('pt-BR')}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">no intervalo selecionado</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Maior alta anual</span>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {periodoComparativo.maiorAlta ? `${periodoComparativo.maiorAlta.variacao! > 0 ? '+' : ''}${periodoComparativo.maiorAlta.variacao}` : '-'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{periodoComparativo.maiorAlta ? `em ${periodoComparativo.maiorAlta.ano} vs ano anterior` : 'sem comparação'}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Melhor ano</span>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{periodoComparativo.melhorAno?.ano ?? '-'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{periodoComparativo.melhorAno ? `${periodoComparativo.melhorAno.total.toLocaleString('pt-BR')} cadastros` : ''}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comparação entre dois anos */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Comparar</span>
+                    <select
+                      value={anoCmpA ?? comparativoAnual.primeiro}
+                      onChange={(e) => setAnoCmpA(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    >
+                      {comparativoAnual.anos.map(l => (
+                        <option key={l.ano} value={l.ano}>{l.ano}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">com</span>
+                    <select
+                      value={anoCmpB ?? comparativoAnual.ultimo}
+                      onChange={(e) => setAnoCmpB(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded-md dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    >
+                      {comparativoAnual.anos.map(l => (
+                        <option key={l.ano} value={l.ano}>{l.ano}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {(() => {
+                    const a = anoCmpA ?? comparativoAnual.primeiro;
+                    const b = anoCmpB ?? comparativoAnual.ultimo;
+                    const ta = totalDoAno(a);
+                    const tb = totalDoAno(b);
+                    const diff = tb - ta;
+                    const pct = ta > 0 ? (diff / ta) * 100 : null;
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{a}</span>
+                          <p className="text-xl font-bold text-gray-900 dark:text-white">{ta.toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{b}</span>
+                          <p className="text-xl font-bold text-gray-900 dark:text-white">{tb.toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg border ${diff >= 0 ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Diferença</span>
+                          <p className={`text-xl font-bold ${diff >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {diff > 0 ? '+' : ''}{diff.toLocaleString('pt-BR')}{pct !== null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Tabela por ano */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th className="py-2 font-medium">Ano</th>
+                        <th className="py-2 font-medium text-right">Novos</th>
+                        <th className="py-2 font-medium text-right">Variação vs ano anterior</th>
+                        <th className="py-2 font-medium text-right">%</th>
+                        <th className="py-2 font-medium text-right">Acumulado</th>
+                        <th className="py-2 font-medium text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparativoAnual.anos.map((l, index, arr) => {
+                        const dentro = l.ano >= periodoComparativo.ini && l.ano <= periodoComparativo.fim;
+                        const abreParaCima = index >= arr.length - 2;
+                        return (
+                          <tr key={l.ano} className={`border-b border-gray-100 dark:border-gray-800 ${dentro ? '' : 'opacity-50'}`}>
+                            <td className="py-2 font-medium text-gray-900 dark:text-white">{l.ano}</td>
+                            <td className="py-2 text-right text-gray-900 dark:text-white">{l.total.toLocaleString('pt-BR')}</td>
+                            <td className="py-2 text-right">
+                              {l.variacao === null ? (
+                                <span className="text-gray-400">-</span>
+                              ) : (
+                                <span className={`inline-flex items-center gap-1 ${l.variacao > 0 ? 'text-green-600' : l.variacao < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                  {l.variacao > 0 ? <TrendingUp className="w-4 h-4" /> : l.variacao < 0 ? <TrendingDown className="w-4 h-4" /> : null}
+                                  {l.variacao > 0 ? '+' : ''}{l.variacao.toLocaleString('pt-BR')}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 text-right text-gray-600 dark:text-gray-300">
+                              {l.variacaoPct === null ? '-' : `${l.variacaoPct > 0 ? '+' : ''}${l.variacaoPct.toFixed(1)}%`}
+                            </td>
+                            <td className="py-2 text-right text-gray-600 dark:text-gray-300">{l.acumulado.toLocaleString('pt-BR')}</td>
+                            <td className="py-2">
+                              <div className="relative flex items-center justify-center">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuAno(openMenuAno === l.ano ? null : l.ano);
+                                  }}
+                                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                  title="Opções de exportação"
+                                >
+                                  <MoreVertical className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                                </button>
+                                {openMenuAno === l.ano && (
+                                  <div
+                                    className={`absolute right-0 ${abreParaCima ? 'bottom-8' : 'top-8'} z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        handleExportAnoExcel(l.ano);
+                                        setOpenMenuAno(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                    >
+                                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                      Excel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        handleExportAnoPDF(l.ano);
+                                        setOpenMenuAno(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-white"
+                                    >
+                                      <FileText className="w-4 h-4 text-red-600" />
+                                      PDF
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </Card>
 

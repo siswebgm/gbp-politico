@@ -194,8 +194,15 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds, filt
         // Se não houver seleção, busca TODOS os eleitores com os filtros ativos (sem limite de página)
         setLoadingMessage(`Buscando todos os ${quantidadeExportar} eleitores...`);
         try {
-          const response = await eleitorService.listAll(company.uid, filters, 1, 999999);
-          eleitoresData = response.data;
+          const EXPORT_PAGE = 1000;
+          const todos: any[] = [];
+          for (let page = 1; ; page++) {
+            const response = await eleitorService.listAll(company.uid, filters, page, EXPORT_PAGE);
+            todos.push(...(response.data || []));
+            setLoadingMessage(`Buscando todos os ${quantidadeExportar} eleitores... ${todos.length}/${quantidadeExportar}`);
+            if (!response.data || response.data.length < EXPORT_PAGE) break;
+          }
+          eleitoresData = todos;
         } catch (error) {
           console.error('Erro ao buscar todos os eleitores:', error);
           toast.error('Erro ao buscar dados dos eleitores para exportação');
@@ -286,30 +293,40 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds, filt
               const eleitorUids = sortedData.map(e => e.uid).filter(Boolean);
               let atendimentosPorEleitorUid: Record<string, any[]> = {};
 
-              if (eleitorUids.length > 0) {
-                const { data: atendRaw, error: atendError } = await supabaseClient
+              const ATEND_PAGE = 1000;
+              const atendRaw: any[] = [];
+              for (let from = 0; ; from += ATEND_PAGE) {
+                const { data: pageData, error: atendError } = await supabaseClient
                   .from('gbp_atendimentos')
                   .select(`
-                    uid,
-                    eleitor_uid,
-                    data_atendimento,
-                    descricao,
+                    *,
                     gbp_usuarios!usuario_uid ( nome ),
                     gbp_categorias!categoria_uid ( nome )
                   `)
-                  .in('eleitor_uid', eleitorUids)
                   .eq('empresa_uid', company.uid)
-                  .order('data_atendimento', { ascending: false });
+                  .or('oculto.is.null,oculto.eq.false')
+                  .order('data_atendimento', { ascending: false })
+                  .order('uid', { ascending: true })
+                  .range(from, from + ATEND_PAGE - 1);
 
-                if (atendError) console.error('[Export] Erro ao buscar atendimentos:', atendError);
+                if (atendError) {
+                  console.error('[Export] Erro ao buscar atendimentos:', atendError);
+                  toast.error(`Erro ao buscar atendimentos: ${atendError.message}`);
+                  break;
+                }
 
-                (atendRaw || []).forEach((at: any) => {
-                  if (!atendimentosPorEleitorUid[at.eleitor_uid]) {
-                    atendimentosPorEleitorUid[at.eleitor_uid] = [];
-                  }
-                  atendimentosPorEleitorUid[at.eleitor_uid].push(at);
-                });
+                atendRaw.push(...(pageData || []));
+                setLoadingMessage(`Buscando atendimentos... ${atendRaw.length}`);
+                if (!pageData || pageData.length < ATEND_PAGE) break;
               }
+
+              console.log('[Export] Eleitores:', sortedData.length, 'Atendimentos encontrados:', atendRaw.length);
+              atendRaw.forEach((at: any) => {
+                if (!atendimentosPorEleitorUid[at.eleitor_uid]) {
+                  atendimentosPorEleitorUid[at.eleitor_uid] = [];
+                }
+                atendimentosPorEleitorUid[at.eleitor_uid].push(at);
+              });
 
               setLoadingMessage('Gerando arquivo XLSX...');
 
@@ -349,45 +366,67 @@ export function ExportarModal({ isOpen, onClose, filteredData, selectedIds, filt
               const eleitorAtendRowMap: Record<string, number> = {};
 
               // ── ABA ATENDIMENTOS ──────────────────────────────────────────
-              const atendHeaders = ['Eleitor', 'Data', 'Descrição', 'Responsável', 'Categoria', '← Voltar'];
+              const fmtDate = (v: any) => (v ? new Date(v).toLocaleDateString('pt-BR') : '');
+              const fmtText = (v: any) => (v === null || v === undefined ? '' : String(v));
+              const ATEND_COLS: { label: string; wch: number; get: (at: any) => string }[] = [
+                { label: 'Data', wch: 14, get: at => fmtDate(at.data_atendimento) },
+                { label: 'Tipo de Atendimento', wch: 24, get: at => fmtText(at.tipo_de_atendimento) },
+                { label: 'Status', wch: 16, get: at => fmtText(at.status) },
+                { label: 'Descrição', wch: 55, get: at => fmtText(at.descricao) },
+                { label: 'Responsável', wch: 24, get: at => at.gbp_usuarios?.nome || fmtText(at.responsavel) },
+                { label: 'Categoria', wch: 24, get: at => at.gbp_categorias?.nome || '' },
+                { label: 'Indicado', wch: 20, get: at => fmtText(at.indicado) },
+                { label: 'Número', wch: 10, get: at => fmtText(at.numero) },
+                { label: 'Data Agendamento', wch: 18, get: at => fmtDate(at.data_agendamento) },
+                { label: 'Data Expiração', wch: 16, get: at => fmtDate(at['data_expiração']) },
+                { label: 'Status Expiração', wch: 18, get: at => fmtText(at.status_data_expiração) },
+                { label: 'Observação', wch: 36, get: at => fmtText(at.observacao_descricao) },
+                { label: 'Eleitor (atend.)', wch: 30, get: at => fmtText(at.eleitor) },
+                { label: 'WhatsApp', wch: 16, get: at => fmtText(at.whatsapp) },
+                { label: 'CPF', wch: 16, get: at => fmtText(at.cpf) },
+                { label: 'Nascimento', wch: 14, get: at => fmtDate(at.nascimento) },
+                { label: 'Número do SUS', wch: 18, get: at => fmtText(at.numero_do_sus) },
+                { label: 'Logradouro', wch: 30, get: at => fmtText(at.logradouro) },
+                { label: 'Nº Endereço', wch: 12, get: at => fmtText(at.end_numero) },
+                { label: 'Complemento', wch: 20, get: at => fmtText(at.complemento) },
+                { label: 'Bairro', wch: 20, get: at => fmtText(at.bairro) },
+                { label: 'Cidade', wch: 20, get: at => fmtText(at.cidade) },
+                { label: 'UF', wch: 6, get: at => fmtText(at.uf) },
+                { label: 'CEP', wch: 12, get: at => fmtText(at.cep) },
+                { label: 'Latitude', wch: 14, get: at => fmtText(at.latitude) },
+                { label: 'Longitude', wch: 14, get: at => fmtText(at.longitude) },
+                { label: 'Anexos', wch: 10, get: at => (Array.isArray(at.anexos) ? String(at.anexos.length) : '') },
+                { label: 'Oculto', wch: 8, get: at => (at.oculto ? 'Sim' : 'Não') },
+                { label: 'Criado em', wch: 14, get: at => fmtDate(at.created_at) },
+                { label: 'Atualizado em', wch: 14, get: at => fmtDate(at.updated_at) },
+                { label: 'UID', wch: 38, get: at => fmtText(at.uid) },
+              ];
+              const atendHeaders = ['Eleitor', ...ATEND_COLS.map(c => c.label)];
               const wsAtendData: string[][] = [atendHeaders];
+              const atendBackLinks: { r: number; eleitor: any }[] = [];
 
               sortedData.forEach(eleitor => {
                 const atends = atendimentosPorEleitorUid[eleitor.uid] || [];
                 if (atends.length === 0) return;
 
-                const anchorRow = wsAtendData.length + 1;
-                eleitorAtendRowMap[eleitor.uid] = anchorRow;
-                // Linha de grupo: nome do eleitor + célula de volta (preenchida depois via .l)
-                wsAtendData.push([eleitor.nome, '', '', '', '', '← Voltar aos Eleitores']);
-
+                eleitorAtendRowMap[eleitor.uid] = wsAtendData.length + 1;
                 atends.forEach((at: any) => {
-                  wsAtendData.push([
-                    '',
-                    at.data_atendimento
-                      ? new Date(at.data_atendimento).toLocaleDateString('pt-BR')
-                      : '',
-                    at.descricao || '',
-                    at.gbp_usuarios?.nome || '',
-                    at.gbp_categorias?.nome || '',
-                    '',
-                  ]);
+                  atendBackLinks.push({ r: wsAtendData.length, eleitor });
+                  wsAtendData.push([eleitor.nome, ...ATEND_COLS.map(c => c.get(at))]);
                 });
               });
 
               const wsAtend = XLSX.utils.aoa_to_sheet(wsAtendData);
               wsAtend['!cols'] = [
-                { wch: 36 }, { wch: 14 }, { wch: 55 }, { wch: 24 }, { wch: 24 }, { wch: 22 },
+                { wch: 36 }, ...ATEND_COLS.map(c => ({ wch: c.wch })),
               ];
               // Freeze cabeçalho da aba Atendimentos
               wsAtend['!views'] = [{ state: 'frozen', ySplit: 1 }];
 
-              // Hyperlinks de volta: col F (índice 5) de cada linha de grupo → aba Eleitores
-              sortedData.forEach(eleitor => {
-                const anchorRow = eleitorAtendRowMap[eleitor.uid];
-                if (!anchorRow) return;
+              // Hyperlinks de volta: coluna Eleitor de cada atendimento → aba Eleitores
+              atendBackLinks.forEach(({ r, eleitor }) => {
                 const elRow = eleitorEleitoresRowMap[eleitor.uid];
-                const cellAddr = XLSX.utils.encode_cell({ r: anchorRow - 1, c: 5 });
+                const cellAddr = XLSX.utils.encode_cell({ r, c: 0 });
                 if (wsAtend[cellAddr]) {
                   wsAtend[cellAddr].l = {
                     Target: `#Eleitores!A${elRow}`,

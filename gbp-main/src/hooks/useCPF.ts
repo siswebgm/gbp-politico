@@ -21,6 +21,11 @@ interface CPFResponse {
   titulo?: string;
   nome_mae?: string;
   existsInOtherCompany?: boolean;
+  empresasVerificadas?: Array<{
+    empresa: string;
+    dataCadastro: string | null;
+    categoria: string | null;
+  }>;
 }
 
 export function useCPF() {
@@ -30,21 +35,38 @@ export function useCPF() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const checkExistingVoter = async (cpf: string): Promise<{ existingVoter: any; existsInOtherCompany: boolean }> => {
+  const checkExistingVoter = async (cpf: string): Promise<{ existingVoter: any; existsInOtherCompany: boolean; empresasVerificadas?: Array<{ empresa: string; dataCadastro: string | null; categoria: string | null }> }> => {
     if (!user?.empresa_uid) {
       console.error('❌ Empresa não selecionada');
       return { existingVoter: null, existsInOtherCompany: false };
     }
 
     const cleanCPF = cpf.replace(/\D/g, '');
-    
+
     console.log('=== VERIFICAÇÃO DE CPF ===');
     console.log('🔍 CPF Original:', cpf);
     console.log('🔍 CPF Limpo:', cleanCPF);
     console.log('🔍 Empresa UID:', user.empresa_uid);
     console.log('🔍 Comprimento:', cleanCPF.length);
-    
+
     try {
+      // Busca configuração de empresas autorizadas para verificação cruzada
+      const { data: companyConfig, error: configError } = await supabase
+        .from('gbp_empresas')
+        .select('empresas_verificacao_cpf')
+        .eq('uid', user.empresa_uid)
+        .single();
+
+      if (configError) {
+        console.error('❌ Erro ao buscar configuração da empresa:', configError);
+      }
+
+      const empresasAutorizadas = companyConfig?.empresas_verificacao_cpf || [];
+      const deveVerificarOutras = empresasAutorizadas.length > 0;
+
+      console.log('🔍 Empresas autorizadas para verificação:', empresasAutorizadas.length);
+      console.log('🔍 Deve verificar outras empresas:', deveVerificarOutras);
+
       // Verifica se existe na empresa atual (busca apenas dígitos)
       // Usando limit(1) para pegar o primeiro caso haja duplicatas
       console.log('📡 Executando query no Supabase...');
@@ -54,12 +76,12 @@ export function useCPF() {
         .eq('cpf', cleanCPF)
         .eq('empresa_uid', user.empresa_uid)
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      console.log('📊 Resposta do banco:', { 
-        encontrado: !!existingInCompany, 
+      console.log('📊 Resposta do banco:', {
+        encontrado: !!existingInCompany,
         erro: companyError,
-        dados: existingInCompany 
+        dados: existingInCompany
       });
 
       if (companyError) {
@@ -79,30 +101,42 @@ export function useCPF() {
           className: "bg-yellow-50 border-yellow-200 text-yellow-800",
           duration: 3000,
         });
-        
+
         navigate(`/app/pessoas/${existingInCompany.uid}`);
         return { existingVoter: existingInCompany, existsInOtherCompany: false };
       }
 
       console.log('ℹ️ CPF não encontrado na empresa atual');
 
-      // Verifica se existe em outras empresas
-      const { data: existingInOthers, error: othersError } = await supabase
-        .from('gbp_eleitores')
-        .select('uid, nome, empresa_uid, cpf')
-        .eq('cpf', cleanCPF)
-        .neq('empresa_uid', user.empresa_uid);
-      
-      console.log('🔍 CPF em outras empresas:', existingInOthers?.length || 0);
+      // Verifica se existe em outras empresas APENAS se configurado
+      let empresasVerificadas: any[] = [];
 
-      if (othersError) {
-        console.error('Erro ao consultar outras empresas:', othersError);
-        return { existingVoter: null, existsInOtherCompany: false };
+      if (deveVerificarOutras) {
+        const { data: existingInOthers, error: othersError } = await supabase
+          .from('gbp_eleitores')
+          .select('uid, nome, empresa_uid, cpf, created_at, categoria_uid, gbp_empresas!inner(nome), gbp_categorias(nome)')
+          .eq('cpf', cleanCPF)
+          .in('empresa_uid', empresasAutorizadas);
+
+        console.log('🔍 CPF em empresas autorizadas:', existingInOthers?.length || 0);
+
+        if (othersError) {
+          console.error('Erro ao consultar outras empresas:', othersError);
+          return { existingVoter: null, existsInOtherCompany: false };
+        }
+
+        if (existingInOthers && existingInOthers.length > 0) {
+          empresasVerificadas = existingInOthers.map((e: any) => ({
+            empresa: e.gbp_empresas?.nome || 'Empresa desconhecida',
+            dataCadastro: e.created_at || null,
+            categoria: e.gbp_categorias?.nome || null
+          }));
+        }
       }
 
-      const existsInOtherCompany = existingInOthers && existingInOthers.length > 0;
+      const existsInOtherCompany = empresasVerificadas.length > 0;
 
-      return { existingVoter: null, existsInOtherCompany };
+      return { existingVoter: null, existsInOtherCompany, empresasVerificadas };
     } catch (error) {
       console.error('Erro ao verificar CPF:', error);
       return { existingVoter: null, existsInOtherCompany: false };
@@ -121,7 +155,7 @@ export function useCPF() {
 
     try {
       // Verifica se o CPF já está cadastrado
-      const { existingVoter, existsInOtherCompany } = await checkExistingVoter(cleanCPF);
+      const { existingVoter, existsInOtherCompany, empresasVerificadas } = await checkExistingVoter(cleanCPF);
       if (existingVoter) {
         setIsLoading(false);
         return null;
@@ -181,7 +215,8 @@ export function useCPF() {
         genero: generoCompleto || undefined,
         titulo: data.TITULO_ELEITOR || undefined,
         nome_mae: data.NOME_MAE || undefined,
-        existsInOtherCompany
+        existsInOtherCompany,
+        empresasVerificadas
       };
     } catch (err) {
       console.error('Erro ao buscar dados do CPF:', err);

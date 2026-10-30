@@ -28,6 +28,7 @@ import {
   DialogFooter,
 } from '../../components/ui/dialog';
 import { FileUpload } from '../../components/ui/file-upload';
+import { CPFVerificationModal } from '../../components/CPFVerificationModal';
 
 interface Indicado {
   uid: string;
@@ -406,6 +407,8 @@ export const NovaPessoa: React.FC = () => {
   const [showConfirmarLimpar, setShowConfirmarLimpar] = useState(false);
   const [showModalPDF, setShowModalPDF] = useState(false);
   const [showMenuPDF, setShowMenuPDF] = useState(false);
+  const [showCPFModal, setShowCPFModal] = useState(false);
+  const [empresasCPF, setEmpresasCPF] = useState<Array<{ empresa: string; dataCadastro: string | null; categoria: string | null }>>([]);
   const [camposPDF, setCamposPDF] = useState({
     nomeCompleto: true,
     cpf: true,
@@ -934,7 +937,7 @@ export const NovaPessoa: React.FC = () => {
         try {
           setLastCheckedCPF(cleanCPF);
           const cpfData = await fetchCPFData(cleanCPF);
-          
+
           if (cpfData) {
             // Preenche os campos com os dados da API
             if (cpfData.nome) setValue('nome', cpfData.nome);
@@ -942,6 +945,12 @@ export const NovaPessoa: React.FC = () => {
             if (cpfData.data_nascimento) setValue('nascimento', formatDateString(cpfData.data_nascimento));
             if (cpfData.genero) setValue('genero', cpfData.genero);
             if (cpfData.titulo) setValue('titulo', cpfData.titulo);
+
+            // Abre modal se CPF foi encontrado em outras empresas autorizadas (exceto para visitante)
+            if (cpfData.empresasVerificadas && cpfData.empresasVerificadas.length > 0 && user?.nivel_acesso?.toLowerCase() !== 'visitante') {
+              setEmpresasCPF(cpfData.empresasVerificadas);
+              setShowCPFModal(true);
+            }
           }
         } catch (error) {
           console.error('Erro ao preencher dados do CPF:', error);
@@ -3176,6 +3185,12 @@ export const NovaPessoa: React.FC = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <CPFVerificationModal
+          open={showCPFModal}
+          onOpenChange={setShowCPFModal}
+          empresas={empresasCPF}
+        />
       </div>
     </>
   );
