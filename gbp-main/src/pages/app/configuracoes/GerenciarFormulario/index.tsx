@@ -1948,6 +1948,9 @@ export default function GerenciarFormulario() {
                                 label={
                                   <span className="text-sm font-medium text-gray-900">
                                     {field.label}
+                                    {fieldConfig.obrigatorio && (
+                                      <span className="ml-1 text-red-500">*</span>
+                                    )}
                                   </span>
                                 }
                               />
@@ -2136,6 +2139,9 @@ export default function GerenciarFormulario() {
                                   label={
                                     <span className="text-sm font-medium text-gray-900">
                                       {doc.label}
+                                      {docConfig.obrigatorio && (
+                                        <span className="ml-1 text-red-500">*</span>
+                                      )}
                                     </span>
                                   }
                                 />

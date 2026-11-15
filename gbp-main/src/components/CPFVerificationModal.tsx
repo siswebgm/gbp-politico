@@ -22,7 +22,7 @@ export function CPFVerificationModal({ open, onOpenChange, empresas }: CPFVerifi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-6">
+      <DialogContent className="sm:max-w-md max-w-[calc(100vw-3rem)] p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Info className="h-5 w-5 text-blue-600" />

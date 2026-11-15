@@ -1,4 +1,5 @@
 import { supabaseClient } from '@/lib/supabase';
+import type { CamposConfigDemanda, CabecalhoConfig } from '@/config/demandaCampos';
 
 export interface DemandaTipo {
   id: number;
@@ -8,6 +9,8 @@ export interface DemandaTipo {
   nome_tipo: string[];
   updated_at: string | null;
   tipo_demanda_rua: string[];
+  campos_config?: CamposConfigDemanda | null;
+  cabecalho_config?: CabecalhoConfig | null;
 }
 
 export const demandaTipoService = {
@@ -82,6 +85,114 @@ export const demandaTipoService = {
       
       console.log(`[atualizarTiposDemanda] Novo registro criado com sucesso:`, data);
       return data;
+    }
+  },
+
+  // Buscar a configuração de campos do formulário público
+  async getCamposConfig(empresaUid: string): Promise<CamposConfigDemanda | null> {
+    const { data, error } = await supabaseClient
+      .from('gbp_demanda_tipo')
+      .select('campos_config')
+      .eq('empresa_uid', empresaUid)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[getCamposConfig] Erro ao buscar campos_config:', error);
+      throw error;
+    }
+
+    return (data?.campos_config as CamposConfigDemanda) || null;
+  },
+
+  // Salvar a configuração de campos do formulário público
+  async atualizarCamposConfig(empresaUid: string, camposConfig: CamposConfigDemanda): Promise<void> {
+    const { data: existing, error: fetchError } = await supabaseClient
+      .from('gbp_demanda_tipo')
+      .select('uid')
+      .eq('empresa_uid', empresaUid)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('[atualizarCamposConfig] Erro ao verificar registro:', fetchError);
+      throw fetchError;
+    }
+
+    if (existing) {
+      const { error } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .update({
+          campos_config: camposConfig,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('empresa_uid', empresaUid);
+
+      if (error) {
+        console.error('[atualizarCamposConfig] Erro ao atualizar campos_config:', error);
+        throw error;
+      }
+    } else {
+      const { error } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .insert([{ empresa_uid: empresaUid, campos_config: camposConfig }]);
+
+      if (error) {
+        console.error('[atualizarCamposConfig] Erro ao criar registro de campos_config:', error);
+        throw error;
+      }
+    }
+  },
+
+  // Buscar a configuração do cabeçalho do formulário público
+  async getCabecalhoConfig(empresaUid: string): Promise<CabecalhoConfig | null> {
+    const { data, error } = await supabaseClient
+      .from('gbp_demanda_tipo')
+      .select('cabecalho_config')
+      .eq('empresa_uid', empresaUid)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[getCabecalhoConfig] Erro ao buscar cabecalho_config:', error);
+      throw error;
+    }
+
+    return (data?.cabecalho_config as CabecalhoConfig) || null;
+  },
+
+  // Salvar a configuração do cabeçalho do formulário público
+  async atualizarCabecalhoConfig(empresaUid: string, cabecalhoConfig: CabecalhoConfig): Promise<void> {
+    const { data: existing, error: fetchError } = await supabaseClient
+      .from('gbp_demanda_tipo')
+      .select('uid')
+      .eq('empresa_uid', empresaUid)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('[atualizarCabecalhoConfig] Erro ao verificar registro:', fetchError);
+      throw fetchError;
+    }
+
+    if (existing) {
+      const { error } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .update({
+          cabecalho_config: cabecalhoConfig,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('empresa_uid', empresaUid);
+
+      if (error) {
+        console.error('[atualizarCabecalhoConfig] Erro ao atualizar cabecalho_config:', error);
+        throw error;
+      }
+    } else {
+      const { error } = await supabaseClient
+        .from('gbp_demanda_tipo')
+        .insert([{ empresa_uid: empresaUid, cabecalho_config: cabecalhoConfig }]);
+
+      if (error) {
+        console.error('[atualizarCabecalhoConfig] Erro ao criar registro de cabecalho_config:', error);
+        throw error;
+      }
     }
   },
 

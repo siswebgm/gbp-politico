@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useCompanyStore } from '../store/useCompanyStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabaseClient } from '../lib/supabase';
@@ -37,6 +37,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isInitializing, setIsInitializing] = useState(true);
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
   const { toast } = useToast();
+  const location = useLocation();
+
+  // Não mostrar loading em rotas públicas
+  const isPublicRoute = location.pathname.startsWith('/demanda') || 
+                        location.pathname.startsWith('/demanda-sucesso') ||
+                        location.pathname.startsWith('/termos-uso') ||
+                        location.pathname.startsWith('/ref/') ||
+                        location.pathname === '/vendas' ||
+                        location.pathname === '/clientes';
 
   const safeGetLocalStorageItem = (key: string) => {
     try {
@@ -399,7 +408,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signOut,
       }}
     >
-      {isInitializing ? <LoadingSpinner /> : children}
+      {isInitializing && !isPublicRoute ? <LoadingSpinner /> : children}
     </AuthContext.Provider>
   );
 };

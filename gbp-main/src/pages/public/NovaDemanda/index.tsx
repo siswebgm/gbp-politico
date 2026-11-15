@@ -5,6 +5,7 @@ import { getEmpresa } from '../../../services/empresa';
 import { createDemandaRua, uploadDemandaFiles, uploadBoletimOcorrencia, DemandaRuaInput } from '../../../services/demandasRua';
 import { indicadoService, type Indicado } from '../../../services/indicadoService';
 import { compressImages } from '../../../utils/imageCompression';
+import { mergeCamposConfig, mergeCabecalhoConfig, type CamposConfigDemanda, type CabecalhoConfig } from '../../../config/demandaCampos';
 import { toast } from 'react-toastify';
 import { X, Loader2 } from 'lucide-react';
 import './global.css';
@@ -13,6 +14,7 @@ interface Empresa {
   uid: string;
   nome: string;
   logo_url?: string;
+  link_demanda_disponivel?: boolean;
 }
 
 interface Endereco {
@@ -54,11 +56,11 @@ export function NovaDemanda() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingEmpresa, setIsLoadingEmpresa] = useState(true);
   const [isUploadingBoletim, setIsUploadingBoletim] = useState(false);
   const [isConsultingCpf, setIsConsultingCpf] = useState(false);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
-  const [linkDesativado, setLinkDesativado] = useState(false);
+  const [linkDisabled, setLinkDisabled] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [boletimFile, setBoletimFile] = useState<File | null>(null);
@@ -67,6 +69,10 @@ export function NovaDemanda() {
   const dataNascimentoRef = useRef<HTMLInputElement>(null);
   const [temEnderecoRequerente, setTemEnderecoRequerente] = useState(false);
   const [geoStatus, setGeoStatus] = useState<'idle' | 'buscando' | 'ok' | 'nao_localizado'>('idle');
+  
+  // Estado para paginação do formulário
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 3;
   
   // Capturar usuário que compartilhou o link
   const usuarioCompartilhador = searchParams.get('user');
@@ -110,34 +116,31 @@ export function NovaDemanda() {
         navigate('/');
         return;
       }
-      
+
       try {
-        setIsLoadingEmpresa(true);
         const empresaData = await getEmpresa(empresa_uid);
-        
+
         if (!empresaData) {
           toast.error('Empresa não encontrada');
           navigate('/');
           return;
         }
 
-        // Se o link de demanda público não estiver ativo/disponível
-        if (!empresaData.link_demanda_disponivel) {
-          setLinkDesativado(true);
+        // Verifica se o link público está disponível (só se o campo existir)
+        if (empresaData.link_demanda_disponivel === false) {
+          setLinkDisabled(true);
+          setInitialLoading(false);
+          return;
         }
 
-        // Atualiza o estado da empresa mesmo se o link estiver desativado
+        // Atualiza o estado da empresa
         setEmpresa(empresaData);
+        setInitialLoading(false);
 
-        // Link de demanda está sempre disponível
-        setIsLoadingEmpresa(false);
-        
       } catch (error) {
         console.error('Erro ao carregar empresa:', error);
         toast.error('Erro ao carregar dados da empresa');
         navigate('/');
-      } finally {
-        setIsLoadingEmpresa(false);
       }
     };
 
@@ -158,10 +161,20 @@ export function NovaDemanda() {
         setLoadingTipos(true);
         const { data, error } = await supabase
           .from('gbp_demanda_tipo')
-          .select('tipo_demanda_rua')
+          .select('tipo_demanda_rua, campos_config, cabecalho_config')
           .eq('empresa_uid', empresa_uid);
 
         if (error) throw error;
+
+        // Carrega a configuração de visibilidade dos campos
+        if (data && data.length > 0) {
+          setCamposConfig(mergeCamposConfig(data[0].campos_config));
+          const cabecalhoMerged = mergeCabecalhoConfig(data[0].cabecalho_config);
+          console.log('[DEBUG] Configuração do cabeçalho:', cabecalhoMerged);
+          console.log('[DEBUG] Configuração original:', data[0].cabecalho_config);
+          setCabecalhoConfig(cabecalhoMerged);
+          setCabecalhoLoaded(true);
+        }
         
         if (data && data.length > 0 && data[0].tipo_demanda_rua) {
           // Usar o array de tipos da coluna tipo_demanda_rua
@@ -262,6 +275,27 @@ export function NovaDemanda() {
   
   // Estado para controlar se tem indicado
   const [temIndicado, setTemIndicado] = useState<string>('não');
+
+  // Configuração de visibilidade dos campos do formulário (por empresa)
+  const [camposConfig, setCamposConfig] = useState<CamposConfigDemanda>(() => mergeCamposConfig(null));
+  const campoVisivel = (id: string) => {
+    const config = camposConfig[id];
+    return config ? config.visivel !== false : true;
+  };
+  const campoObrigatorio = (id: string) => {
+    const config = camposConfig[id];
+    return config ? config.obrigatorio === true : false;
+  };
+  
+  // Configuração visual do cabeçalho
+  const [cabecalhoConfig, setCabecalhoConfig] = useState<CabecalhoConfig>(() => mergeCabecalhoConfig(null));
+  const [cabecalhoLoaded, setCabecalhoLoaded] = useState(false);
+  const camposRequerente = ['requerente_cpf', 'requerente_nome', 'requerente_whatsapp', 'requerente_data_nascimento', 'genero'];
+  const camposEndereco = ['cep', 'logradouro', 'numero', 'bairro', 'referencia', 'cidade', 'uf'];
+  const camposDemanda = ['tipo_de_demanda', 'nivel_de_urgencia', 'indicado', 'link_da_demanda', 'descricao_do_problema'];
+  const secaoRequerenteVisivel = camposRequerente.some(campoVisivel);
+  const secaoEnderecoVisivel = camposEndereco.some(campoVisivel);
+  const secaoDemandaVisivel = camposDemanda.some(campoVisivel);
 
   // Funções de formatação
   const formatPhone = (value: string): string => {
@@ -700,7 +734,7 @@ export function NovaDemanda() {
     }
 
     console.log('[DEBUG] Validando termos...');
-    if (!formData.aceite_termos) {
+    if (campoVisivel('aceite_termos') && !formData.aceite_termos) {
       console.log('[DEBUG] Termos não aceitos');
       toast.error('Você precisa aceitar os termos de uso para continuar');
       return;
@@ -714,15 +748,16 @@ export function NovaDemanda() {
       return;
     }
 
-    // Validar se pelo menos uma foto foi anexada
+    // Validar se pelo menos uma foto foi anexada (se configurado como obrigatório)
     console.log('[DEBUG] Validando fotos...');
-    if (files.length === 0) {
+    if (campoObrigatorio('fotos') && campoVisivel('fotos') && files.length === 0) {
       console.log('[DEBUG] Nenhuma foto anexada');
       toast.error('Por favor, anexe pelo menos uma foto do problema');
       return;
     }
 
-    // Validar data de nascimento
+    // Validar data de nascimento (somente se o campo estiver visível no formulário)
+    if (campoVisivel('requerente_data_nascimento')) {
     console.log('[DEBUG] Validando data de nascimento...');
     setDataNascimentoError(''); // Limpa erro anterior
     
@@ -776,16 +811,20 @@ export function NovaDemanda() {
       toast.error('O requerente deve ter pelo menos 18 anos');
       return;
     }
+    }
 
     console.log('[DEBUG] Todas validações passadas! Prosseguindo...');
     setIsLoading(true);
 
     try {
+      // CPF do requerente (se o campo estiver oculto, gera um identificador único)
+      const cpfRequerente = formData.requerente_cpf.replace(/\D/g, '') || `9${Date.now().toString().slice(-10)}`;
+
       // 1. Verificar se o requerente já existe
       const { data: requerenteExistente } = await supabase
         .from('gbp_requerentes_demanda_rua')
         .select('*')
-        .eq('cpf', formData.requerente_cpf.replace(/\D/g, ''))
+        .eq('cpf', cpfRequerente)
         .eq('empresa_uid', empresa_uid)
         .maybeSingle();
 
@@ -800,11 +839,11 @@ export function NovaDemanda() {
           : null;
 
         const dadosRequerente = {
-          nome: formData.requerente_nome,
-          cpf: formData.requerente_cpf.replace(/\D/g, ''),
-          whatsapp: formData.requerente_whatsapp,
+          nome: formData.requerente_nome || 'Não informado',
+          cpf: cpfRequerente,
+          whatsapp: formData.requerente_whatsapp || '',
           nascimento: dataNascimentoFormatada,
-          genero: formData.genero,
+          genero: formData.genero || 'prefiro_nao_informar',
           empresa_uid: empresa_uid
         };
 
@@ -1004,215 +1043,146 @@ export function NovaDemanda() {
     }
   };
 
-  if (isLoadingEmpresa) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  // Verifica se o link de demanda público não está ativo
-  if (linkDesativado) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center px-6 py-12 font-sans light">
-        <div className="max-w-3xl w-full flex flex-col md:flex-row items-center justify-between gap-8 md:gap-16">
-          
-          {/* Lado Esquerdo: Conteúdo de Texto */}
-          <div className="flex-1 text-center md:text-left space-y-5">
-            {/* Logo da Instituição */}
-            <div className="flex items-center justify-center md:justify-start gap-3 mb-6">
-              {empresa?.logo_url ? (
-                <img
-                  className="h-10 w-auto max-w-[150px] object-contain"
-                  src={empresa.logo_url}
-                  alt={`Logo ${empresa.nome}`}
-                />
-              ) : (
-                <span className="text-xl font-bold tracking-tight text-gray-800">
-                  {empresa?.nome || 'GBP Político'}
-                </span>
-              )}
+  // Renderiza o formulário
+  return (
+    <div className="page-wrapper">
+      <div className="content-wrapper min-h-screen overflow-y-auto">
+        {initialLoading ? (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600">Carregando...</p>
             </div>
-            
-            <div className="space-y-3">
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900">
-                <span className="text-blue-600 font-extrabold">404.</span> Ops, ocorreu um erro.
-              </h1>
-              <p className="text-gray-600 text-base leading-relaxed max-w-md">
+          </div>
+        ) : linkDisabled ? (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+            <div className="text-center">
+              <h1 className="text-6xl font-bold text-gray-900 mb-4">404</h1>
+              <h2 className="text-2xl font-semibold text-gray-700 mb-2">Ops, ocorreu um erro.</h2>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 A página que você está tentando acessar está temporariamente indisponível devido a instabilidades técnicas.
               </p>
-            </div>
-            
-            <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center md:justify-start">
               <button
-                onClick={() => window.location.reload()}
-                className="inline-flex justify-center items-center py-2 px-5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors font-semibold"
+                onClick={() => window.location.href = '/'}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
                 Tentar novamente
               </button>
             </div>
           </div>
-          
-          {/* Lado Direito: Ilustração SVG Robô Quebrado */}
-          <div className="flex-shrink-0 flex items-center justify-center text-blue-500/80">
-            <svg className="w-56 h-56 md:w-64 md:h-64" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Ground Shadow */}
-              <path d="M30 180 H170" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="5 5" />
-              
-              {/* Antenna */}
-              <path d="M100 40 V20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx="100" cy="17" r="4" fill="currentColor" />
-              
-              {/* Head */}
-              <rect x="70" y="40" width="60" height="40" rx="8" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-              
-              {/* Left Eye (Normal) */}
-              <circle cx="88" cy="55" r="5" stroke="currentColor" strokeWidth="2" />
-              <circle cx="88" cy="55" r="2" fill="currentColor" />
-              
-              {/* Right Eye (X shape for broken/error) */}
-              <path d="M108 51 L116 59 M116 51 L108 59" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              
-              {/* Mouth (Sad/Wavy) */}
-              <path d="M85 70 Q100 64 115 70" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              
-              {/* Neck */}
-              <rect x="92" y="80" width="16" height="10" stroke="currentColor" strokeWidth="2.5" />
-              
-              {/* Body */}
-              <rect x="60" y="90" width="80" height="60" rx="10" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-              
-              {/* Heart/Battery indicator on chest */}
-              <rect x="75" y="105" width="20" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
-              <line x1="78" y1="110" x2="84" y2="110" stroke="currentColor" strokeWidth="2" />
-              
-              {/* Broken gauge meter scale on chest */}
-              <path d="M110 115 A 10 10 0 0 1 125 115" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <line x1="117.5" y1="115" x2="113" y2="108" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              
-              {/* Left Arm (Holding wrench) */}
-              <path d="M60 105 H40 V125" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              {/* Wrench head */}
-              <path d="M35 125 H45 M35 130 H45 M37 125 V130 M40 120 L40 125" stroke="currentColor" strokeWidth="2" />
-              <path d="M35 130 A 5 5 0 0 0 45 130" stroke="currentColor" strokeWidth="2" fill="none" />
-              
-              {/* Right Arm (Disconnected/Sparking) */}
-              <path d="M140 105 Q155 105 160 115" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              {/* Sparkles */}
-              <path d="M165 110 L170 112 M162 120 L165 125 M155 120 L153 125" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              
-              {/* Debris on ground */}
-              <circle cx="145" cy="165" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-              <circle cx="145" cy="165" r="4" stroke="currentColor" strokeWidth="2" />
-              
-              <line x1="55" y1="165" x2="65" y2="165" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-              <line x1="60" y1="161" x2="60" y2="169" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              
-              <line x1="80" y1="175" x2="95" y2="171" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
-          
-        </div>
-      </div>
-    );
-  }
-
-  // Verifica se o link de demanda está disponível
-  if (!empresa) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-sm p-8 text-center">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
-            <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Empresa não encontrada</h2>
-          <p className="text-gray-600 mb-6">O link de acesso é inválido ou a empresa não existe mais.</p>
-          <button
-            onClick={() => navigate('/')}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        ) : (
+          <form onSubmit={handleSubmit} className="w-full">
+          {/* Cabeçalho Horizontal Moderno */}
+          {cabecalhoLoaded && (
+          <div 
+            className="shadow-lg pb-14 sm:pb-16 lg:pb-20 relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${cabecalhoConfig.corCabecalho || '#1e3a8a'} 0%, ${cabecalhoConfig.corCabecalho || '#1e3a8a'}bb 100%)`
+            }}
           >
-            Voltar para a página inicial
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderiza o formulário (link sempre disponível)
-  return (
-    <div className="page-wrapper">
-      <div className="content-wrapper">
-        <form onSubmit={handleSubmit} className="w-full">
-          {/* Banner da Empresa */}
-          <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-xl">
-            <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 relative overflow-hidden">
-              {/* Efeito de brilho sutil */}
-              <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10"></div>
-              
-              {/* Botão Minhas Demandas no canto direito */}
-              {empresa_uid && (
-                <div className="absolute top-24 right-4 z-20">
-                  <a 
-                    href={`/minhas-demandas/empresa/${empresa_uid}`}
-                    className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-white/20 hover:bg-white/30 transition-colors whitespace-nowrap border border-white/20"
-                  >
-                    Minhas Demandas
-                  </a>
-                </div>
-              )}
-              
-              <div className="relative z-10">
-                <div className="flex flex-col sm:flex-row items-start sm:items-start justify-start text-left">
-                  <div className="flex items-center space-x-6">
-                    {empresa?.logo_url && (
-                      <div className="flex-shrink-0 bg-white/10 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-white/10 transform transition-all duration-300 hover:scale-105">
-                        <img
-                          className="h-14 w-auto max-w-[140px] object-contain"
-                          src={empresa.logo_url}
-                          alt={`Logo ${empresa.nome}`}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-200">
-                        {empresa.nome || 'Sistema de Demandas'}
-                      </h1>
-                      <p className="text-primary-100 mt-1 text-sm sm:text-base">
-                        Registre ou consulte sua demanda
-                      </p>
-                      <div className="flex items-center space-x-2 mt-2">
-                        <span className="relative flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                        </span>
-                        <p className="text-gray-200 text-sm">
-                          Atendimento Online
-                        </p>
-                      </div>
+            {/* Faixas diagonais decorativas */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-8 transform rotate-45 translate-x-1/2 -translate-y-1/2"></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-white opacity-6 transform -rotate-45 -translate-x-1/2 translate-y-1/2"></div>
+            </div>
+            
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 lg:py-12 relative z-10">
+              <div className="flex flex-row items-center gap-4 sm:gap-6 lg:gap-12">
+                {/* Lado Esquerdo - Foto do Responsável */}
+                {(cabecalhoConfig.logoUrl || empresa?.logo_url) && (
+                  <div className="flex-shrink-0">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-white opacity-10 rounded-2xl blur-2xl transform scale-110"></div>
+                      <img
+                        className="h-32 w-32 sm:h-40 sm:w-40 lg:h-56 lg:w-56 object-contain relative z-10 drop-shadow-2xl"
+                        src={cabecalhoConfig.logoUrl || empresa?.logo_url}
+                        alt={`Foto ${empresa?.nome || 'Empresa'}`}
+                      />
                     </div>
                   </div>
+                )}
+                
+                {/* Lado Direito - Identificação */}
+                <div className="flex-1 text-left">
+                  {/* Cargo/Função - Etiqueta */}
+                  {cabecalhoConfig.subtitulo && (
+                    <div className="inline-flex items-center gap-2 mb-2 sm:mb-3">
+                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                      <span 
+                        style={{ 
+                          backgroundColor: '#f97316',
+                          color: '#ffffff',
+                          boxShadow: '0 2px 8px rgba(249, 115, 22, 0.3)'
+                        }}
+                        className="px-2 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wide"
+                      >
+                        {cabecalhoConfig.subtitulo}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Nome com linha decorativa */}
+                  <div className="mb-2 sm:mb-4">
+                    <h1 style={{ color: cabecalhoConfig.corTitulo || '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }} className="text-xl sm:text-2xl lg:text-4xl font-bold mb-1 sm:mb-2 leading-tight tracking-tight">
+                      {cabecalhoConfig.titulo}
+                    </h1>
+                    <div className="h-0.5 sm:h-1 w-16 sm:w-24 bg-gradient-to-r from-orange-500 to-orange-400 rounded"></div>
+                  </div>
+                  
+                  {/* Texto de orientação */}
+                  <p style={{ color: cabecalhoConfig.corDescricao || 'rgba(255,255,255,0.95)' }} className="text-xs sm:text-base lg:text-lg font-medium leading-relaxed">
+                    {cabecalhoConfig.descricao || 'Registre ou consulte sua demanda'}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-          <div className="bg-white shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Formulário de Registro</h2>
-            <p className="text-gray-600 mb-4">
-              Utilize este formulário para registrar sua demanda. Tem algum problema? Nos envie.
-            </p>
-            <div className="h-1 w-20 bg-gray-600 rounded-full mb-4"></div>
+          )}
+          {/* Cartão Principal */}
+          <div className="form-card">
+            {/* Cabeçalho do formulário */}
+            <div className="form-header">
+              <div className="flex items-center gap-3">
+                <div className="form-header-icon">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Formulário de Registro</h2>
+                  <p style={{ color: '#64748b' }} className="font-semibold">Envie sua demanda</p>
+                </div>
+              </div>
+            </div>
 
-            {/* Dados do Requerente */}
-            <div className="border-b border-gray-200 pb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Dados do Requerente</h3>
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6">
+            {/* Indicador de etapas */}
+            <div className="wizard-steps">
+              <div className={`wizard-step ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
+                <div className="wizard-step-line"></div>
+                <div className="wizard-step-number">1</div>
+                <div className="wizard-step-label">Seus Dados</div>
+              </div>
+              <div className={`wizard-step ${currentStep >= 2 ? 'active' : ''} ${currentStep > 2 ? 'completed' : ''}`}>
+                <div className="wizard-step-line"></div>
+                <div className="wizard-step-number">2</div>
+                <div className="wizard-step-label">Endereço</div>
+              </div>
+              <div className={`wizard-step ${currentStep >= 3 ? 'active' : ''}`}>
+                <div className="wizard-step-number">3</div>
+                <div className="wizard-step-label">Demanda</div>
+              </div>
+            </div>
+
+            {/* Dados do Requerente - Etapa 1 */}
+            {secaoRequerenteVisivel && currentStep === 1 && (
+            <div className="form-section">
+              <h3>Dados do Requerente</h3>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:gap-x-6 sm:gap-y-4">
                 {/* CPF */}
+                {campoVisivel('requerente_cpf') && (
                 <div className="col-span-full">
-                  <label htmlFor="requerente_cpf" className="block text-sm font-medium text-gray-700">
-                    CPF *
+                  <label htmlFor="requerente_cpf" className="form-label">
+                    CPF {campoObrigatorio('requerente_cpf') && <span className="required">*</span>}
                     {isConsultingCpf && (
                       <span className="ml-2 text-xs text-gray-500 flex items-center">
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -1224,70 +1194,72 @@ export function NovaDemanda() {
                     type="text"
                     id="requerente_cpf"
                     name="requerente_cpf"
-                    required
+                    required={campoObrigatorio('requerente_cpf')}
                     maxLength={14}
                     placeholder="000.000.000-00"
                     value={formData.requerente_cpf}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="form-input"
                   />
                 </div>
+                )}
 
                 {/* Nome Completo */}
-                <div className="sm:col-span-6">
-                  <label htmlFor="requerente_nome" className="block text-sm font-medium text-gray-700">
-                    Nome Completo *
+                {campoVisivel('requerente_nome') && (
+                <div className="col-span-full">
+                  <label htmlFor="requerente_nome" className="form-label">
+                    Nome Completo {campoObrigatorio('requerente_nome') && '*'}
                   </label>
                   <input
                     type="text"
                     id="requerente_nome"
                     name="requerente_nome"
-                    required
+                    required={campoObrigatorio('requerente_nome')}
                     value={formData.requerente_nome}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('requerente_whatsapp') && (
                 <div className="col-span-full">
-                  <label htmlFor="requerente_whatsapp" className="block text-sm font-medium text-gray-700">
-                    WhatsApp *
+                  <label htmlFor="requerente_whatsapp" className="form-label">
+                    WhatsApp {campoObrigatorio('requerente_whatsapp') && '*'}
                   </label>
                   <input
                     type="tel"
                     name="requerente_whatsapp"
                     id="requerente_whatsapp"
-                    required
+                    required={campoObrigatorio('requerente_whatsapp')}
                     maxLength={15}
                     placeholder="(00) 00000-0000"
                     value={formData.requerente_whatsapp}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('requerente_data_nascimento') && (
                 <div className="col-span-full">
-                  <label htmlFor="requerente_data_nascimento" className={`block text-sm font-medium ${dataNascimentoError ? 'text-red-600' : 'text-gray-700'}`}>
-                    Data de Nascimento *
+                  <label htmlFor="requerente_data_nascimento" className={`form-label ${dataNascimentoError ? 'text-red-600' : ''}`}>
+                    Data de Nascimento {campoObrigatorio('requerente_data_nascimento') && '*'}
                   </label>
                   <input
                     type="text"
                     name="requerente_data_nascimento"
                     id="requerente_data_nascimento"
                     ref={dataNascimentoRef}
-                    required
+                    required={campoObrigatorio('requerente_data_nascimento')}
                     maxLength={10}
                     placeholder="dd/mm/aaaa"
                     value={formData.requerente_data_nascimento}
                     onChange={(e) => {
                       handleInputChange(e);
-                      if (dataNascimentoError) setDataNascimentoError(''); // Limpa erro ao digitar
+                      if (dataNascimentoError) setDataNascimentoError('');
                     }}
-                    className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm ${
-                      dataNascimentoError 
-                        ? 'border-red-500 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                        : 'border-gray-300'
-                    }`}
+                    className={`form-input ${dataNascimentoError ? 'border-red-500 bg-red-50' : ''}`}
                   />
                   {dataNascimentoError && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -1298,18 +1270,20 @@ export function NovaDemanda() {
                     </p>
                   )}
                 </div>
+                )}
 
+                {campoVisivel('genero') && (
                 <div className="col-span-full">
-                  <label htmlFor="genero" className="block text-sm font-medium text-gray-700">
-                    Gênero *
+                  <label htmlFor="genero" className="form-label">
+                    Gênero {campoObrigatorio('genero') && '*'}
                   </label>
                   <select
                     id="genero"
                     name="genero"
-                    required
+                    required={campoObrigatorio('genero')}
                     value={formData.genero}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    className="form-select"
                   >
                     <option value="">Selecione...</option>
                     <option value="masculino">Masculino</option>
@@ -1318,14 +1292,17 @@ export function NovaDemanda() {
                     <option value="prefiro_nao_informar">Prefiro não informar</option>
                   </select>
                 </div>
+                )}
 
               </div>
             </div>
+            )}
 
-            {/* Endereço */}
-            <div className="border-b border-gray-200 pb-6">
-              <div className="mb-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Endereço do Problema</h3>
+            {/* Endereço - Etapa 2 */}
+            {secaoEnderecoVisivel && currentStep === 2 && (
+            <div className="form-section">
+              <h3>Endereço do Problema</h3>
+              <div className="mb-3 sm:mb-4">
                 {temEnderecoRequerente && (
                   <div className="flex flex-col sm:flex-row gap-2 mb-3">
                     <button 
@@ -1450,16 +1427,17 @@ export function NovaDemanda() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-12">
+                {campoVisivel('cep') && (
                 <div className="sm:col-span-4">
-                  <label htmlFor="cep" className="block text-sm font-medium text-gray-700">
-                    CEP *
+                  <label htmlFor="cep" className="form-label">
+                    CEP {campoObrigatorio('cep') && '*'}
                   </label>
                   <div className="mt-1 flex rounded-md shadow-sm">
                     <input
                       type="text"
                       name="cep"
                       id="cep"
-                      required
+                      required={campoObrigatorio('cep')}
                       value={formData.cep}
                       onChange={handleInputChange}
                       onBlur={(e) => {
@@ -1469,103 +1447,118 @@ export function NovaDemanda() {
                           buscarEnderecoPorCep(cepLimpo);
                         }
                       }}
-                      className={`flex-1 min-w-0 block w-full px-3 py-2 rounded-md border bg-white border-gray-300 shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                      className="form-input"
                       maxLength={9}
                       placeholder="00000-000"
                     />
                   </div>
                 </div>
+                )}
 
+                {campoVisivel('logradouro') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="logradouro" className="block text-sm font-medium text-gray-700">
-                    Logradouro *
+                  <label htmlFor="logradouro" className="form-label">
+                    Logradouro {campoObrigatorio('logradouro') && '*'}
                   </label>
                   <input
                     type="text"
                     name="logradouro"
                     id="logradouro"
-                    required
+                    required={campoObrigatorio('logradouro')}
                     value={formData.logradouro}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full px-3 py-2 rounded-md border bg-white border-gray-300 shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className="form-input"
                     placeholder="Nome da rua"
                   />
                 </div>
+                )}
 
+                {campoVisivel('numero') && (
                 <div className="sm:col-span-2">
-                  <label htmlFor="numero" className="block text-sm font-medium text-gray-700">
-                    Nº *
+                  <label htmlFor="numero" className="form-label">
+                    Nº {campoObrigatorio('numero') && '*'}
                   </label>
                   <input
                     type="text"
                     name="numero"
                     id="numero"
+                    required={campoObrigatorio('numero')}
                     value={formData.numero}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('bairro') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="bairro" className="block text-sm font-medium text-gray-700">
-                    Bairro *
+                  <label htmlFor="bairro" className="form-label">
+                    Bairro {campoObrigatorio('bairro') && '*'}
                   </label>
                   <input
                     type="text"
                     name="bairro"
                     id="bairro"
-                    required
+                    required={campoObrigatorio('bairro')}
                     value={formData.bairro}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('referencia') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="referencia" className="block text-sm font-medium text-gray-700">
-                    Referência
+                  <label htmlFor="referencia" className="form-label">
+                    Referência {campoObrigatorio('referencia') && '*'}
                   </label>
                   <input
                     type="text"
                     name="referencia"
                     id="referencia"
+                    required={campoObrigatorio('referencia')}
                     value={formData.referencia}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className="form-input"
                     placeholder="Ex: Próximo ao mercado, em frente à praça, etc."
                   />
                 </div>
+                )}
 
+                {campoVisivel('cidade') && (
                 <div className="sm:col-span-8">
-                  <label htmlFor="cidade" className="block text-sm font-medium text-gray-700">
-                    Cidade *
+                  <label htmlFor="cidade" className="form-label">
+                    Cidade {campoObrigatorio('cidade') && '*'}
                   </label>
                   <input
                     type="text"
                     name="cidade"
                     id="cidade"
-                    required
+                    required={campoObrigatorio('cidade')}
                     value={formData.cidade}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('uf') && (
                 <div className="sm:col-span-4">
-                  <label htmlFor="uf" className="block text-sm font-medium text-gray-700">
-                    UF *
+                  <label htmlFor="uf" className="form-label">
+                    UF {campoObrigatorio('uf') && '*'}
                   </label>
                   <input
                     type="text"
                     name="uf"
                     id="uf"
-                    required
+                    required={campoObrigatorio('uf')}
                     maxLength={2}
                     value={formData.uf}
                     onChange={handleInputChange}
-                    className={`mt-1 block w-full border bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm uppercase`}
+                    className="form-input uppercase"
                   />
                 </div>
+                )}
 
                 {/* Campos provisórios para conferir geocoding - OCULTOS */}
                 <div className="hidden">
@@ -1584,24 +1577,28 @@ export function NovaDemanda() {
                 </div>
               </div>
             </div>
+            )}
 
-            {/* Detalhes da Demanda */}
-            <div className="border-b border-gray-200 pb-6 mt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Detalhes da Demanda</h3>
+            {/* Detalhes da Demanda - Etapa 3 */}
+            {secaoDemandaVisivel && currentStep === 3 && (
+            <div className="form-section">
+              <h3>Detalhes da Demanda</h3>
               
-              <div className="grid grid-cols-1 gap-y-4 gap-x-6 sm:grid-cols-6">
-                <div className="sm:col-span-3">
-                  <label htmlFor="tipo_de_demanda" className="block text-sm font-medium text-gray-700">
-                    Tipo de Demanda *
+              <div className="grid grid-cols-1 gap-y-3 gap-x-4 sm:gap-y-4 sm:gap-x-6">
+                <div className="col-span-full">
+                  {campoVisivel('tipo_de_demanda') && (
+                  <>
+                  <label htmlFor="tipo_de_demanda" className="form-label">
+                    Tipo de Demanda {campoObrigatorio('tipo_de_demanda') && '*'}
                   </label>
                   <select
                     id="tipo_de_demanda"
                     name="tipo_de_demanda"
-                    required
+                    required={campoObrigatorio('tipo_de_demanda')}
                     value={formData.tipo_de_demanda}
                     onChange={handleInputChange}
                     disabled={loadingTipos}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    className="form-select"
                   >
                     <option value="">
                       {loadingTipos ? 'Carregando tipos...' : 'Selecione o tipo de demanda...'}
@@ -1641,28 +1638,35 @@ export function NovaDemanda() {
                       <option value="" disabled>Nenhum tipo de demanda disponível</option>
                     )}
                   </select>
+                  </>
+                  )}
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label htmlFor="nivel_de_urgencia" className="block text-sm font-medium text-gray-700">
-                    Nível de Urgência *
+                  {campoVisivel('nivel_de_urgencia') && (
+                  <>
+                  <label htmlFor="nivel_de_urgencia" className="form-label">
+                    Nível de Urgência {campoObrigatorio('nivel_de_urgencia') && '*'}
                   </label>
                   <select
                     id="nivel_de_urgencia"
                     name="nivel_de_urgencia"
-                    required
+                    required={campoObrigatorio('nivel_de_urgencia')}
                     value={formData.nivel_de_urgencia}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    className="form-select"
                   >
                     <option value="baixa">Baixa</option>
                     <option value="média">Média</option>
                     <option value="alta">Alta</option>
                   </select>
+                  </>
+                  )}
                 </div>
 
+                {campoVisivel('indicado') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="tem_indicado" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="tem_indicado" className="form-label">
                     Esta demanda foi indicada por alguém?
                   </label>
                   <select
@@ -1675,26 +1679,27 @@ export function NovaDemanda() {
                         setFormData(prev => ({ ...prev, indicado_uid: '' }));
                       }
                     }}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    className="form-select"
                   >
                     <option value="não">Não</option>
                     <option value="sim">Sim</option>
                   </select>
                 </div>
+                )}
 
-                {temIndicado === 'sim' && (
+                {campoVisivel('indicado') && temIndicado === 'sim' && (
                   <div className="sm:col-span-6">
-                    <label htmlFor="indicado_uid" className="block text-sm font-medium text-gray-700">
-                      Selecione o indicado *
+                    <label htmlFor="indicado_uid" className="form-label">
+                      Selecione o indicado {campoObrigatorio('indicado') && '*'}
                     </label>
                     <select
                       id="indicado_uid"
                       name="indicado_uid"
-                      required
+                      required={campoObrigatorio('indicado')}
                       value={formData.indicado_uid}
                       onChange={handleInputChange}
                       disabled={loadingIndicados}
-                      className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                      className="form-select"
                     >
                       <option value="">
                         {loadingIndicados ? 'Carregando indicados...' : 'Selecione um indicado...'}
@@ -1713,7 +1718,7 @@ export function NovaDemanda() {
                 )}
 
                 <div className="sm:col-span-6 hidden">
-                  <label htmlFor="boletim_ocorrencia" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="boletim_ocorrencia" className="form-label">
                     Denúncia com boletim de ocorrência? *
                   </label>
                   <select
@@ -1721,7 +1726,7 @@ export function NovaDemanda() {
                     name="boletim_ocorrencia"
                     value={formData.boletim_ocorrencia}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full border border-gray-300 bg-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" style={{ WebkitAppearance: "none", MozAppearance: "none", appearance: "none", backgroundImage: "url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e')", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em", paddingRight: "2.5rem" }}
+                    className="form-select"
                   >
                     <option value="não">Não</option>
                     <option value="sim">Sim</option>
@@ -1799,46 +1804,51 @@ export function NovaDemanda() {
                   )}
                 </div>
 
+                {campoVisivel('link_da_demanda') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="link_da_demanda" className="block text-sm font-medium text-gray-700">
-                    Link da demanda nas redes sociais (opcional)
+                  <label htmlFor="link_da_demanda" className="form-label">
+                    Link da demanda nas redes sociais {campoObrigatorio('link_da_demanda') && '*'}
                   </label>
                   <input
                     type="url"
                     name="link_da_demanda"
                     id="link_da_demanda"
+                    required={campoObrigatorio('link_da_demanda')}
                     value={formData.link_da_demanda}
                     onChange={handleInputChange}
                     placeholder="https://exemplo.com"
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    className="form-input"
                   />
                 </div>
+                )}
 
+                {campoVisivel('descricao_do_problema') && (
                 <div className="sm:col-span-6">
-                  <label htmlFor="descricao_do_problema" className="block text-sm font-medium text-gray-700">
-                    Descrição Detalhada *
+                  <label htmlFor="descricao_do_problema" className="form-label">
+                    Descrição Detalhada {campoObrigatorio('descricao_do_problema') && '*'}
                   </label>
                   <div className="mt-1">
                     <textarea
                       id="descricao_do_problema"
                       name="descricao_do_problema"
                       rows={4}
-                      required
+                      required={campoObrigatorio('descricao_do_problema')}
                       value={formData.descricao_do_problema}
                       onChange={handleInputChange}
-                      className="px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-300 block w-full sm:text-sm border border-gray-300 rounded-md transition-colors"
+                      className="form-textarea"
                       placeholder="Descreva detalhadamente a demanda..."
                       style={{ lineHeight: '1.5' }}
                     />
                   </div>
                 </div>
+                )}
               </div>
-            </div>
 
             {/* Fotos do Problema */}
-            <div className="border-b border-gray-200 pb-6 mt-6">
-              <label className="block text-lg font-medium text-gray-900 mb-4">
-                Fotos do Problema <span className="text-red-500">*</span>
+            {campoVisivel('fotos') && (
+            <div className="border-b border-gray-200 pb-4 sm:pb-6 mt-4 sm:mt-6">
+              <label className="block text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">
+                Fotos do Problema {campoObrigatorio('fotos') && <span className="text-red-500">*</span>}
                 <span className="text-xs font-normal text-gray-500 ml-1">
                   (Mín. 1, Máx. 2 imagens)
                 </span>
@@ -1965,8 +1975,10 @@ export function NovaDemanda() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Termos de uso */}
+            {campoVisivel('aceite_termos') && (
             <div className="mt-6">
               <div className="flex items-start">
                 <div className="flex items-center h-5">
@@ -1974,7 +1986,7 @@ export function NovaDemanda() {
                     id="aceite_termos"
                     name="aceite_termos"
                     type="checkbox"
-                    required
+                    required={campoObrigatorio('aceite_termos')}
                     checked={formData.aceite_termos}
                     onChange={handleInputChange}
                     className="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300 rounded"
@@ -1982,27 +1994,50 @@ export function NovaDemanda() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="aceite_termos" className="font-medium text-gray-700">
-                    Eu concordo com os <a href="/termos-uso" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500 underline">termos de uso e política de privacidade</a> *
+                    Eu concordo com os <a href="/termos-uso" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500 underline">termos de uso e política de privacidade</a> {campoObrigatorio('aceite_termos') && '*'}
                   </label>
                 </div>
               </div>
             </div>
+            )}
+            </div>
+            )}
 
-            {/* Barra de ações */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
-              <div className="flex justify-end space-x-3">
+            {/* Navegação do Wizard */}
+            <div className="wizard-nav">
+              {currentStep > 1 && (
                 <button
                   type="button"
-                  onClick={() => window.history.back()}
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  onClick={() => setCurrentStep(currentStep - 1)}
+                  className="wizard-nav-btn wizard-nav-btn-prev"
                 >
-                  Cancelar
+                  Voltar
                 </button>
+              )}
+              {currentStep < totalSteps ? (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(currentStep + 1)}
+                  className="wizard-nav-btn wizard-nav-btn-next"
+                  style={{
+                    backgroundColor: cabecalhoConfig.corBotao,
+                    color: cabecalhoConfig.corBotaoTexto
+                  }}
+                >
+                  Próximo
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ) : (
                 <button
                   type="submit"
                   disabled={isLoading || isUploadingBoletim}
-                  onClick={() => console.log('[DEBUG] Botão clicado - isLoading:', isLoading, 'isUploadingBoletim:', isUploadingBoletim)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="wizard-nav-btn wizard-nav-btn-next"
+                  style={{
+                    backgroundColor: cabecalhoConfig.corBotao,
+                    color: cabecalhoConfig.corBotaoTexto
+                  }}
                 >
                   {isLoading ? (
                     <>
@@ -2013,10 +2048,11 @@ export function NovaDemanda() {
                     'Enviar Demanda'
                   )}
                 </button>
-              </div>
+              )}
             </div>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

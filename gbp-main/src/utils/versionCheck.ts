@@ -8,6 +8,16 @@ export const checkForNewVersion = () => {
   const checkVersion = async () => {
     const now = Date.now();
     
+    // Não verifica versão em rotas públicas
+    if (window.location.pathname.startsWith('/demanda') || 
+        window.location.pathname.startsWith('/demanda-sucesso') ||
+        window.location.pathname.startsWith('/termos-uso') ||
+        window.location.pathname.startsWith('/ref/') ||
+        window.location.pathname === '/vendas' ||
+        window.location.pathname === '/clientes') {
+      return;
+    }
+    
     // Evita verificações muito frequentes
     if (isChecking || (now - lastCheck < CHECK_INTERVAL)) {
       return;
