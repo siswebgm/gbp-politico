@@ -431,9 +431,9 @@ option {
 }
 
 .wizard-step.active .wizard-step-number {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: var(--wizard-active-gradient, linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%));
   color: white;
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 3px 10px var(--wizard-active-shadow, rgba(37, 99, 235, 0.25));
   transform: scale(1.05);
 }
 
@@ -477,7 +477,7 @@ option {
 }
 
 .wizard-step.active .wizard-step-label {
-  color: #1e3a8a;
+  color: var(--wizard-active-label, #1e3a8a);
   font-weight: 600;
 }
 
@@ -538,7 +538,7 @@ option {
 
 .wizard-nav-btn-next:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 3px 10px var(--wizard-active-shadow, rgba(37, 99, 235, 0.25));
 }
 
 .wizard-nav-btn:disabled {

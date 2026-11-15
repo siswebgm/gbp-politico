@@ -49,6 +49,11 @@ export const userService = {
       // Remove a confirmação de senha antes de enviar
       const { confirmarSenha, ...userDataToSend } = userData as any;
 
+      // cargo_enum só aceita admin/editor/viewer  nivel_acesso segue sendo a permissão real
+      if (!userDataToSend.cargo) {
+        userDataToSend.cargo = userDataToSend.nivel_acesso === 'admin' ? 'admin' : 'viewer';
+      }
+
       // Criação via RPC com sessão de admin (INSERT direto foi revogado)
       const { data, error } = await supabaseClient.rpc('admin_criar_usuario', {
         p_sessao_token: getSessaoToken(),

@@ -94,6 +94,8 @@ export const demandaTipoService = {
       .from('gbp_demanda_tipo')
       .select('campos_config')
       .eq('empresa_uid', empresaUid)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -110,10 +112,17 @@ export const demandaTipoService = {
       .from('gbp_demanda_tipo')
       .select('uid')
       .eq('empresa_uid', empresaUid)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (fetchError) {
-      console.error('[atualizarCamposConfig] Erro ao verificar registro:', fetchError);
+      console.error('[atualizarCamposConfig] Erro ao verificar registro:', {
+        message: fetchError.message,
+        code: fetchError.code,
+        details: fetchError.details,
+        hint: fetchError.hint,
+      });
       throw fetchError;
     }
 
@@ -148,6 +157,8 @@ export const demandaTipoService = {
       .from('gbp_demanda_tipo')
       .select('cabecalho_config')
       .eq('empresa_uid', empresaUid)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -164,6 +175,8 @@ export const demandaTipoService = {
       .from('gbp_demanda_tipo')
       .select('uid')
       .eq('empresa_uid', empresaUid)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (fetchError) {
@@ -208,8 +221,11 @@ export const demandaTipoService = {
         return [];
       }
       
-      // Retorna o primeiro registro encontrado (deveria ter apenas um por empresa)
-      const tiposFormatados = tipos[0]?.tipo_demanda_rua || [];
+      // Pega o registro mais recente (pode haver duplicatas legadas)
+      const maisRecente = [...tipos].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0];
+      const tiposFormatados = maisRecente?.tipo_demanda_rua || [];
       console.log(`[getTiposDemandaFormatados] Tipos formatados:`, tiposFormatados);
       return tiposFormatados;
     } catch (error) {

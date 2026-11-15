@@ -1,4 +1,4 @@
-import { useState, FormEvent, useEffect, useRef } from 'react';
+import { useState, FormEvent, useEffect, useRef, type CSSProperties } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseClient as supabase } from '../../../lib/supabase';
 import { getEmpresa } from '../../../services/empresa';
@@ -7,8 +7,116 @@ import { indicadoService, type Indicado } from '../../../services/indicadoServic
 import { compressImages } from '../../../utils/imageCompression';
 import { mergeCamposConfig, mergeCabecalhoConfig, type CamposConfigDemanda, type CabecalhoConfig } from '../../../config/demandaCampos';
 import { toast } from 'react-toastify';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, ImagePlus } from 'lucide-react';
 import './global.css';
+
+// ─── Utilitários de cor para o cabeçalho dinâmico ───
+const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
+  const clean = (hex || '').trim().replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
+  return {
+    r: parseInt(full.slice(0, 2), 16),
+    g: parseInt(full.slice(2, 4), 16),
+    b: parseInt(full.slice(4, 6), 16),
+  };
+};
+
+const rgbToHex = (r: number, g: number, b: number): string =>
+  '#' + [r, g, b]
+    .map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'))
+    .join('');
+
+// amount: -1 (preto) a 1 (branco)
+const shadeHex = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const target = amount < 0 ? 0 : 255;
+  const p = Math.abs(amount);
+  return rgbToHex(
+    rgb.r + (target - rgb.r) * p,
+    rgb.g + (target - rgb.g) * p,
+    rgb.b + (target - rgb.b) * p,
+  );
+};
+
+const relativeLuminance = (hex: string): number => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return 0;
+  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map(v => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+const contrastRatio = (hex1: string, hex2: string): number => {
+  const l1 = relativeLuminance(hex1);
+  const l2 = relativeLuminance(hex2);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+// Retorna a cor configurada se tiver contraste >= 3:1 com o fundo;
+// caso contrário, escolhe automaticamente branco ou quase-preto.
+const ensureReadableColor = (fg: string | undefined, bg: string, fallback: string): string => {
+  const candidate = fg && hexToRgb(fg) ? fg : fallback;
+  if (hexToRgb(candidate) && contrastRatio(candidate, bg) >= 3) return candidate;
+  return relativeLuminance(bg) > 0.5 ? '#1f2937' : '#ffffff';
+};
+
+// ─── Derivação de cor de destaque (acento) a partir da cor base ───
+const hexToHsl = (hex: string): { h: number; s: number; l: number } | null => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return { h, s, l };
+};
+
+const hslToHex = (h: number, s: number, l: number): string => {
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  let r: number, g: number, b: number;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return rgbToHex(r * 255, g * 255, b * 255);
+};
+
+// Gera a cor de destaque a partir da cor base mantendo matiz e saturação —
+// altera apenas a luminosidade para destacar do fundo sem destoar da identidade.
+const deriveAccentColor = (baseHex: string): string => {
+  const hsl = hexToHsl(baseHex);
+  if (!hsl) return '#f97316';
+  let l = hsl.l;
+  if (l < 0.3) l = 0.55;                    // fundo muito escuro → acento claro
+  else if (l > 0.7) l = 0.4;                // fundo muito claro → acento escuro
+  else l = l + (l > 0.5 ? -0.12 : 0.12);    // afastamento sutil do fundo
+  l = Math.min(0.75, Math.max(0.25, l));
+  return hslToHex(hsl.h, hsl.s, l);
+};
 
 interface Empresa {
   uid: string;
@@ -605,71 +713,72 @@ export function NovaDemanda() {
 
   const [isCompressing, setIsCompressing] = useState(false);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processImageFiles = async (fileList: FileList | File[]) => {
     try {
-      if (!e.target.files || e.target.files.length === 0) {
+      if (!fileList || fileList.length === 0) {
         return;
       }
-      
-      const newFiles = Array.from(e.target.files);
+
+      const newFiles = Array.from(fileList);
       const totalFiles = files.length + newFiles.length;
-      
+
       if (totalFiles > 2) {
         toast.warning('Máximo de 2 imagens permitidas');
-        e.target.value = '';
         return;
       }
-      
+
       // Verifica se os arquivos são imagens
       const validFiles = newFiles.filter(file => file.type.startsWith('image/'));
-      
+
       if (validFiles.length === 0) {
         toast.warning('Por favor, selecione apenas arquivos de imagem');
-        e.target.value = '';
         return;
       }
-      
+
       // Limita ao máximo de 2 imagens
       const filesToProcess = validFiles.slice(0, 2 - files.length);
-      
+
       // Comprime as imagens automaticamente
       setIsCompressing(true);
       toast.info('Comprimindo imagens...', { autoClose: 2000 });
-      
+
       const compressedFiles = await compressImages(filesToProcess, {
         maxWidth: 1920,
         maxHeight: 1080,
         quality: 0.85,
         maxSizeMB: 1.5 // Target: 1.5MB máximo
       });
-      
+
       setFiles(prev => [...prev, ...compressedFiles]);
-      
+
       // Criar URLs de visualização
       const urls = compressedFiles.map(file => URL.createObjectURL(file));
       setPreviewUrls(prev => [...prev, ...urls]);
-      
-      // Mostrar informações sobre a compressão
-      const originalSize = filesToProcess.reduce((acc, f) => acc + f.size, 0);
-      const compressedSize = compressedFiles.reduce((acc, f) => acc + f.size, 0);
-      const reduction = ((originalSize - compressedSize) / originalSize * 100).toFixed(0);
-      
-      if (parseInt(reduction) > 10) {
-        toast.success(`${compressedFiles.length} imagem(ns) adicionada(s) - ${reduction}% menor`, {
-          autoClose: 3000
-        });
-      } else {
-        toast.success(`${compressedFiles.length} imagem(ns) adicionada(s)`);
-      }
-      
-      // Limpa o input para permitir selecionar o mesmo arquivo novamente
-      e.target.value = '';
+
+      toast.success(`${compressedFiles.length} imagem(ns) adicionada(s)`);
     } catch (error) {
-      console.error('Erro no handleFileChange:', error);
+      console.error('Erro no processImageFiles:', error);
       toast.error('Erro ao processar as imagens');
     } finally {
       setIsCompressing(false);
     }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await processImageFiles(e.target.files);
+    // Limpa o input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = '';
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await processImageFiles(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const handleBoletimChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1043,6 +1152,19 @@ export function NovaDemanda() {
     }
   };
 
+  // Cores derivadas do cabeçalho — sempre consistentes com a cor base configurada
+  const cabecalhoBase = cabecalhoConfig.corCabecalho || '#1e3a8a';
+  const cabecalhoGradiente = shadeHex(cabecalhoBase, -0.22);
+  const cabecalhoClaro = relativeLuminance(cabecalhoBase) > 0.5;
+  const overlayCor = cabecalhoClaro ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.07)';
+  const cabecalhoTitulo = ensureReadableColor(cabecalhoConfig.corTitulo, cabecalhoBase, '#ffffff');
+  const cabecalhoDescricao = ensureReadableColor(cabecalhoConfig.corDescricao, cabecalhoBase, '#f8fafc');
+  const cabecalhoAccent = deriveAccentColor(cabecalhoBase);
+  const cabecalhoAccentTexto = ensureReadableColor(undefined, cabecalhoAccent, '#ffffff');
+  // Cores do cabeçalho do card — usam exatamente as cores de texto configuradas
+  const cardHeaderTitulo = cabecalhoConfig.corTitulo || cabecalhoConfig.corTexto || '#1f2937';
+  const cardHeaderDescricao = cabecalhoConfig.corDescricao || cabecalhoConfig.corTexto || '#64748b';
+
   // Renderiza o formulário
   return (
     <div className="page-wrapper">
@@ -1077,19 +1199,22 @@ export function NovaDemanda() {
           <div 
             className="shadow-lg pb-14 sm:pb-16 lg:pb-20 relative overflow-hidden"
             style={{
-              background: `linear-gradient(135deg, ${cabecalhoConfig.corCabecalho || '#1e3a8a'} 0%, ${cabecalhoConfig.corCabecalho || '#1e3a8a'}bb 100%)`
+              background: `linear-gradient(135deg, ${cabecalhoBase} 0%, ${cabecalhoGradiente} 100%)`
             }}
           >
-            {/* Faixas diagonais decorativas */}
+            {/* Faixas diagonais decorativas — cor do overlay adaptada ao fundo */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-8 transform rotate-45 translate-x-1/2 -translate-y-1/2"></div>
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-white opacity-6 transform -rotate-45 -translate-x-1/2 translate-y-1/2"></div>
+              <div className="absolute top-0 right-0 w-96 h-96 transform rotate-45 translate-x-1/2 -translate-y-1/2" style={{ backgroundColor: overlayCor }}></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 transform -rotate-45 -translate-x-1/2 translate-y-1/2" style={{ backgroundColor: overlayCor }}></div>
             </div>
             
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 lg:py-12 relative z-10">
-              <div className="flex flex-row items-center gap-4 sm:gap-6 lg:gap-12">
-                {/* Lado Esquerdo - Foto do Responsável */}
-                {(cabecalhoConfig.logoUrl || empresa?.logo_url) && (
+              {(() => {
+                const temLogo = !!(cabecalhoConfig.logoUrl || empresa?.logo_url);
+                return (
+              <div className="flex flex-row items-center justify-center gap-4 sm:gap-6 lg:gap-12">
+                {/* Foto/Logo ao lado do texto */}
+                {temLogo && (
                   <div className="flex-shrink-0">
                     <div className="relative">
                       <div className="absolute inset-0 bg-white opacity-10 rounded-2xl blur-2xl transform scale-110"></div>
@@ -1103,18 +1228,19 @@ export function NovaDemanda() {
                 )}
                 
                 {/* Lado Direito - Identificação */}
-                <div className="flex-1 text-left">
+                <div className="max-w-2xl text-left">
                   {/* Cargo/Função - Etiqueta */}
                   {cabecalhoConfig.subtitulo && (
                     <div className="inline-flex items-center gap-2 mb-2 sm:mb-3">
-                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse" style={{ backgroundColor: cabecalhoAccent }}></span>
                       <span 
                         style={{ 
-                          backgroundColor: '#f97316',
-                          color: '#ffffff',
-                          boxShadow: '0 2px 8px rgba(249, 115, 22, 0.3)'
+                          backgroundColor: cabecalhoAccent,
+                          color: cabecalhoAccentTexto,
+                          boxShadow: `0 2px 8px ${cabecalhoAccent}55`,
+                          fontSize: 'clamp(0.65rem, 0.58rem + 0.35vw, 0.9rem)'
                         }}
-                        className="px-2 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wide"
+                        className="px-2 sm:px-4 py-1 sm:py-2 rounded-full font-semibold uppercase tracking-wide"
                       >
                         {cabecalhoConfig.subtitulo}
                       </span>
@@ -1123,18 +1249,19 @@ export function NovaDemanda() {
                   
                   {/* Nome com linha decorativa */}
                   <div className="mb-2 sm:mb-4">
-                    <h1 style={{ color: cabecalhoConfig.corTitulo || '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }} className="text-xl sm:text-2xl lg:text-4xl font-bold mb-1 sm:mb-2 leading-tight tracking-tight">
+                    <h1 style={{ color: cabecalhoTitulo, textShadow: cabecalhoClaro ? '0 1px 2px rgba(255,255,255,0.4)' : '0 2px 4px rgba(0,0,0,0.15)', fontSize: 'clamp(1.5rem, 0.9rem + 2.8vw, 3.25rem)' }} className="font-bold mb-1 sm:mb-2 leading-tight tracking-tight">
                       {cabecalhoConfig.titulo}
                     </h1>
-                    <div className="h-0.5 sm:h-1 w-16 sm:w-24 bg-gradient-to-r from-orange-500 to-orange-400 rounded"></div>
                   </div>
                   
                   {/* Texto de orientação */}
-                  <p style={{ color: cabecalhoConfig.corDescricao || 'rgba(255,255,255,0.95)' }} className="text-xs sm:text-base lg:text-lg font-medium leading-relaxed">
+                  <p style={{ color: cabecalhoDescricao, fontSize: 'clamp(0.8rem, 0.72rem + 0.45vw, 1.15rem)' }} className="font-medium leading-relaxed">
                     {cabecalhoConfig.descricao || 'Registre ou consulte sua demanda'}
                   </p>
                 </div>
               </div>
+                );
+              })()}
             </div>
           </div>
           )}
@@ -1150,13 +1277,20 @@ export function NovaDemanda() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Formulário de Registro</h2>
-                  <p style={{ color: '#64748b' }} className="font-semibold">Envie sua demanda</p>
+                  <p className="font-semibold text-gray-500">Envie sua demanda</p>
                 </div>
               </div>
             </div>
 
             {/* Indicador de etapas */}
-            <div className="wizard-steps">
+            <div 
+              className="wizard-steps"
+              style={{
+                '--wizard-active-gradient': `linear-gradient(135deg, ${cabecalhoBase} 0%, ${cabecalhoGradiente} 100%)`,
+                '--wizard-active-shadow': `${cabecalhoBase}40`,
+                '--wizard-active-label': '#1f2937',
+              } as CSSProperties}
+            >
               <div className={`wizard-step ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
                 <div className="wizard-step-line"></div>
                 <div className="wizard-step-number">1</div>
@@ -1584,8 +1718,8 @@ export function NovaDemanda() {
             <div className="form-section">
               <h3>Detalhes da Demanda</h3>
               
-              <div className="grid grid-cols-1 gap-y-3 gap-x-4 sm:gap-y-4 sm:gap-x-6">
-                <div className="col-span-full">
+              <div className="grid grid-cols-1 gap-y-3 gap-x-4 sm:grid-cols-12 sm:gap-y-4 sm:gap-x-6">
+                <div className="col-span-full w-full">
                   {campoVisivel('tipo_de_demanda') && (
                   <>
                   <label htmlFor="tipo_de_demanda" className="form-label">
@@ -1598,7 +1732,8 @@ export function NovaDemanda() {
                     value={formData.tipo_de_demanda}
                     onChange={handleInputChange}
                     disabled={loadingTipos}
-                    className="form-select"
+                    className="form-select w-full block"
+                    style={{ width: '100%' }}
                   >
                     <option value="">
                       {loadingTipos ? 'Carregando tipos...' : 'Selecione o tipo de demanda...'}
@@ -1823,7 +1958,7 @@ export function NovaDemanda() {
                 )}
 
                 {campoVisivel('descricao_do_problema') && (
-                <div className="sm:col-span-6">
+                <div className="col-span-full">
                   <label htmlFor="descricao_do_problema" className="form-label">
                     Descrição Detalhada {campoObrigatorio('descricao_do_problema') && '*'}
                   </label>
@@ -1847,133 +1982,70 @@ export function NovaDemanda() {
             {/* Fotos do Problema */}
             {campoVisivel('fotos') && (
             <div className="border-b border-gray-200 pb-4 sm:pb-6 mt-4 sm:mt-6">
-              <label className="block text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">
+              <label className="block text-base sm:text-lg font-medium text-gray-900 mb-1 sm:mb-2">
                 Fotos do Problema {campoObrigatorio('fotos') && <span className="text-red-500">*</span>}
-                <span className="text-xs font-normal text-gray-500 ml-1">
-                  (Mín. 1, Máx. 2 imagens)
-                </span>
               </label>
-              
-              {previewUrls.length > 0 ? (
-                <div>
-                  {/* Pré-visualização das imagens */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-                    {previewUrls.map((url, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={url}
-                          alt={`Pré-visualização ${index + 1}`}
-                          className="h-24 w-full object-cover rounded-md border-2 border-green-300"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Botão para adicionar mais fotos (se ainda não atingiu o limite) */}
-                  {files.length < 2 && (
-                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                      <div className="space-y-3 text-center w-full">
-                        <svg
-                          className="mx-auto h-12 w-12 text-gray-400"
-                          stroke="currentColor"
-                          fill="none"
-                          viewBox="0 0 48 48"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                        <div className="flex flex-row gap-2 justify-center items-center">
-                          <label
-                            htmlFor="file-upload-more"
-                            className={`cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50 ${isCompressing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            <span className="flex items-center gap-2">
-                              {isCompressing ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Comprimindo...
-                                </>
-                              ) : (
-                                'Adicionar mais fotos'
-                              )}
-                            </span>
-                            <input
-                              id="file-upload-more"
-                              name="file-upload-more"
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              className="sr-only"
-                              multiple
-                              onChange={handleFileChange}
-                              disabled={isCompressing}
-                            />
-                          </label>
-                        </div>
-                        <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                  <div className="space-y-3 text-center w-full">
-                    <svg
-                      className="mx-auto h-12 w-12 text-gray-400"
-                      stroke="currentColor"
-                      fill="none"
-                      viewBox="0 0 48 48"
-                      aria-hidden="true"
+              <p className="text-xs text-gray-500 mb-3">
+                {files.length === 0
+                  ? 'Adicione até 2 fotos'
+                  : `${files.length} de 2 fotos`}
+              </p>
+
+              <div
+                className="flex flex-wrap gap-3"
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+              >
+                {previewUrls.map((url, index) => (
+                  <div key={index} className="relative group flex-1 min-w-[120px] h-24 sm:h-28">
+                    <img
+                      src={url}
+                      alt={`Foto ${index + 1}`}
+                      className="h-full w-full object-cover rounded-xl border border-gray-200 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md hover:bg-red-600 transition-colors"
+                      aria-label="Remover foto"
                     >
-                      <path
-                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <div className="flex flex-row gap-2 justify-center items-center">
-                      <label
-                        htmlFor="file-upload"
-                        className={`cursor-pointer bg-white border-2 border-primary-600 text-primary-600 px-4 py-2 rounded-md font-medium hover:bg-primary-50 ${isCompressing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {isCompressing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Comprimindo...
-                            </>
-                          ) : (
-                            'Enviar fotos'
-                          )}
-                        </span>
-                        <input
-                          id="file-upload"
-                          name="file-upload"
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          className="sr-only"
-                          multiple
-                          onChange={handleFileChange}
-                          disabled={isCompressing}
-                        />
-                      </label>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                </div>
-              )}
+                ))}
+
+                {files.length < 2 && (
+                  <label
+                    htmlFor="file-upload"
+                    className={`relative flex flex-col items-center justify-center flex-1 min-w-[120px] h-24 sm:h-28 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+                      isCompressing
+                        ? 'border-gray-200 bg-gray-50 opacity-60 cursor-wait'
+                        : 'border-gray-300 bg-gray-50/50 hover:border-primary-500 hover:bg-primary-50/40'
+                    }`}
+                  >
+                    {isCompressing ? (
+                      <Loader2 className="h-7 w-7 text-primary-600 animate-spin" />
+                    ) : (
+                      <>
+                        <ImagePlus className="h-7 w-7 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                        <span className="mt-1 text-[11px] font-medium text-gray-500">
+                          {files.length === 0 ? 'Foto do problema' : 'Mais uma'}
+                        </span>
+                      </>
+                    )}
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      multiple
+                      onChange={handleFileChange}
+                      disabled={isCompressing}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
             )}
 
