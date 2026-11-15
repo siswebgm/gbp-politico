@@ -5,27 +5,6 @@ const STATIC_RESOURCES = [
   '/offline.html'
 ];
 
-const unregisterAndRefreshClients = async () => {
-  try {
-    await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
-
-    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of clientsList) {
-      try {
-        await client.navigate(client.url);
-      } catch (_) {
-        // ignore
-      }
-    }
-  } finally {
-    try {
-      await self.registration.unregister();
-    } catch (_) {
-      // ignore
-    }
-  }
-};
-
 // Função para limpar caches antigos
 const clearOldCaches = async () => {
   const keys = await caches.keys();
@@ -53,8 +32,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       clearOldCaches(),
-      self.clients.claim(),
-      unregisterAndRefreshClients()
+      self.clients.claim()
     ])
   );
 });

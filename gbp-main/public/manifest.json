@@ -1,7 +1,10 @@
 {
+  "id": "/",
   "name": "GBP Político",
   "short_name": "GBP",
   "description": "Sistema de Gestão Política",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1E40AF",
   "theme_color": "#1E40AF",

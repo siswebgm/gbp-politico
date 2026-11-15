@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, Eye, EyeOff, ShieldOff, RefreshCw } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Eye, EyeOff, ShieldOff, RefreshCw, Download } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { authService, AuthError } from '../../services/auth';
 import { useToast } from '../../components/ui/use-toast'; // Importação corrigida
@@ -38,6 +38,10 @@ export function Login() {
   const [attemptsWarning, setAttemptsWarning] = useState<number | null>(null);
   const [mathNum1, setMathNum1] = useState(() => Math.floor(Math.random() * 10) + 1);
   const [mathNum2, setMathNum2] = useState(() => Math.floor(Math.random() * 10) + 1);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isInstallInfoOpen, setIsInstallInfoOpen] = useState(false);
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [honeypot, setHoneypot] = useState('');
   const [captchaError, setCaptchaError] = useState(false);
@@ -60,6 +64,54 @@ export function Login() {
       if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as any).standalone === true;
+    setIsStandalone(standalone);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsStandalone(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    const promptEvent = deferredPrompt || (window as any).__pwaInstallPrompt;
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+          (window as any).__pwaInstallPrompt = null;
+        }
+      } catch (err) {
+        console.error('Erro ao instalar PWA:', err);
+      }
+      return;
+    }
+    if (isIOSDevice) {
+      setIsInstallInfoOpen(true);
+      return;
+    }
+    toast({
+      title: "Instalação do aplicativo",
+      description: "O navegador exibirá a opção de instalação automaticamente. Se não aparecer, use o menu ⋮ → \"Instalar aplicativo\".",
+    });
+  };
 
   useEffect(() => {
     const handleSecretKey = (e: KeyboardEvent) => {
@@ -499,7 +551,7 @@ export function Login() {
                     Verificação de segurança
                   </label>
                   <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0 text-base text-gray-800 font-medium bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100">
+                    <div className="flex-shrink-0 text-sm sm:text-base text-gray-800 font-medium bg-blue-50 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-blue-100">
                       Quanto é {mathNum1} + {mathNum2}?
                     </div>
                     <input
@@ -602,6 +654,22 @@ export function Login() {
                   Esqueci minha senha
                 </button>
 
+                {/* Botão para instalar o PWA */}
+                {!isStandalone && (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    aria-label="Instalar aplicativo"
+                    title="Instalar aplicativo"
+                    className="mt-3 inline-flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity"
+                  >
+                    <img
+                      src="https://studio.gbppolitico.com/storage/v1/object/public/jmapps/banner/Google-Play-logo-wordmark.png"
+                      alt="Instalar aplicativo"
+                      className="h-16 w-auto object-contain"
+                    />
+                  </button>
+                )}
                 {showCreateCompany && (
                   <button
                     onClick={() => setIsModalOpen(true)}
@@ -616,23 +684,57 @@ export function Login() {
               </div>
             </div>
 
-            {/* Link discreto para baixar o app na Play Store */}
-            <a
-              href="https://play.google.com/apps/internaltest/4701148402452716879"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Baixar aplicativo na Play Store"
-              className="md:hidden flex items-center justify-center gap-2 text-xs text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              <img
-                src="https://studio.gbppolitico.com/storage/v1/object/public/jmapps/google-play-store-logo-png-transparent-png-logos-10.png"
-                alt="Play Store"
-                className="h-7 w-auto object-contain rounded"
-              />
-              Baixar app
-            </a>
           </div>
         </div>
+
+        {/* Modal de instruções para instalação do app */}
+        <Dialog open={isInstallInfoOpen} onOpenChange={setIsInstallInfoOpen}>
+          <DialogContent className="sm:max-w-[425px]" aria-describedby={undefined}>
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-blue-600">
+                <Download className="h-6 w-6" />
+                <DialogTitle className="text-lg font-semibold">
+                  Instalar GBP Político
+                </DialogTitle>
+              </div>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="text-base text-gray-700 dark:text-gray-300">
+                {isIOSDevice ? (
+                  <>
+                    Para instalar o aplicativo no seu iPhone/iPad:
+                    <ol className="list-decimal list-inside mt-3 space-y-2 text-sm">
+                      <li>Toque no ícone de <strong>Compartilhar</strong> (quadrado com seta para cima) no Safari</li>
+                      <li>Role e selecione <strong>"Adicionar à Tela de Início"</strong></li>
+                      <li>Confirme tocando em <strong>"Adicionar"</strong></li>
+                    </ol>
+                  </>
+                ) : (
+                  <>
+                    Para instalar o aplicativo:
+                    <ol className="list-decimal list-inside mt-3 space-y-2 text-sm">
+                      <li>Toque no menu <strong>⋮</strong> do navegador</li>
+                      <li>Selecione <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong></li>
+                      <li>Confirme a instalação</li>
+                    </ol>
+                    <p className="mt-3 text-xs text-gray-500">
+                      Se a opção não aparecer, certifique-se de estar usando o Chrome e que o site foi acessado pela internet (não em aba anônima).
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={() => setIsInstallInfoOpen(false)}
+                className="w-full"
+              >
+                Entendi
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Erro para Usuário Inativo */}
         <Dialog open={isErrorModalOpen} onOpenChange={setIsErrorModalOpen}>

@@ -1185,7 +1185,7 @@ export function NovaDemanda() {
                 A página que você está tentando acessar está temporariamente indisponível devido a instabilidades técnicas.
               </p>
               <button
-                onClick={() => window.location.href = '/'}
+                onClick={() => window.location.reload()}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
                 Tentar novamente

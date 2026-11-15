@@ -67,7 +67,17 @@ ReactDOM.createRoot(rootElement as HTMLElement).render(
 );
 
 // Registra o service worker
-serviceWorkerRegistration.unregister();
+// Captura global do prompt de instalação do PWA — garante que o evento
+// não se perca caso dispare antes dos componentes montarem
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  (window as any).__pwaInstallPrompt = e;
+});
+window.addEventListener('appinstalled', () => {
+  (window as any).__pwaInstallPrompt = null;
+});
+
+serviceWorkerRegistration.register();
 
 // Inicia a verificação de nova versão
 checkForNewVersion();
