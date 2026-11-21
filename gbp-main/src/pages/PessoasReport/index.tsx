@@ -189,6 +189,7 @@ export function PessoasReport() {
   const [indicadoView, setIndicadoView] = useViewState('indicados');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
   const [categoriaView, setCategoriaView] = useViewState('categorias');
+  const [buscaCategoria, setBuscaCategoria] = useState('');
   const [buscaZona, setBuscaZona] = useState('');
   const [zonaView, setZonaView] = useViewState('zonas');
   const [buscaUsuario, setBuscaUsuario] = useState('');
@@ -420,8 +421,11 @@ export function PessoasReport() {
     [stats, buscaIndicado]
   );
   const categoriasFiltradas = useMemo(
-    () => categorias
-      .filter(c => !categoriaSelecionada || c.categoria_uid === categoriaSelecionada)
+    () => filtrarLista(
+      categorias.filter(c => !categoriaSelecionada || c.categoria_uid === categoriaSelecionada),
+      buscaCategoria,
+      c => `${c.nome} ${c.tipo || ''} ${c.grupo || ''}`
+    )
       .slice()
       .sort((a, b) => {
         const grupoA = a.grupo || 'Sem grupo';
@@ -432,7 +436,7 @@ export function PessoasReport() {
         if (tipoA !== tipoB) return tipoA === 'Não informado' ? 1 : tipoB === 'Não informado' ? -1 : tipoA.localeCompare(tipoB, 'pt-BR');
         return a.nome.localeCompare(b.nome, 'pt-BR');
       }),
-    [categorias, categoriaSelecionada]
+    [categorias, categoriaSelecionada, buscaCategoria]
   );
   const categoriasDropdown = useMemo<Category[]>(
     () => categorias.map(c => ({
@@ -3805,6 +3809,16 @@ export function PessoasReport() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 min-w-[160px] sm:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaCategoria}
+                    onChange={(e) => { setBuscaCategoria(e.target.value); setCategoriaPage(1); }}
+                    placeholder="Buscar categoria..."
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0">
                   <button
                     onClick={() => setCategoriaView('tabela')}

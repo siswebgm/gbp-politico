@@ -24,7 +24,8 @@ import {
   Download,
   Pencil,
   Loader2,
-  MoreVertical
+  MoreVertical,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -835,6 +836,10 @@ export function DemandasRuas() {
                     <DropdownMenuItem onClick={exportarDemandas}>
                       <Download className="mr-2 h-4 w-4 text-green-600" />
                       Exportar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/app/documentos/demandas-ruas/requerentes-nao-cadastrados')}>
+                      <UserPlus className="mr-2 h-4 w-4 text-amber-600" />
+                      Requerentes
                     </DropdownMenuItem>
                     {user?.nivel_acesso?.toLowerCase() === 'admin' && (
                       <DropdownMenuItem onClick={() => navigate('/app/documentos/demandas-ruas/configuracoes')}>

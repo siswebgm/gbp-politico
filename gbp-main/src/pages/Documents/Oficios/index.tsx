@@ -1442,7 +1442,7 @@ export default function OficiosPage({ itemsPerPage = 9 }: OficiosPageProps) {
     <div className="flex flex-col flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900">
       <div className="flex-1 overflow-y-auto">
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 mb-6">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
             <div className="flex items-center justify-between min-h-[48px]">
               {/* Lado esquerdo - Título e navegação */}
               <div className="flex items-center min-w-0">

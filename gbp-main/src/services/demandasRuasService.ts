@@ -267,7 +267,16 @@ export const demandasRuasService = {
         requerente: {
           nome: data.requerente.nome,
           telefone: data.requerente.whatsapp,
-          email: ''
+          email: '',
+          genero: data.requerente.genero,
+          nascimento: data.requerente.nascimento,
+          cep: data.requerente.cep,
+          logradouro: data.requerente.logradouro,
+          numero: data.requerente.numero,
+          bairro: data.requerente.bairro,
+          cidade: data.requerente.cidade,
+          uf: data.requerente.uf,
+          referencia: data.requerente.referencia
         }
       };
       console.log('Dados da demanda com requerente:', demandaComRequerente);

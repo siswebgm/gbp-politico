@@ -23,6 +23,7 @@ import { EditarDemanda } from './pages/Documents/DemandasRuas/EditarDemanda';
 import RelatoriosDemandas from './pages/Documents/DemandasRuas/Relatorios';
 import { DetalhesDemanda } from './pages/Documents/DemandasRuas/DetalhesDemanda';
 import ConfiguracoesDemanda from './pages/Documents/DemandasRuas/ConfiguracoesDemanda';
+import { RequerentesNaoCadastrados } from './pages/Documents/DemandasRuas/RequerentesNaoCadastrados';
 import { AttendanceList } from './pages/AttendanceList';
 import { AttendanceForm } from './pages/AttendanceForm';
 import { AttendanceReport } from './pages/AttendanceReport';
@@ -364,6 +365,7 @@ export function AppRoutes() {
             <Route path=":id/detalhes" element={<PrivateRoute><DetalhesDemanda /></PrivateRoute>} />
             <Route path="relatorios" element={<AdminRoute><RelatoriosDemandas /></AdminRoute>} />
             <Route path="configuracoes" element={<PrivateRoute><ConfiguracoesDemanda /></PrivateRoute>} />
+            <Route path="requerentes-nao-cadastrados" element={<PrivateRoute><RequerentesNaoCadastrados /></PrivateRoute>} />
           </Route>
           <Route path="oficios">
             <Route index element={<RestrictedRoute blockedRoles={['visitante']}><Oficios /></RestrictedRoute>} />

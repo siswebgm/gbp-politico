@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabaseClient } from '@/lib/supabase';
-import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip, Download, MoreVertical, Trash2, Info } from 'lucide-react';
+import { ArrowLeft, Loader2, ExternalLink, FileText, Star, AlertTriangle, SendHorizontal, Upload, Pencil, RefreshCw, X, Paperclip, Download, MoreVertical, Trash2, Info, UserCheck, UserPlus } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { demandasRuasService, type DemandaRua } from '@/services/demandasRuasService';
+import { categoryService } from '@/services/categories';
 import { useAuth } from '@/providers/AuthProvider';
 
 interface MensagemWhatsApp {
@@ -113,6 +114,10 @@ export function DetalhesDemanda() {
   const [anexoWhatsApp, setAnexoWhatsApp] = useState<File | null>(null);
   const [indicadoNome, setIndicadoNome] = useState<string | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
+  const [eleitorVinculado, setEleitorVinculado] = useState<{ uid: string; nome: string } | null>(null);
+  const [verificandoEleitor, setVerificandoEleitor] = useState(false);
+  const [cadastrandoEleitor, setCadastrandoEleitor] = useState(false);
+  const [showCadastrarRequerenteModal, setShowCadastrarRequerenteModal] = useState(false);
   const MAX_CARACTERES = 1000;
 
   const sugestoesMensagens = [
@@ -1317,6 +1322,124 @@ export function DetalhesDemanda() {
     }
   };
 
+  // Verifica se o requerente já existe como pessoa cadastrada (gbp_eleitores),
+  // comparando o CPF normalizado e sempre filtrando pela empresa da demanda.
+  const verificarEleitorPorCpf = async (demandaCarregada: DemandaComObservacoes) => {
+    const cpfLimpo = (demandaCarregada.requerente_cpf || '').replace(/\D/g, '');
+    if (!cpfLimpo || cpfLimpo.length !== 11 || !demandaCarregada.empresa_uid) {
+      setEleitorVinculado(null);
+      return;
+    }
+    try {
+      setVerificandoEleitor(true);
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .select('uid, nome')
+        .eq('cpf', cpfLimpo)
+        .eq('empresa_uid', demandaCarregada.empresa_uid)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      setEleitorVinculado(data ? { uid: data.uid, nome: data.nome } : null);
+    } catch (err) {
+      console.error('Erro ao verificar eleitor pelo CPF:', err);
+      setEleitorVinculado(null);
+    } finally {
+      setVerificandoEleitor(false);
+    }
+  };
+
+  // Busca ou cria a categoria "Requerente de Demanda" para a empresa
+  const obterCategoriaRequerente = async (empresaUid: string): Promise<string> => {
+    const NOME_CATEGORIA = 'Requerente de Demanda';
+    
+    try {
+      // Buscar categorias existentes
+      const categorias = await categoryService.list(empresaUid);
+      const categoriaExistente = categorias.find(c => c.nome === NOME_CATEGORIA);
+      
+      if (categoriaExistente) {
+        console.log('Categoria "Requerente de Demanda" já existe:', categoriaExistente.uid);
+        return categoriaExistente.uid;
+      }
+      
+      // Criar categoria se não existir
+      console.log('Criando categoria "Requerente de Demanda"...');
+      const novaCategoria = await categoryService.create({
+        nome: NOME_CATEGORIA,
+        tipo_uid: null,
+        empresa_uid: empresaUid
+      });
+      
+      console.log('Categoria criada:', novaCategoria.uid);
+      return novaCategoria.uid;
+    } catch (error) {
+      console.error('Erro ao obter/criar categoria:', error);
+      throw new Error('Não foi possível obter ou criar a categoria para o requerente.');
+    }
+  };
+
+  // Cadastra o requerente da demanda como pessoa em gbp_eleitores
+  const handleCadastrarRequerenteComoPessoa = async () => {
+    if (!demanda) return;
+    try {
+      setCadastrandoEleitor(true);
+      const cpfLimpo = (demanda.requerente_cpf || '').replace(/\D/g, '');
+      const whatsappLimpo = (demanda.requerente_whatsapp || '').replace(/\D/g, '');
+      const reqAddr = (demanda.requerente as any) || {};
+      const cepLimpo = reqAddr.cep?.replace(/\D/g, '') || null;
+      const generoFormatado = reqAddr.genero
+        ? reqAddr.genero.charAt(0).toUpperCase() + reqAddr.genero.slice(1).toLowerCase()
+        : null;
+
+      // Obter ou criar categoria "Requerente de Demanda"
+      const categoriaUid = await obterCategoriaRequerente(demanda.empresa_uid);
+
+      const { data, error } = await supabaseClient
+        .from('gbp_eleitores')
+        .insert([{
+          nome: demanda.requerente_nome,
+          cpf: cpfLimpo,
+          nascimento: demanda.requerente_nascimento || null,
+          genero: generoFormatado,
+          whatsapp: whatsappLimpo || null,
+          cep: cepLimpo,
+          logradouro: reqAddr.logradouro || null,
+          numero: reqAddr.numero || null,
+          bairro: reqAddr.bairro || null,
+          cidade: reqAddr.cidade || null,
+          uf: reqAddr.uf || null,
+          complemento: reqAddr.referencia || null,
+          empresa_uid: demanda.empresa_uid,
+          usuario_uid: user?.uid || null,
+          categoria_uid: categoriaUid,
+          responsavel: 'Demanda',
+        }])
+        .select('uid, nome')
+        .single();
+
+      if (error) throw error;
+
+      setEleitorVinculado({ uid: data.uid, nome: data.nome });
+      setShowCadastrarRequerenteModal(false);
+      toast({
+        title: 'Pessoa cadastrada',
+        description: `${data.nome} foi cadastrado(a) em Pessoas com a categoria "Requerente de Demanda".`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Erro ao cadastrar requerente como pessoa:', err);
+      toast({
+        title: 'Erro',
+        description: err instanceof Error ? err.message : 'Não foi possível cadastrar o requerente como pessoa.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCadastrandoEleitor(false);
+    }
+  };
+
   const carregarDemanda = async (id: string) => {
     try {
       setCarregando(true);
@@ -1327,7 +1450,10 @@ export function DetalhesDemanda() {
         setIsFavorito(demandaCarregada.favorito || false);
         setNivelFavorito(demandaCarregada.nivel_favorito || 0);
         setDemandaConcluida(demandaCarregada.status === 'concluido');
-        
+
+        // Verifica se o requerente já é uma pessoa cadastrada (match por CPF + empresa)
+        await verificarEleitorPorCpf(demandaCarregada);
+
         // Buscar nome do indicado se existir
         console.log('Demanda carregada:', demandaCarregada);
         console.log('indicado_uid:', demandaCarregada.indicado_uid);
@@ -1985,7 +2111,7 @@ export function DetalhesDemanda() {
                       <h3 className="font-medium text-sm sm:text-base mb-2 sm:mb-3 text-gray-700 dark:text-gray-300">
                         Informações do Requerente
                       </h3>
-                      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                         {demanda.requerente_nome && (
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">Nome</Label>
@@ -1995,13 +2121,13 @@ export function DetalhesDemanda() {
                         {demanda.requerente_whatsapp && (
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">WhatsApp</Label>
-                            <p className="text-sm sm:text-base font-mono">{demanda.requerente_whatsapp}</p>
+                            <p className="text-sm sm:text-base font-mono break-all">{demanda.requerente_whatsapp}</p>
                           </div>
                         )}
                         {demanda.requerente_cpf && (
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">CPF</Label>
-                            <p className="text-sm sm:text-base font-mono">{demanda.requerente_cpf}</p>
+                            <p className="text-sm sm:text-base font-mono break-all">{demanda.requerente_cpf}</p>
                           </div>
                         )}
                         {demanda.requerente_nascimento && (
@@ -2014,6 +2140,72 @@ export function DetalhesDemanda() {
                           <div className="space-y-0.5">
                             <Label className="text-xs sm:text-sm text-muted-foreground">Indicado</Label>
                             <p className="text-sm sm:text-base font-medium break-words">{indicadoNome}</p>
+                          </div>
+                        )}
+                      </div>
+                      {/* Status de cadastro como pessoa + ação de registro */}
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        {verificandoEleitor ? (
+                          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                            <span className="text-sm text-gray-600 dark:text-gray-300">Verificando cadastro...</span>
+                          </div>
+                        ) : eleitorVinculado ? (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full flex-shrink-0">
+                                <UserCheck className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-green-800 dark:text-green-300">Cadastrado como pessoa</p>
+                                <p className="text-xs text-green-600 dark:text-green-400 truncate">{eleitorVinculado.nome}</p>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/app/pessoas/${eleitorVinculado.uid}`)}
+                              className="border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 w-full sm:w-auto"
+                            >
+                              Ver cadastro
+                            </Button>
+                          </div>
+                        ) : demanda.requerente_cpf ? (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-full flex-shrink-0">
+                                <UserPlus className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Não cadastrado em Pessoas</p>
+                                <p className="text-xs text-amber-600 dark:text-amber-400 truncate">Requerente com CPF disponível para vinculação</p>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => setShowCadastrarRequerenteModal(true)}
+                              disabled={cadastrandoEleitor}
+                              className="bg-amber-600 hover:bg-amber-700 text-white w-full sm:w-auto"
+                            >
+                              {cadastrandoEleitor ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Cadastrando...
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus className="w-4 h-4 mr-2" />
+                                  Cadastrar
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <div className="p-2 bg-gray-200 dark:bg-gray-700 rounded-full">
+                              <Info className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 break-words">Requerente sem CPF — não é possível vincular a uma pessoa.</p>
                           </div>
                         )}
                       </div>
@@ -2070,7 +2262,7 @@ export function DetalhesDemanda() {
                             className="text-blue-600 hover:underline flex items-start text-sm sm:text-base break-all"
                           >
                             <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 flex-shrink-0 mt-0.5" />
-                            <span className="break-words">{demanda.link_da_demanda}</span>
+                            <span className="break-words truncate">{demanda.link_da_demanda}</span>
                           </a>
                         </div>
                       </div>
@@ -2116,14 +2308,14 @@ export function DetalhesDemanda() {
                 </CardHeader>
                 <CardContent className="pt-4 sm:pt-6">
                   <div className="space-y-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex flex-wrap items-baseline gap-1 text-sm sm:text-base">
-                        <span className="font-medium">{demanda.logradouro || 'Rua não informada'}</span>
-                        {demanda.numero && <span>, {demanda.numero}</span>}
+                    <div className="space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 text-sm sm:text-base">
+                        <span className="font-medium break-words">{demanda.logradouro || 'Rua não informada'}</span>
+                        {demanda.numero && <span className="text-muted-foreground">, {demanda.numero}</span>}
                       </div>
                       
                       {(demanda.bairro || demanda.cidade || demanda.uf) && (
-                        <div className="flex flex-wrap items-center gap-1 text-sm sm:text-base text-muted-foreground">
+                        <div className="text-sm sm:text-base text-muted-foreground break-words">
                           {demanda.bairro && <span>{demanda.bairro}</span>}
                           {(demanda.cidade || demanda.uf) && (
                             <span>
@@ -2138,7 +2330,7 @@ export function DetalhesDemanda() {
                       {demanda.cep && (
                         <div className="text-sm sm:text-base">
                           <span className="text-muted-foreground">CEP: </span>
-                          <span className="font-mono">{demanda.cep}</span>
+                          <span className="font-mono break-all">{demanda.cep}</span>
                         </div>
                       )}
                     </div>
@@ -2146,7 +2338,7 @@ export function DetalhesDemanda() {
                     {demanda.referencia && (
                       <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                         <Label className="text-xs sm:text-sm text-muted-foreground">Ponto de referência</Label>
-                        <p className="mt-1 text-sm sm:text-base">{demanda.referencia}</p>
+                        <p className="mt-1 text-sm sm:text-base break-words">{demanda.referencia}</p>
                       </div>
                     )}
                   </div>
@@ -2160,9 +2352,9 @@ export function DetalhesDemanda() {
                 </CardHeader>
                 <CardContent className="py-2 sm:py-3">
                   {fotosDoProblema.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 sm:gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                       {fotosDoProblema.map((foto, index) => (
-                        <div key={index} className="relative w-[200px] h-[200px] bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
+                        <div key={index} className="relative aspect-square bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
                           <img 
                             src={foto} 
                             alt={`Foto ${index + 1} da demanda`}
@@ -2241,7 +2433,7 @@ export function DetalhesDemanda() {
                               className={novoStatus === 'recebido' ? 'font-medium' : 'text-gray-700'}
                               disabled={['feito_oficio', 'protocolado', 'aguardando', 'concluido', 'cancelado'].includes(novoStatus || '')}
                             >
-                              Recebido {novoStatus === 'recebido' && '(Atual)'}
+                              Recebido{novoStatus === 'recebido' && ' ✓'}
                             </option>
                             
                             {/* Mostra Feito Ofício */}
@@ -2250,7 +2442,7 @@ export function DetalhesDemanda() {
                               className={novoStatus === 'feito_oficio' ? 'font-medium' : 'text-gray-700'}
                               disabled={['protocolado', 'aguardando', 'concluido', 'cancelado'].includes(novoStatus || '')}
                             >
-                              Feito ofício {novoStatus === 'feito_oficio' && '(Atual)'}
+                              Feito ofício{novoStatus === 'feito_oficio' && ' ✓'}
                             </option>
                             
                             {/* Sempre mostra Protocolado */}
@@ -2259,7 +2451,7 @@ export function DetalhesDemanda() {
                               className={`${novoStatus === 'protocolado' ? 'font-medium' : 'text-gray-700'}`}
                               disabled={['aguardando', 'concluido', 'cancelado'].includes(novoStatus || '')}
                             >
-                              {novoStatus === 'protocolado' ? 'Protocolado (Atual)' : 'Protocolado'}
+                              Protocolado{novoStatus === 'protocolado' && ' ✓'}
                             </option>
                             
                             {/* Mostra Aguardando apenas se o status for Protocolado */}
@@ -2271,7 +2463,7 @@ export function DetalhesDemanda() {
                                 className={novoStatus === 'aguardando' ? 'font-medium' : 'text-gray-700'}
                                 disabled={['concluido', 'cancelado'].includes(novoStatus || '')}
                               >
-                                Aguardando {novoStatus === 'aguardando' && '(Atual)'}
+                                Aguardando{novoStatus === 'aguardando' && ' ✓'}
                               </option>
                             )}
                             
@@ -2292,7 +2484,7 @@ export function DetalhesDemanda() {
                                 className="text-green-600 font-medium"
                                 disabled
                               >
-                                Concluído (Atual)
+                                Concluído ✓
                               </option>
                             )}
                             
@@ -2302,7 +2494,7 @@ export function DetalhesDemanda() {
                               className="text-red-600 font-medium"
                               disabled={novoStatus === 'cancelado'}
                             >
-                              {novoStatus === 'cancelado' ? 'Cancelado (Atual)' : 'Cancelar demanda'}
+                              {novoStatus === 'cancelado' ? 'Cancelado ✓' : 'Cancelar'}
                             </option>
                           </select>
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
@@ -2875,6 +3067,94 @@ export function DetalhesDemanda() {
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Confirmação de Cadastro do Requerente como Pessoa */}
+      <AlertDialog open={showCadastrarRequerenteModal} onOpenChange={setShowCadastrarRequerenteModal}>
+        <AlertDialogContent className="w-[95%] sm:max-w-[450px]">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex-shrink-0">
+                <UserPlus className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <AlertDialogTitle className="text-lg sm:text-xl break-words">Cadastrar Requerente</AlertDialogTitle>
+              </div>
+            </div>
+          </AlertDialogHeader>
+          
+          <AlertDialogDescription className="sr-only">
+            Confirmação para cadastrar o requerente como pessoa no cadastro de Pessoas.
+          </AlertDialogDescription>
+
+          <div className="py-4 space-y-3">
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-md flex-shrink-0">
+                  <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Nome</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{demanda?.requerente_nome}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-md flex-shrink-0">
+                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">CPF</p>
+                  <p className="text-sm font-mono font-medium text-gray-900 dark:text-white break-all">{demanda?.requerente_cpf}</p>
+                </div>
+              </div>
+              {demanda?.requerente_whatsapp && (
+                <div className="flex items-start gap-3">
+                  <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-md flex-shrink-0">
+                    <SendHorizontal className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">WhatsApp</p>
+                    <p className="text-sm font-mono text-gray-900 dark:text-white break-all">{demanda.requerente_whatsapp}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-blue-800 dark:text-blue-300 break-words">
+                O requerente será cadastrado automaticamente com a categoria <strong>"Requerente de Demanda"</strong>. Se a categoria não existir, ela será criada.
+              </p>
+            </div>
+          </div>
+
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowCadastrarRequerenteModal(false)}
+              disabled={cadastrandoEleitor}
+              className="mt-0 h-10 px-6"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCadastrarRequerenteComoPessoa}
+              disabled={cadastrandoEleitor}
+              className="mt-0 h-10 px-6 bg-blue-600 hover:bg-blue-700"
+            >
+              {cadastrandoEleitor ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Cadastrando...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Cadastrar
+                </>
+              )}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
