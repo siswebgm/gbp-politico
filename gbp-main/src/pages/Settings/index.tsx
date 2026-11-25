@@ -243,8 +243,8 @@ export function Settings() {
         <div className="w-full px-4 sm:px-6 py-6">
           <div className="flex flex-col lg:flex-row gap-6 items-stretch">
             {/* Sidebar Desktop */}
-            <aside className="hidden lg:flex flex-col w-72 flex-shrink-0">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3.5 h-full flex flex-col">
+            <aside className="hidden lg:flex flex-col w-72 flex-shrink-0 lg:sticky lg:top-6 lg:self-start">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3.5 flex flex-col">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                   Módulos de Configuração
                 </div>

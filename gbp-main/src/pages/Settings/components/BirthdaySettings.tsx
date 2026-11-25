@@ -1,534 +1,639 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useCompanyStore } from '../../../store/useCompanyStore';
-import { Loader2, AlertCircle, Trash2, Save, MessageSquare } from 'lucide-react';
+import { Loader2, Trash2, Save, MessageSquare, Plus, Tag } from 'lucide-react';
 import { supabaseClient } from '../../../lib/supabase';
 import { useToast } from "../../../components/ui/use-toast";
 import { useAuth } from '../../../providers/AuthProvider';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel
+} from '../../../components/ui/alert-dialog';
 
-const birthdaySchema = z.object({
-  texto_aniversario: z.string().nullable(),
-  imagem_aniversario: z.string().nullable(),
-  video_aniversario: z.string().nullable(),
-  audio_aniversario: z.string().nullable(),
-  saudacao_niver: z.boolean().default(true),
-});
-
+const birthdaySchema = z.object({ saudacao_niver: z.boolean().default(true) });
 type BirthdayFormData = z.infer<typeof birthdaySchema>;
+
+interface ConteudoItem {
+  uid?: string;
+  tipo: 'texto' | 'imagem' | 'video' | 'audio';
+  conteudo: string;
+  bloco: number;
+  ordem: number;
+  ativo: boolean;
+  isNew?: boolean;
+  file?: File;
+  previewUrl?: string;
+  updated_at?: string;
+}
+
+interface Bloco {
+  id: number;
+  itens: ConteudoItem[];
+  genero: string | null;
+  ativo: boolean;
+}
 
 export function BirthdaySettings() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [currentFiles, setCurrentFiles] = useState<BirthdayFormData>({
-    texto_aniversario: '',
-    imagem_aniversario: '',
-    video_aniversario: '',
-    audio_aniversario: '',
-    saudacao_niver: true,
-  });
-  const [initialFiles, setInitialFiles] = useState<BirthdayFormData>({
-    texto_aniversario: '',
-    imagem_aniversario: '',
-    video_aniversario: '',
-    audio_aniversario: '',
-    saudacao_niver: true,
-  });
-  const [newFiles, setNewFiles] = useState<{[key: string]: File}>({});
+  const [blocos, setBlocos] = useState<Bloco[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [blocoToDelete, setBlocoToDelete] = useState<number | null>(null);
   const company = useCompanyStore((state) => state.company);
-  const { register, handleSubmit, formState: { isSubmitting }, setValue, watch } = useForm<BirthdayFormData>();
+  const { setValue, watch } = useForm<BirthdayFormData>({
+    resolver: zodResolver(birthdaySchema),
+    defaultValues: { saudacao_niver: true }
+  });
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading, session, user } = useAuth();
-  
-  const saudacaoAtiva = watch('saudacao_niver', true);
-
-  const formValues = watch();
+  const { user } = useAuth();
 
   useEffect(() => {
-    const subscription = watch((value, { name, type }) => {
-      if (type === 'change') {
-        setHasUnsavedChanges(true);
-      }
-    });
-    return () => subscription.unsubscribe();
+    const sub = watch((_, { type }) => { if (type === 'change') setHasUnsavedChanges(true); });
+    return () => sub.unsubscribe();
   }, [watch]);
 
   useEffect(() => {
-    if (Object.keys(newFiles).length > 0) {
-      setHasUnsavedChanges(true);
-    }
-  }, [newFiles]);
+    if (blocos.some(b => b.itens.some(i => i.file))) setHasUnsavedChanges(true);
+  }, [blocos]);
 
-  const sanitizeFileName = (fileName: string): string => {
-    return fileName
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-      .replace(/[^a-zA-Z0-9.]/g, '_') // Substitui caracteres especiais por _
-      .replace(/_+/g, '_') // Remove underscores múltiplos
-      .toLowerCase();
+  const sanitizeFileName = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.]/g, '_').replace(/_+/g, '_').toLowerCase();
+
+  const handleAddBloco = () => {
+    const id = blocos.length > 0 ? Math.max(...blocos.map(b => b.id)) + 1 : 0;
+    setBlocos(prev => [{
+      id,
+      itens: [{ tipo: 'texto', conteudo: '', bloco: id, ordem: 0, ativo: true, isNew: true }],
+      genero: null, ativo: true
+    }, ...prev]);
+    setHasUnsavedChanges(true);
   };
 
-  const handleFileSelect = (file: File, type: 'imagem' | 'video' | 'audio') => {
+  const removeBlocoFromState = (id: number) => {
+    setBlocos(prev => {
+      const b = prev.find(x => x.id === id);
+      b?.itens.forEach(i => i.previewUrl && URL.revokeObjectURL(i.previewUrl));
+      return prev.filter(x => x.id !== id);
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleRemoveBloco = (id: number) => {
+    const bloco = blocos.find(x => x.id === id);
+    const existsInDb = !!bloco?.itens.some(i => i.uid);
+
+    if (existsInDb) {
+      setBlocoToDelete(id);
+      return;
+    }
+
+    removeBlocoFromState(id);
+  };
+
+  const confirmRemoveBloco = async () => {
+    const id = blocoToDelete;
+    setBlocoToDelete(null);
+    if (id === null) return;
+
+    removeBlocoFromState(id);
+
+    if (!company?.uid) return;
     try {
-      // Validar tamanho do arquivo (70MB)
-      const MAX_SIZE = 70 * 1024 * 1024; // 70MB
-      if (file.size > MAX_SIZE) {
-        throw new Error('Arquivo muito grande. O tamanho máximo é 70MB.');
-      }
+      const { error } = await supabaseClient.from('gbp_aniversario_conteudos')
+        .delete()
+        .eq('empresa_uid', company.uid)
+        .eq('bloco', id);
+      if (error) throw error;
 
-      // Validar tipo de arquivo para imagem
-      if (type === 'imagem') {
-        const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowedImageTypes.includes(file.type)) {
-          throw new Error('Formato de imagem inválido. Use apenas JPG, PNG, GIF ou WEBP.');
-        }
-      }
-
-      // Criar URL temporária para preview
-      const previewUrl = URL.createObjectURL(file);
-      
-      // Armazenar o arquivo para upload posterior
-      setNewFiles(prev => ({
-        ...prev,
-        [`${type}_aniversario`]: file
-      }));
-
-      // Atualizar preview
-      setCurrentFiles(prev => ({
-        ...prev,
-        [`${type}_aniversario`]: previewUrl
-      }));
+      const newBlocos = blocos.filter(b => b.id !== id);
+      await syncLegacyColumns(newBlocos);
+      toast({ description: `✨ Bloco #${id + 1} excluído.`, variant: "success" });
     } catch (err) {
-      console.error('Erro ao selecionar arquivo:', err);
-      toast({
-        variant: "error",
-        description: `Erro ao selecionar ${type}: ${err.message}`,
-      });
+      console.error('Erro ao excluir bloco:', err);
+      toast({ variant: "error", description: `Erro ao excluir bloco: ${err.message}` });
+    }
+  };
+
+  const handleToggleBloco = (id: number) => {
+    setBlocos(prev => prev.map(b => b.id === id ? { ...b, ativo: !b.ativo } : b));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleUpdateBloco = (id: number, field: 'genero', value: string | null) => {
+    setBlocos(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
+    setHasUnsavedChanges(true);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingFileRef = useRef<{ blocoId: number; tipo: 'imagem' | 'video' | 'audio' } | null>(null);
+
+  const handleAddMediaClick = (blocoId: number, tipo: 'imagem' | 'video' | 'audio') => {
+    pendingFileRef.current = { blocoId, tipo };
+    const input = fileInputRef.current;
+    if (input) {
+      input.accept = tipo === 'imagem' ? '.jpg,.jpeg,.png,.gif,.webp,image/*' : `${tipo}/*`;
+      input.click();
+    }
+  };
+
+  const handleUpdateItem = (blocoId: number, idx: number, conteudo: string) => {
+    setBlocos(prev => prev.map(b => {
+      if (b.id !== blocoId) return b;
+      return { ...b, itens: b.itens.map((item, i) => i === idx ? { ...item, conteudo, isNew: true } : item) };
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Variáveis disponíveis para inserção nas tags
+  const variaveisDisponiveis = [
+    { tag: '{nome}', label: 'Nome do Eleitor', cor: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
+    { tag: '{saudacao}', label: 'Saudação (bom dia/tarde/noite)', cor: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' },
+    { tag: '{cliente}', label: 'Gabinete / Mandato', cor: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
+  ];
+
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement>>({});
+
+  const handleInsertTag = (blocoId: number, idx: number, tag: string) => {
+    const key = `${blocoId}-${idx}`;
+    const textarea = textareaRefs.current[key];
+    const bloco = blocos.find(b => b.id === blocoId);
+    const item = bloco?.itens[idx];
+    if (!item) return;
+
+    const textoAtual = item.conteudo || '';
+    const start = textarea?.selectionStart ?? textoAtual.length;
+    const end = textarea?.selectionEnd ?? textoAtual.length;
+
+    const novoTexto = textoAtual.substring(0, start) + tag + textoAtual.substring(end);
+    handleUpdateItem(blocoId, idx, novoTexto);
+
+    setTimeout(() => {
+      textarea?.focus();
+      const novaPos = start + tag.length;
+      textarea?.setSelectionRange(novaPos, novaPos);
+    }, 0);
+  };
+
+  const handleFileSelect = (file: File, tipo: 'imagem' | 'video' | 'audio', blocoId: number, itemIdx?: number) => {
+    try {
+      if (file.size > 70 * 1024 * 1024) throw new Error('Arquivo muito grande. Máximo 70MB.');
+      if (tipo === 'imagem') {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.type)) throw new Error('Use JPG, PNG, GIF ou WEBP.');
+      }
+      const previewUrl = URL.createObjectURL(file);
+      setBlocos(prev => prev.map(b => {
+        if (b.id !== blocoId) return b;
+        if (itemIdx !== undefined) {
+          return { ...b, itens: b.itens.map((item, i) => i === itemIdx ? { ...item, file, previewUrl, isNew: true } : item) };
+        }
+        return { ...b, itens: [...b.itens, { tipo, conteudo: '', bloco: blocoId, ordem: 0, ativo: true, isNew: true, file, previewUrl }] };
+      }));
+      setHasUnsavedChanges(true);
+    } catch (err) {
+      toast({ variant: "error", description: `Erro: ${err.message}` });
       setError(err.message);
     }
   };
 
-  const handleRemoveFile = (type: 'imagem' | 'video' | 'audio') => {
-    // Limpar URL temporária se existir
-    const currentUrl = currentFiles[`${type}_aniversario`];
-    if (currentUrl?.startsWith('blob:')) {
-      URL.revokeObjectURL(currentUrl);
-    }
-
-    // Remover arquivo do estado
-    setNewFiles(prev => {
-      const next = { ...prev };
-      delete next[`${type}_aniversario`];
-      return next;
-    });
-
-    // Limpar preview
-    setCurrentFiles(prev => ({
-      ...prev,
-      [`${type}_aniversario`]: ''
-    }));
-
-    setHasUnsavedChanges(true); // Marca que há alterações não salvas ao remover arquivo
-  };
-
   useEffect(() => {
-    const loadSettings = async () => {
+    const load = async () => {
       if (!company?.uid) return;
-
       try {
         setIsLoading(true);
         setError(null);
 
-        const { data, error } = await supabaseClient
-          .from('gbp_empresas')
-          .select('texto_aniversario, imagem_aniversario, video_aniversario, audio_aniversario, saudacao_niver')
-          .eq('uid', company.uid)
-          .single();
+        const { data: emp } = await supabaseClient.from('gbp_empresas').select('saudacao_niver').eq('uid', company.uid).single();
+        setValue('saudacao_niver', emp?.saudacao_niver ?? true);
 
-        if (error) throw error;
+        const { data: conteudos, error: cErr } = await supabaseClient
+          .from('gbp_aniversario_conteudos')
+          .select('*')
+          .eq('empresa_uid', company.uid)
+          .order('bloco').order('tipo').order('ordem');
 
-        const settings: BirthdayFormData = {
-          texto_aniversario: data.texto_aniversario || '',
-          imagem_aniversario: data.imagem_aniversario || '',
-          video_aniversario: data.video_aniversario || '',
-          audio_aniversario: data.audio_aniversario || '',
-          saudacao_niver: data.saudacao_niver ?? true,
-        };
-
-        setCurrentFiles(settings);
-        setInitialFiles(settings);
-        
-        // Atualizar form com os valores
-        Object.entries(settings).forEach(([key, value]) => {
-          setValue(key as keyof BirthdayFormData, value);
-        });
+        if (cErr) {
+          // Fallback legado
+          const { data: leg } = await supabaseClient.from('gbp_empresas')
+            .select('texto_aniversario, imagem_aniversario, video_aniversario, audio_aniversario')
+            .eq('uid', company.uid).single();
+          if (leg) {
+            const itens: ConteudoItem[] = [];
+            if (leg.texto_aniversario) itens.push({ tipo: 'texto', conteudo: leg.texto_aniversario, bloco: 0, ordem: 0, ativo: true, isNew: true });
+            if (leg.imagem_aniversario) itens.push({ tipo: 'imagem', conteudo: leg.imagem_aniversario, bloco: 0, ordem: 0, ativo: true, isNew: true });
+            if (leg.video_aniversario) itens.push({ tipo: 'video', conteudo: leg.video_aniversario, bloco: 0, ordem: 0, ativo: true, isNew: true });
+            if (leg.audio_aniversario) itens.push({ tipo: 'audio', conteudo: leg.audio_aniversario, bloco: 0, ordem: 0, ativo: true, isNew: true });
+            if (itens.length) setBlocos([{ id: 0, itens, genero: null, ativo: true }]);
+          }
+        } else {
+          const map = new Map<number, Bloco>();
+          (conteudos || []).forEach((c: any) => {
+            if (!map.has(c.bloco)) {
+              map.set(c.bloco, { id: c.bloco, itens: [], genero: c.genero, ativo: c.ativo });
+            }
+            map.get(c.bloco)!.itens.push({
+              uid: c.uid, tipo: c.tipo, conteudo: c.conteudo, bloco: c.bloco,
+              ordem: c.ordem, ativo: c.ativo, genero: c.genero, isNew: false,
+              updated_at: c.updated_at
+            });
+          });
+          setBlocos(Array.from(map.values()).sort((a, b) => a.id - b.id));
+        }
       } catch (err) {
-        console.error('Erro ao carregar configurações:', err);
-        toast({
-          variant: "error",
-          description: "Erro ao carregar configurações",
-        });
-        setError('Erro ao carregar configurações');
+        console.error('Erro ao carregar:', err);
+        toast({ variant: "error", description: "Erro ao carregar configurações" });
+        setError('Erro ao carregar');
       } finally {
         setIsLoading(false);
       }
     };
-
-    loadSettings();
-
-    // Cleanup de URLs temporárias ao desmontar
-    return () => {
-      Object.values(currentFiles).forEach(url => {
-        if (typeof url === 'string' && url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
+    load();
+    return () => blocos.forEach(b => b.itens.forEach(i => i.previewUrl && URL.revokeObjectURL(i.previewUrl)));
   }, [company?.uid]);
 
-  const onSubmit = async (data: BirthdayFormData) => {
-    if (!company?.uid) return;
+  const [savingBloco, setSavingBloco] = useState<number | null>(null);
+  const [testingBloco, setTestingBloco] = useState<number | null>(null);
 
+  const getBucket = async () => {
+    const { data: emp } = await supabaseClient.from('gbp_empresas').select('storage').eq('uid', company!.uid).single();
+    if (!emp?.storage) throw new Error('Storage não configurado');
+    return emp.storage;
+  };
+
+  // Faz upload dos arquivos do bloco e retorna itens com URLs públicas
+  const persistBloco = async (bloco: Bloco): Promise<ConteudoItem[]> => {
+    const bucket = await getBucket();
+    const savedItens: ConteudoItem[] = [];
+    for (const item of bloco.itens) {
+      let conteudoFinal = item.conteudo;
+      if (item.file) {
+        const ts = Date.now();
+        const fn = `${ts}_${sanitizeFileName(item.file.name)}`;
+        const { error: upErr, data: upData } = await supabaseClient.storage.from(bucket).upload(fn, item.file, { cacheControl: '3600', upsert: false });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabaseClient.storage.from(bucket).getPublicUrl(upData.path);
+        conteudoFinal = publicUrl;
+      }
+      savedItens.push({ ...item, conteudo: conteudoFinal, isNew: false, file: undefined });
+    }
+
+    await supabaseClient.from('gbp_aniversario_conteudos')
+      .delete()
+      .eq('empresa_uid', company!.uid)
+      .eq('bloco', bloco.id);
+
+    if (savedItens.length > 0) {
+      const toInsert = savedItens.map((c, idx) => ({
+        empresa_uid: company!.uid, tipo: c.tipo, conteudo: c.conteudo,
+        bloco: bloco.id, ordem: idx, ativo: c.ativo, genero: bloco.genero
+      }));
+      const { error: insErr } = await supabaseClient.from('gbp_aniversario_conteudos').insert(toInsert);
+      if (insErr) throw insErr;
+    }
+    return savedItens;
+  };
+
+  // Sincroniza colunas legadas do gbp_empresas com o primeiro bloco ativo
+  const syncLegacyColumns = async (blocosState: Bloco[]) => {
+    const primeiroBloco = blocosState.find(b => b.ativo) || blocosState[0];
+    const url = (item?: ConteudoItem) => (!item || item.file ? null : (item.conteudo || null));
+    const t = primeiroBloco?.itens.find(i => i.tipo === 'texto' && i.ativo);
+    const img = primeiroBloco?.itens.find(i => i.tipo === 'imagem' && i.ativo);
+    const vid = primeiroBloco?.itens.find(i => i.tipo === 'video' && i.ativo);
+    const aud = primeiroBloco?.itens.find(i => i.tipo === 'audio' && i.ativo);
+
+    const { error: syncErr } = await supabaseClient.from('gbp_empresas').update({
+      texto_aniversario: t?.conteudo || null,
+      imagem_aniversario: url(img),
+      video_aniversario: url(vid),
+      audio_aniversario: url(aud),
+    }).eq('uid', company!.uid);
+    if (syncErr) throw syncErr;
+  };
+
+  const handleSaveBloco = async (bloco: Bloco) => {
+    if (!company?.uid) return;
     try {
       setError(null);
-
-      // Buscar o nome do bucket da empresa
-      const { data: empresaData, error: empresaError } = await supabaseClient
-        .from('gbp_empresas')
-        .select('storage')
-        .eq('uid', company.uid)
-        .single();
-
-      if (empresaError) throw empresaError;
-      if (!empresaData.storage) {
-        throw new Error('Nome do storage não configurado para esta empresa');
-      }
-
-      const bucket = empresaData.storage;
-      const newUrls: Partial<BirthdayFormData> = {};
-
-      // Fazer upload dos novos arquivos
-      for (const [key, file] of Object.entries(newFiles)) {
-        const timestamp = new Date().getTime();
-        const sanitizedName = sanitizeFileName(file.name);
-        const fileName = `${timestamp}_${sanitizedName}`;
-
-        const { error: uploadError, data: uploadData } = await supabaseClient.storage
-          .from(bucket)
-          .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (uploadError) throw uploadError;
-        if (!uploadData?.path) {
-          throw new Error(`Erro ao obter URL do arquivo ${key}`);
-        }
-
-        const { data: { publicUrl } } = supabaseClient.storage
-          .from(bucket)
-          .getPublicUrl(uploadData.path);
-
-        newUrls[key] = publicUrl;
-      }
-
-      // Remover arquivos antigos que foram substituídos
-      for (const [key, _] of Object.entries(newFiles)) {
-        const oldUrl = initialFiles[key as keyof BirthdayFormData];
-        if (typeof oldUrl === 'string' && oldUrl) {
-          const oldFileName = oldUrl.split('/').pop();
-          if (oldFileName) {
-            try {
-              await supabaseClient.storage
-                .from(bucket)
-                .remove([oldFileName]);
-            } catch (err) {
-              console.warn('Erro ao remover arquivo antigo:', err);
-            }
-          }
-        }
-      }
-
-      // Atualizar o banco com os novos valores
-      const { error } = await supabaseClient
-        .from('gbp_empresas')
-        .update({
-          texto_aniversario: data.texto_aniversario,
-          imagem_aniversario: newUrls.imagem_aniversario || currentFiles.imagem_aniversario || '',
-          video_aniversario: newUrls.video_aniversario || currentFiles.video_aniversario || '',
-          audio_aniversario: newUrls.audio_aniversario || currentFiles.audio_aniversario || '',
-          saudacao_niver: data.saudacao_niver,
-        })
-        .eq('uid', company.uid);
-
-      if (error) throw error;
-
-      // Limpar URLs temporárias
-      Object.values(currentFiles).forEach(url => {
-        if (typeof url === 'string' && url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
-
-      // Atualizar estados com as novas URLs
-      const updatedFiles = {
-        ...currentFiles,
-        ...newUrls
-      };
-
-      setNewFiles({});
-      setInitialFiles(updatedFiles);
-      setCurrentFiles(updatedFiles);
-
-      setHasUnsavedChanges(false);
-      
-      toast({
-        description: "✨ Configurações salvas com sucesso!",
-        variant: "success"
-      });
+      setSavingBloco(bloco.id);
+      const savedItens = await persistBloco(bloco);
+      const updatedBloco = { ...bloco, itens: savedItens };
+      const newBlocos = blocos.map(b => b.id === bloco.id ? updatedBloco : b);
+      setBlocos(newBlocos);
+      await syncLegacyColumns(newBlocos);
+      setHasUnsavedChanges(newBlocos.some(b => b.itens.some(i => i.file)));
+      toast({ description: `✨ Bloco #${bloco.id + 1} salvo com sucesso!`, variant: "success" });
     } catch (err) {
-      console.error('Erro ao salvar:', err);
-      toast({
-        variant: "error",
-        description: `Não foi possível salvar as configurações: ${err.message}`,
-      });
-      setError('Erro ao salvar configurações');
+      console.error('Erro ao salvar bloco:', err);
+      toast({ variant: "error", description: `Erro ao salvar bloco: ${err.message}` });
+      setError('Erro ao salvar bloco');
+    } finally {
+      setSavingBloco(null);
     }
   };
 
-  const [isTesting, setIsTesting] = useState(false);
-
-  const handleTestMessage = async () => {
+  const handleTestBloco = async (bloco: Bloco) => {
+    if (!company?.uid) return;
     try {
-      setIsTesting(true);
       setError(null);
+      setTestingBloco(bloco.id);
+      let itens = bloco.itens;
+      let newBlocos = blocos;
 
-      const response = await fetch('https://whkn8n.guardia.work/webhook/gbp_disparo_aniversario_teste_user', {
+      // Se houver arquivo novo, salva o bloco antes de testar (n8n precisa de URL pública)
+      if (itens.some(i => i.file)) {
+        const savedItens = await persistBloco(bloco);
+        const updatedBloco = { ...bloco, itens: savedItens };
+        newBlocos = blocos.map(b => b.id === bloco.id ? updatedBloco : b);
+        setBlocos(newBlocos);
+        await syncLegacyColumns(newBlocos);
+        itens = savedItens;
+      }
+
+      const t = itens.find(i => i.tipo === 'texto' && i.ativo);
+      const img = itens.find(i => i.tipo === 'imagem' && i.ativo);
+      const vid = itens.find(i => i.tipo === 'video' && i.ativo);
+      const aud = itens.find(i => i.tipo === 'audio' && i.ativo);
+
+      const res = await fetch('https://whkn8n.guardia.work/webhook/gbp_disparo_aniversario_teste_user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Informações do usuário
-          user: {
-            uid: user?.uid,
-            email: user?.email,
-            nome: user?.nome,
-            nivel_acesso: user?.nivel_acesso,
-            telefone: user?.telefone,
-            contato: user?.contato || user?.telefone // Usa o contato se existir, senão usa o telefone
-          },
-          // Informações da empresa
-          company: {
-            uid: company?.uid,
-            nome: company?.nome,
-            storage: company?.storage,
-            plano: company?.plano,
-            token: company?.token,
-            porta: company?.porta,
-            instancia: company?.instancia
-          },
-          // Configurações da mensagem
-          texto_aniversario: watch('texto_aniversario'),
-          imagem_aniversario: currentFiles.imagem_aniversario,
-          video_aniversario: currentFiles.video_aniversario,
-          audio_aniversario: currentFiles.audio_aniversario,
+          user: { uid: user?.uid, email: user?.email, nome: user?.nome, nivel_acesso: user?.nivel_acesso, telefone: user?.telefone, contato: user?.contato || user?.telefone },
+          company: { uid: company?.uid, nome: company?.nome, storage: company?.storage, plano: company?.plano, token: company?.token, porta: company?.porta, instancia: company?.instancia },
+          texto_aniversario: t?.conteudo || '',
+          imagem_aniversario: img?.conteudo || '',
+          video_aniversario: vid?.conteudo || '',
+          audio_aniversario: aud?.conteudo || '',
           saudacao_niver: watch('saudacao_niver'),
         }),
       });
-
-      if (!response.ok) {
-        throw new Error('Erro ao testar mensagem');
-      }
-
-      toast({
-        description: "✨ Mensagem de teste enviada com sucesso!",
-        variant: "success"
-      });
+      if (!res.ok) throw new Error('Erro ao testar');
+      toast({ description: `✨ Teste do Bloco #${bloco.id + 1} enviado!`, variant: "success" });
     } catch (err) {
-      console.error('Erro ao testar mensagem:', err);
-      toast({
-        variant: "error",
-        description: `Não foi possível testar a mensagem: ${err.message}`,
-      });
-      setError('Erro ao testar mensagem');
+      toast({ variant: "error", description: `Erro: ${err.message}` });
+      setError('Erro ao testar');
     } finally {
-      setIsTesting(false);
+      setTestingBloco(null);
     }
   };
 
-  if (isLoading) {
-    return <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>;
-  }
+  const renderItem = (item: ConteudoItem, blocoId: number, idx: number) => {
+    const icon = item.tipo === 'imagem' ? '🖼️' : item.tipo === 'video' ? '🎥' : item.tipo === 'audio' ? '🎵' : '📝';
+    const label = item.tipo === 'imagem' ? 'Imagem' : item.tipo === 'video' ? 'Vídeo' : item.tipo === 'audio' ? 'Áudio' : 'Texto';
+    const accept = item.tipo === 'imagem' ? '.jpg,.jpeg,.png,.gif,.webp,image/*' : `${item.tipo}/*`;
+
+    return (
+      <div key={idx} className={`border rounded-lg p-2 bg-white hover:bg-gray-50 transition-colors ${item.tipo !== 'texto' ? 'h-full flex flex-col' : ''}`}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs">{icon}</span>
+            <span className="text-xs font-medium text-gray-600">{label}</span>
+          </div>
+        </div>
+        {item.tipo === 'texto' ? (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-1">
+              <Tag className="w-3 h-3 text-gray-400" />
+              {variaveisDisponiveis.map(v => (
+                <button key={v.tag} type="button" onClick={() => handleInsertTag(blocoId, idx, v.tag)}
+                  title={v.label}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${v.cor}`}>
+                  {v.tag}
+                </button>
+              ))}
+            </div>
+            <textarea
+              ref={(el) => { if (el) textareaRefs.current[`${blocoId}-${idx}`] = el; }}
+              value={item.conteudo} onChange={(e) => handleUpdateItem(blocoId, idx, e.target.value)} rows={6}
+              className="w-full rounded border border-gray-200 p-2 text-xs resize-none focus:border-blue-400 focus:ring-blue-400 min-h-[120px]"
+              placeholder="Digite o texto... Use as tags acima para inserir dados dinâmicos" />
+          </div>
+        ) : (
+          <div className="space-y-2 flex-1 flex flex-col">
+            {(item.previewUrl || item.conteudo) && (
+              <div className="relative flex-1 flex items-center justify-center bg-gray-50 rounded border border-gray-200 min-h-[80px]">
+                {item.tipo === 'imagem' && (
+                  <img src={item.previewUrl || item.conteudo} alt="Preview" className="max-h-32 max-w-full object-contain rounded" />
+                )}
+                {item.tipo === 'video' && (
+                  <video src={item.previewUrl || item.conteudo} controls className="max-h-32 max-w-full rounded" />
+                )}
+                {item.tipo === 'audio' && (
+                  <div className="w-full p-2">
+                    <audio src={item.previewUrl || item.conteudo} controls className="w-full h-8" />
+                  </div>
+                )}
+                {item.file && (
+                  <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] px-1 py-0.5 rounded">
+                    Novo
+                  </div>
+                )}
+              </div>
+            )}
+            <label className="cursor-pointer text-[11px] text-blue-600 hover:text-blue-700 flex items-center gap-1">
+              <Plus className="w-3 h-3" />
+              {item.file || item.conteudo ? 'Substituir arquivo' : 'Selecionar arquivo'}
+              <input type="file" accept={accept} className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f, item.tipo as 'imagem' | 'video' | 'audio', blocoId, idx); }} />
+            </label>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderBloco = (bloco: Bloco) => {
+    const hasImg = bloco.itens.some(i => i.tipo === 'imagem');
+    const hasVid = bloco.itens.some(i => i.tipo === 'video');
+    const hasAud = bloco.itens.some(i => i.tipo === 'audio');
+    const lastUpdate = bloco.itens
+      .map(i => i.updated_at)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const formattedDate = lastUpdate
+      ? new Date(lastUpdate).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : null;
+
+    return (
+      <div className={`border rounded-xl transition-all ${bloco.ativo ? 'border-blue-200 shadow-sm' : 'border-gray-200 opacity-60'}`}>
+        {/* Header do bloco */}
+        <div className={`px-4 py-3 flex items-center justify-between ${bloco.ativo ? 'bg-blue-50' : 'bg-gray-100'}`}>
+          <div className="flex items-center gap-2">
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${bloco.ativo ? 'bg-blue-500 text-white' : 'bg-gray-400 text-white'}`}>
+              {bloco.id + 1}
+            </div>
+            <span className="font-medium text-gray-800 text-sm">Bloco #{bloco.id + 1}</span>
+            {!bloco.ativo && <span className="text-[10px] bg-gray-300 text-gray-600 px-1.5 py-0.5 rounded">Inativo</span>}
+            {formattedDate && <span className="text-[10px] text-gray-400">· {formattedDate}</span>}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => handleToggleBloco(bloco.id)}
+              className={`text-[11px] px-2 py-1 rounded transition-colors ${bloco.ativo ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
+              {bloco.ativo ? '✓ Ativo' : 'Inativo'}
+            </button>
+            <button type="button" onClick={() => handleRemoveBloco(bloco.id)} 
+              className="text-red-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Conteúdo do bloco */}
+        <div className="p-4 bg-white">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+            {/* Texto - ocupa 3 colunas */}
+            <div className="md:col-span-3">
+              {bloco.itens.filter(i => i.tipo === 'texto').map(item => renderItem(item, bloco.id, bloco.itens.indexOf(item)))}
+            </div>
+            
+            {/* Imagem/Vídeo - ocupa 1 coluna, mesma altura do texto */}
+            <div className="md:col-span-1">
+              {!hasImg && !hasVid && (
+                <div className="flex flex-col gap-2 h-full min-h-[140px]">
+                  <button type="button" onClick={() => handleAddMediaClick(bloco.id, 'imagem')}
+                    className="flex-1 py-3 border-2 border-dashed border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all">
+                    + Imagem
+                  </button>
+                  <button type="button" onClick={() => handleAddMediaClick(bloco.id, 'video')}
+                    className="flex-1 py-3 border-2 border-dashed border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all">
+                    + Vídeo
+                  </button>
+                </div>
+              )}
+              {hasImg && bloco.itens.filter(i => i.tipo === 'imagem').map(item => renderItem(item, bloco.id, bloco.itens.indexOf(item)))}
+              {hasVid && bloco.itens.filter(i => i.tipo === 'video').map(item => renderItem(item, bloco.id, bloco.itens.indexOf(item)))}
+            </div>
+          </div>
+
+          {/* Áudio */}
+          <div className="mb-4">
+            {!hasAud ? (
+              <button type="button" onClick={() => handleAddMediaClick(bloco.id, 'audio')}
+                className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-2">
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar áudio (opcional)
+              </button>
+            ) : (
+              bloco.itens.filter(i => i.tipo === 'audio').map(item => renderItem(item, bloco.id, bloco.itens.indexOf(item)))
+            )}
+          </div>
+
+          {/* Filtros e ações */}
+          <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Gênero:</label>
+              <select value={bloco.genero || ''} onChange={(e) => handleUpdateBloco(bloco.id, 'genero', e.target.value || null)}
+                className="rounded border border-gray-200 px-2 py-1 text-xs focus:border-blue-400 focus:ring-blue-400 bg-gray-50">
+                <option value="">Todos</option>
+                <option value="Masculino">♂ Masculino</option>
+                <option value="Feminino">♀ Feminino</option>
+                <option value="Outro">⚧ Outro</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <button type="button" onClick={() => handleTestBloco(bloco)} disabled={testingBloco === bloco.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
+                {testingBloco === bloco.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                Testar
+              </button>
+              <button type="button" onClick={() => handleSaveBloco(bloco)} disabled={savingBloco === bloco.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                {savingBloco === bloco.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (isLoading) return <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>;
 
   return (
     <div className="space-y-6 px-0 py-6">
-      <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-400 p-4 mb-6 rounded-r-lg shadow-sm">
-        <p className="text-sm text-blue-700 space-y-2">
-          <strong className="block text-base mb-2">Configuração da Mensagem de Aniversário</strong>
-          <span className="block mb-3">Nesta página você configura o conteúdo da mensagem automática que será enviada aos seus eleitores no dia do aniversário deles.</span>
-          
-          <strong className="block mt-4 mb-1">Como funciona:</strong>
-          <span className="block">• O texto da mensagem é obrigatório e será sempre enviado.</span>
-          <span className="block">• Você pode adicionar uma imagem OU um vídeo (o vídeo substituirá a imagem).</span>
-          <span className="block">• O áudio é opcional e pode ser enviado junto com qualquer combinação acima.</span>
-          
-          <span className="block mt-4 text-xs text-blue-600"> A mensagem será enviada automaticamente no dia do aniversário de cada eleitor.</span>
-        </p>
+      {/* Header informativo */}
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-400 p-4 rounded-r-lg shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+            <MessageSquare className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-800 mb-1">Mensagem de Aniversário</h3>
+            <p className="text-sm text-gray-600">
+              Mensagens automáticas de aniversário
+            </p>
+          </div>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                {...register('saudacao_niver')}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              <span className="ms-3 text-sm font-medium text-gray-700">Incluir saudação com nome do eleitor</span>
-            </label>
-            <div className="text-xs text-gray-500 sm:text-right">
-              {saudacaoAtiva ? 'Ex: "Olá João, "' : 'Mensagem sem saudação inicial'}
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            const pending = pendingFileRef.current;
+            if (f && pending) {
+              handleFileSelect(f, pending.tipo, pending.blocoId);
+            }
+            e.target.value = '';
+            pendingFileRef.current = null;
+          }}
+        />
+        {/* Seção de blocos */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h4 className="font-medium text-gray-800 text-sm">Blocos de Mensagem</h4>
+              <p className="text-xs text-gray-500 mt-0.5">{blocos.length} bloco{blocos.length !== 1 ? 's' : ''} configurado{blocos.length !== 1 ? 's' : ''}</p>
             </div>
+            <button type="button" onClick={handleAddBloco}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap">
+              <Plus className="w-4 h-4" />
+              Adicionar Bloco
+            </button>
           </div>
-
-          <div className="space-y-4">
-            <div className="border-t border-gray-100 pt-4">
-              <label className="block text-base font-medium text-gray-800 mb-1">
-                Texto da Mensagem de Aniversário
-              </label>
-              <p className="text-sm text-gray-500 mb-3">
-                {saudacaoAtiva ? 
-                  'A mensagem começará com "Olá [Nome do Eleitor]," seguida do texto abaixo:' : 
-                  'Digite a mensagem que será enviada no aniversário:'}
-              </p>
-              <textarea
-                {...register('texto_aniversario')}
-                rows={4}
-                className="w-full rounded-lg border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 resize-none p-4 hover:border-gray-400 transition-colors"
-                placeholder={saudacaoAtiva ? 
-                  "Ex: Feliz aniversário! Que seu dia seja repleto de alegrias..." :
-                  "Ex: Olá! Feliz aniversário! Que seu dia seja repleto de alegrias..."}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {['imagem', 'video', 'audio'].map((type) => {
-            const icon = type === 'imagem' ? '🖼️' : type === 'video' ? '🎥' : '🎵';
-            const accept = type === 'imagem' ? '.jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp' : `${type}/*`;
-            
-            return (
-              <div key={type} className="w-full">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    {icon} {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </label>
-                  {currentFiles[`${type}_aniversario` as keyof BirthdayFormData] && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFile(type as 'imagem' | 'video' | 'audio')}
-                      className="text-red-500 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+          
+          <div className="p-6">
+            {blocos.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                  <Plus className="w-8 h-8 text-gray-300" />
                 </div>
-                
-                <div className="relative w-full h-48">
-                  {currentFiles[`${type}_aniversario` as keyof BirthdayFormData] ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded-lg overflow-hidden">
-                      {type === 'imagem' && (
-                        <img
-                          src={currentFiles.imagem_aniversario}
-                          alt="Preview"
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      )}
-                      {type === 'video' && (
-                        <video
-                          src={currentFiles.video_aniversario}
-                          controls
-                          className="max-w-full max-h-full"
-                        />
-                      )}
-                      {type === 'audio' && (
-                        <audio
-                          src={currentFiles.audio_aniversario}
-                          controls
-                          className="w-full"
-                        />
-                      )}
-                    </div>
-                  ) : (
-                    <div className="relative h-full">
-                      <input
-                        type="file"
-                        accept={accept}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileSelect(file, type as 'imagem' | 'video' | 'audio');
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
-                      <div className="absolute inset-0 border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center hover:border-blue-400 transition-colors">
-                        <div className="text-3xl mb-2">{icon}</div>
-                        <p className="text-sm text-gray-600">Clique ou arraste um arquivo</p>
-                        <p className="text-xs text-gray-500 mt-1">formato: {type}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <p className="text-sm font-medium text-gray-500">Nenhum bloco adicionado</p>
+                <p className="text-xs text-gray-400 mt-1">Clique em "Adicionar Bloco" para começar</p>
               </div>
-            );
-          })}
+            ) : (
+              <div className="space-y-4">
+                {blocos.map(bloco => renderBloco(bloco))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="sm:inline">Salvando...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span className="sm:inline">Salvar Configurações</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleTestMessage}
-            disabled={isTesting || !company?.uid || hasUnsavedChanges}
-            className="py-3 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
-          >
-            {isTesting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="sm:inline">Testando...</span>
-              </>
-            ) : (
-              <>
-                <MessageSquare className="w-4 h-4" />
-                <span className="sm:inline">{hasUnsavedChanges ? 'Salve as alterações primeiro' : 'Testar Mensagem'}</span>
-              </>
-            )}
-          </button>
-        </div>
       </form>
+
+      <AlertDialog open={blocoToDelete !== null} onOpenChange={(open) => !open && setBlocoToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Bloco #{blocoToDelete !== null ? blocoToDelete + 1 : ''}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o Bloco #{blocoToDelete !== null ? blocoToDelete + 1 : ''} permanentemente? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveBloco} className="bg-red-600 hover:bg-red-700 text-white">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   FileSpreadsheet,
   MoreVertical,
+  Upload,
 } from 'lucide-react';
 import { InicialDropdown } from './components/InicialDropdown';
 import {
@@ -420,6 +421,17 @@ export function Pessoas() {
                                   Ativos
                                 </span>
                               )}
+                            </DropdownMenuItem>
+                          )}
+
+                          {/* Importar - para nao-visitantes */}
+                          {!isVisitante && (
+                            <DropdownMenuItem
+                              onSelect={() => navigate('/app/pessoas/importar')}
+                              className="cursor-pointer gap-2"
+                            >
+                              <Upload className="h-4 w-4" />
+                              Importar
                             </DropdownMenuItem>
                           )}
 

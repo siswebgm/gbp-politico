@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Gift, ChevronLeft, ChevronRight, ChevronUp, Download } from 'lucide-react';
+import { Gift, ChevronLeft, ChevronRight, ChevronUp, Download, MessageSquare, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../providers/AuthProvider';
 import ExcelJS from 'exceljs';
@@ -43,6 +43,7 @@ export function BirthdaySection({
 
   const [currentPage, setCurrentPage] = useState(1);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); 
+  const [selectedComentario, setSelectedComentario] = useState<{ nome: string; comentario: string } | null>(null);
   const itemsPerPage = 7;
 
   // Generate year options (from 2022 to current year)
@@ -185,16 +186,22 @@ export function BirthdaySection({
     const status = pessoa.mensagem_entregue?.toLowerCase();
     if (status === 'sim') {
       acc.entregues++;
-    } else {
+    } else if (status === 'não' || status === 'nao') {
       acc.naoEntregues++;
+    } else if (status === 'erro') {
+      acc.erros++;
+    } else {
+      acc.pendentes++;
     }
     return acc;
-  }, { entregues: 0, naoEntregues: 0 });
+  }, { entregues: 0, naoEntregues: 0, pendentes: 0, erros: 0 });
 
-  const total = totais.entregues + totais.naoEntregues;
+  const total = totais.entregues + totais.naoEntregues + totais.pendentes + totais.erros;
   const porcentagens = {
     entregues: total > 0 ? ((totais.entregues / total) * 100).toFixed(1) : '0',
-    naoEntregues: total > 0 ? ((totais.naoEntregues / total) * 100).toFixed(1) : '0'
+    naoEntregues: total > 0 ? ((totais.naoEntregues / total) * 100).toFixed(1) : '0',
+    pendentes: total > 0 ? ((totais.pendentes / total) * 100).toFixed(1) : '0',
+    erros: total > 0 ? ((totais.erros / total) * 100).toFixed(1) : '0'
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -337,37 +344,23 @@ export function BirthdaySection({
         </div>
 
         <div className="px-4 py-2 border-t border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm dark:text-gray-300">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                <span>
-                  Sim ({totais.entregues})
-                  <span className="sm:hidden text-gray-500 ml-1">
-                    {porcentagens.entregues}%
-                  </span>
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center sm:justify-start gap-x-4 gap-y-1.5 sm:gap-x-6">
+            {[
+              { label: 'Sim', count: totais.entregues, pct: porcentagens.entregues, cor: 'bg-green-500' },
+              { label: 'Não', count: totais.naoEntregues, pct: porcentagens.naoEntregues, cor: 'bg-red-500' },
+              { label: 'Pend.', count: totais.pendentes, pct: porcentagens.pendentes, cor: 'bg-yellow-500' },
+              { label: 'Erro', count: totais.erros, pct: porcentagens.erros, cor: 'bg-orange-500' },
+            ].map((s) => (
+              <div key={s.label} className="flex flex-col items-center leading-tight flex-1 min-w-0">
+                <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div className={`w-2 h-2 rounded-full ${s.cor} flex-shrink-0`}></div>
+                  <span>{s.label}</span>
+                </div>
+                <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                  {s.count} <span className="font-normal text-gray-400">({s.pct}%)</span>
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                <span>
-                  Não ({totais.naoEntregues})
-                  <span className="sm:hidden text-gray-500 ml-1">
-                    {porcentagens.naoEntregues}%
-                  </span>
-                </span>
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 border-l border-gray-200 dark:border-gray-600 pl-4">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span>{porcentagens.entregues}%</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <span>{porcentagens.naoEntregues}%</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -418,7 +411,7 @@ export function BirthdaySection({
                     }
                     
                     if (isHorizontalScroll) {
-                      e.preventDefault();
+                      if (e.cancelable) e.preventDefault();
                       const walk = (x - startX) * 2;
                       el.scrollLeft = scrollLeft - walk;
                     }
@@ -426,7 +419,7 @@ export function BirthdaySection({
                 }
               }}
             >
-              <table style={{ minWidth: '700px', width: '100%', borderCollapse: 'collapse', userSelect: 'none' }}>
+              <table style={{ minWidth: '900px', width: '100%', borderCollapse: 'collapse', userSelect: 'none' }}>
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">Nome</th>
@@ -449,6 +442,7 @@ export function BirthdaySection({
                         />
                       </div>
                     </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-300">Comentário</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -458,10 +452,14 @@ export function BirthdaySection({
                       className={`${
                         pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                           ? 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30'
-                          : 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                          : pessoa.mensagem_entregue?.toLowerCase() === 'não' || pessoa.mensagem_entregue?.toLowerCase() === 'nao'
+                          ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
+                          : pessoa.mensagem_entregue?.toLowerCase() === 'erro'
+                          ? 'bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30'
+                          : 'bg-yellow-50 dark:bg-yellow-900/20 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
                       } transition-colors`}
                     >
-                      <td className="px-4 py-3 text-sm font-medium dark:text-gray-200">
+                      <td className={`px-4 py-3 text-sm font-medium dark:text-gray-200 ${pessoa.mensagem_entregue?.toLowerCase() === 'erro' ? 'line-through opacity-60' : ''}`}>
                         <Link
                           to={`/app/pessoas/${pessoa.eleitor_uid}`}
                           className={`truncate max-w-[150px] sm:max-w-none hover:underline ${
@@ -473,7 +471,7 @@ export function BirthdaySection({
                           {formatNome(pessoa.eleitor_nome)}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-sm dark:text-gray-300">
+                      <td className={`px-4 py-3 text-sm dark:text-gray-300 ${pessoa.mensagem_entregue?.toLowerCase() === 'erro' ? 'line-through opacity-60' : ''}`}>
                         {pessoa.eleitor_whatsapp ? (
                           <a
                             href={formatWhatsAppLink(pessoa.eleitor_whatsapp)}
@@ -491,7 +489,7 @@ export function BirthdaySection({
                           '-'
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap dark:text-gray-300">
+                      <td className={`px-4 py-3 text-sm whitespace-nowrap dark:text-gray-300 ${pessoa.mensagem_entregue?.toLowerCase() === 'erro' ? 'line-through opacity-60' : ''}`}>
                         <div className="flex items-center gap-1.5">
                           <span>{formatDate(pessoa.nascimento)}</span>
                           {(() => {
@@ -507,23 +505,60 @@ export function BirthdaySection({
                           })()}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm dark:text-gray-300">
+                      <td className={`px-4 py-3 text-sm dark:text-gray-300 ${pessoa.mensagem_entregue?.toLowerCase() === 'erro' ? 'line-through opacity-60' : ''}`}>
                         <div className="flex items-center gap-2">
                           <div className={`w-2.5 h-2.5 rounded-full ${
                             pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                               ? 'bg-green-500'
-                              : 'bg-red-500'
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'não' || pessoa.mensagem_entregue?.toLowerCase() === 'nao'
+                              ? 'bg-red-500'
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'erro'
+                              ? 'bg-orange-500'
+                              : 'bg-yellow-500'
                           }`}></div>
                           <span className={`${
                             pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                               ? 'text-green-700 dark:text-green-400'
-                              : 'text-red-700 dark:text-red-400'
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'não' || pessoa.mensagem_entregue?.toLowerCase() === 'nao'
+                              ? 'text-red-700 dark:text-red-400'
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'erro'
+                              ? 'text-orange-700 dark:text-orange-400'
+                              : 'text-yellow-700 dark:text-yellow-400'
                           }`}>
                             {pessoa.mensagem_entregue?.toLowerCase() === 'sim'
                               ? 'Sim'
-                              : 'Não'}
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'não' || pessoa.mensagem_entregue?.toLowerCase() === 'nao'
+                              ? 'Não'
+                              : pessoa.mensagem_entregue?.toLowerCase() === 'erro'
+                              ? 'Erro'
+                              : 'Pendente'}
                           </span>
                         </div>
+                      </td>
+                      <td className={`px-4 py-3 text-sm dark:text-gray-300 ${pessoa.mensagem_entregue?.toLowerCase() === 'erro' ? 'line-through opacity-60' : ''}`}>
+                        {pessoa.mensagem_comentario ? (
+                          <div className="relative group max-w-[200px]">
+                            <button
+                              onClick={() => setSelectedComentario({
+                                nome: pessoa.eleitor_nome,
+                                comentario: pessoa.mensagem_comentario || ''
+                              })}
+                              className="text-left w-full truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                              title={pessoa.mensagem_comentario}
+                            >
+                              {pessoa.mensagem_comentario.length > 50
+                                ? pessoa.mensagem_comentario.substring(0, 50) + '...'
+                                : pessoa.mensagem_comentario}
+                            </button>
+                            {/* Tooltip customizado */}
+                            <div className="absolute z-50 hidden group-hover:block bottom-full left-0 mb-2 w-64 p-3 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg pointer-events-none">
+                              <div className="whitespace-pre-wrap break-words">{pessoa.mensagem_comentario}</div>
+                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">-</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -626,6 +661,39 @@ export function BirthdaySection({
           </>
         )}
       </div>
+
+      {/* Modal de Comentário */}
+      {selectedComentario && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedComentario(null)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-blue-500" />
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                  Comentário - {selectedComentario.nome}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedComentario(null)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                {selectedComentario.comentario}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

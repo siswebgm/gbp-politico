@@ -98,17 +98,52 @@ const defaultValues: NovaPessoaForm = {
   colegio_eleitoral: ''
 };
 
+// Palavras que não devem ser preservadas como siglas mesmo em maiúsculo
+const PALAVRAS_MINUSCULAS = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'na', 'no', 'nas', 'nos',
+  'para', 'com', 'sem', 'sob', 'sobre', 'ao', 'aos', 'um', 'uma', 'o', 'a', 'os', 'as'
+]);
+
+// Valida algarismos romanos de verdade (I, II, III, IV, V, VI... XL, XC, CD, CM, M...)
+const ROMAN_NUMERAL_REGEX = /^(?=[MDCLXVI])M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/;
+
+// Capitaliza a palavra preservando algarismos romanos (II, XV...) e siglas curtas (RUA, AV, SUS...)
+// Preposições/artigos ficam minúsculos, exceto na primeira posição (ex: "Jaboatão dos Guararapes")
+const formatarPalavra = (word: string, isFirst = false): string => {
+  const upper = word.toUpperCase();
+  const lower = word.toLowerCase();
+  if (ROMAN_NUMERAL_REGEX.test(upper)) return upper;
+  if (/^[A-Z]{2,4}$/.test(word) && !PALAVRAS_MINUSCULAS.has(lower)) return upper;
+  if (!isFirst && PALAVRAS_MINUSCULAS.has(lower)) return lower;
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+};
+
 const formatName = (name: string) => {
   // Remove espaços extras no início, fim e entre palavras
   const trimmedName = name.trim().replace(/\s+/g, ' ');
-  
+
   return trimmedName
-    .toLowerCase()
     .split(' ')
-    .map(word => {
-      // Todas as palavras começam com maiúscula
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
+    .map((word, i) => formatarPalavra(word, i === 0))
+    .join(' ');
+};
+
+// Formata campos de endereço: remove vírgulas/pontuação, deduplica palavras
+// repetidas consecutivas e padroniza capitalização (ex: "PAULISTA, paulista" → "Paulista")
+const formatAddress = (value: string) => {
+  if (!value) return '';
+  const cleaned = value
+    .trim()
+    .replace(/[,;]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  const words = cleaned
+    .split(' ')
+    .filter(Boolean)
+    .filter((word, i, arr) => i === 0 || word.toLowerCase() !== arr[i - 1].toLowerCase());
+
+  return words
+    .map((word, i) => formatarPalavra(word, i === 0))
     .join(' ');
 };
 
@@ -1002,6 +1037,44 @@ export const NovaPessoa: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [cepValue, fetchAddress, setValue, lastCheckedCep, clearAddressFields]);
 
+  // Sugestões de endereço baseadas em registros já cadastrados na empresa
+  const [sugestoesEndereco, setSugestoesEndereco] = useState<{ cidades: string[]; bairros: string[]; logradouros: string[] }>({
+    cidades: [],
+    bairros: [],
+    logradouros: []
+  });
+
+  useEffect(() => {
+    if (!company?.uid) return;
+    const fetchSugestoes = async () => {
+      try {
+        const { data } = await supabaseClient
+          .from('gbp_eleitores')
+          .select('cidade, bairro, logradouro')
+          .eq('empresa_uid', company.uid)
+          .limit(5000);
+
+        if (data) {
+          const unique = (values: (string | null)[]) =>
+            Array.from(new Set(
+              values
+                .filter((v): v is string => !!v && v.trim().length > 0)
+                .map(v => v.trim())
+            )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+          setSugestoesEndereco({
+            cidades: unique(data.map(d => d.cidade)),
+            bairros: unique(data.map(d => d.bairro)),
+            logradouros: unique(data.map(d => d.logradouro))
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao buscar sugestões de endereço:', err);
+      }
+    };
+    fetchSugestoes();
+  }, [company?.uid]);
+
   // Função para atualizar o bairro com a região
   const handleRegiaoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const regiao = e.target.value;
@@ -1193,13 +1266,13 @@ export const NovaPessoa: React.FC = () => {
         zona: currentValues.zona,
         secao: currentValues.secao,
         cep: currentValues.cep.replace(/\D/g, ''),
-        logradouro: currentValues.endereco, // Usando o campo endereco como logradouro
+        logradouro: formatAddress(currentValues.endereco), // Usando o campo endereco como logradouro
         numero: currentValues.numero,
-        bairro: currentValues.bairro,
+        bairro: formatAddress(currentValues.bairro),
         regiao_bairro: currentValues.regiao_bairro,
-        cidade: currentValues.cidade,
+        cidade: formatAddress(currentValues.cidade),
         uf: currentValues.uf,
-        complemento: currentValues.complemento,
+        complemento: formatAddress(currentValues.complemento),
         empresa_uid: company?.uid || null,
         categoria_uid: currentValues.categoria_uid || null,
         indicado_uid: currentValues.indicado_uid || null,
@@ -2269,8 +2342,12 @@ export const NovaPessoa: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Digite o logradouro"
+                    list="sugestoes-logradouros"
                     {...register('endereco', { 
-                      required: camposObrigatorios.endereco 
+                      required: camposObrigatorios.endereco,
+                      onBlur: (e) => {
+                        setValue('endereco', formatAddress(e.target.value));
+                      }
                     })}
                     className={`w-full rounded-lg border ${errors.endereco ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500`}
                     style={globalStyles.input}
@@ -2299,7 +2376,11 @@ export const NovaPessoa: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Digite o complemento (opcional)"
-                    {...register('complemento')}
+                    {...register('complemento', {
+                      onBlur: (e) => {
+                        setValue('complemento', formatAddress(e.target.value));
+                      }
+                    })}
                     className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500"
                     style={globalStyles.input}
                   />
@@ -2311,11 +2392,11 @@ export const NovaPessoa: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Digite o bairro"
+                    list="sugestoes-bairros"
                     {...register('bairro', { 
                       required: camposObrigatorios.bairro,
                       onBlur: (e) => {
-                        const formattedValue = formatName(e.target.value);
-                        setValue('bairro', formattedValue);
+                        setValue('bairro', formatAddress(e.target.value));
                       }
                     })}
                     className={`w-full rounded-lg border ${errors.bairro ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500`}
@@ -2348,11 +2429,11 @@ export const NovaPessoa: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Digite a cidade"
+                    list="sugestoes-cidades"
                     {...register('cidade', { 
                       required: camposObrigatorios.cidade,
                       onBlur: (e) => {
-                        const formattedValue = formatName(e.target.value);
-                        setValue('cidade', formattedValue);
+                        setValue('cidade', formatAddress(e.target.value));
                       }
                     })}
                     className={`w-full rounded-lg border ${errors.cidade ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-500`}
@@ -2382,6 +2463,23 @@ export const NovaPessoa: React.FC = () => {
                   {errors.uf && <span className="text-red-500 text-sm">Campo obrigatório</span>}
                 </div>
               </div>
+
+              {/* Datalists de autocomplete para endereço */}
+              <datalist id="sugestoes-logradouros">
+                {sugestoesEndereco.logradouros.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+              <datalist id="sugestoes-bairros">
+                {sugestoesEndereco.bairros.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+              <datalist id="sugestoes-cidades">
+                {sugestoesEndereco.cidades.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </div>
           </div>
 
@@ -2477,7 +2575,6 @@ export const NovaPessoa: React.FC = () => {
                       <option value="Pendente">Pendente</option>
                       <option value="Em Andamento">Em Andamento</option>
                       <option value="Concluído">Concluído</option>
-                      <option value="Cancelado">Cancelado</option>
                     </select>
                     {atendimentoErrors.status && (
                       <p className="mt-1 text-sm text-red-500">{atendimentoErrors.status}</p>
@@ -2766,7 +2863,6 @@ export const NovaPessoa: React.FC = () => {
                       <option value="Pendente">Pendente</option>
                       <option value="Em Andamento">Em Andamento</option>
                       <option value="Concluído">Concluído</option>
-                      <option value="Cancelado">Cancelado</option>
                     </select>
                     {novoAtendimentoErrors.status && (
                       <p className="mt-1 text-sm text-red-500">{novoAtendimentoErrors.status}</p>
