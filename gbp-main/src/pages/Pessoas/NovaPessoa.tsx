@@ -426,6 +426,7 @@ export const NovaPessoa: React.FC = () => {
   const [showNovaCategoriaModal, setShowNovaCategoriaModal] = useState(false);
   const [showNovoIndicadoModal, setShowNovoIndicadoModal] = useState(false);
   const [primeiroAtendimento, setPrimeiroAtendimento] = useState(false);
+  const [enviarFeedback, setEnviarFeedback] = useState(true);
   const [descricaoAtendimento, setDescricaoAtendimento] = useState('');
   const [statusAtendimento, setStatusAtendimento] = useState('');
   const [categoriaAtendimento, setCategoriaAtendimento] = useState('');
@@ -1578,6 +1579,7 @@ export const NovaPessoa: React.FC = () => {
                     mensagem_texto: mensagemProcessada,
                     empresa_uid: company?.uid || '',
                     data_programada_envio: dataProgramada,
+                    permissao: i === 0 && primeiroAtendimento ? enviarFeedback : true,
                   });
                   console.log('Mensagem de atendimento criada para:', atendimento.uid, 'com delay:', delayMinutos, 'minutos');
                 } catch (msgError) {
@@ -1698,7 +1700,7 @@ export const NovaPessoa: React.FC = () => {
         </header>
 
         {/* Formulário */}
-        <form onSubmit={handleSubmit(onSubmit)} className="px-4 py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="px-4 py-6 pb-8 sm:px-6 lg:px-8">
           {/* Dados Pessoais */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm rounded-lg overflow-hidden">
             <div className="p-6">
@@ -2593,6 +2595,22 @@ export const NovaPessoa: React.FC = () => {
                       maxSize={50 * 1024 * 1024} // 50MB
                     />
                   </div>
+                  <div className="pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enviarFeedback}
+                        onChange={(e) => setEnviarFeedback(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Enviar mensagem de feedback
+                      </span>
+                    </label>
+                    <p className="mt-1 ml-6 text-xs text-gray-500 dark:text-gray-400">
+                      Uma mensagem de feedback será enviada automaticamente para o atendido.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -2627,7 +2645,7 @@ export const NovaPessoa: React.FC = () => {
           </div>
 
           {/* Actions */}
-          <div className="mt-6 mb-8 flex flex-row justify-end gap-3 px-4 sm:px-0">
+          <div className="mt-4 flex flex-row justify-end gap-3 px-4 sm:px-0">
             <button
               type="button"
               onClick={() => navigate('/app/pessoas')}

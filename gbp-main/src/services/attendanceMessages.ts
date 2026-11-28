@@ -9,6 +9,7 @@ export interface AttendanceMessage {
   data_envio?: string | null;
   empresa_uid: string;
   data_programada_envio?: string | null;
+  permissao?: boolean;
 }
 
 export interface MessageTemplateData {
@@ -53,6 +54,7 @@ export async function createAttendanceMessage(data: AttendanceMessage) {
       mensagem_enviada: false,
       empresa_uid: data.empresa_uid,
       data_programada_envio: data.data_programada_envio || null,
+      permissao: data.permissao ?? true,
     })
     .select()
     .single();

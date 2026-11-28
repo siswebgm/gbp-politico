@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -65,6 +65,7 @@ export function AttendanceFormContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<File[]>([]);
+  const [enviarFeedback, setEnviarFeedback] = useState(true);
   const { toast } = useToast();
   // Inscrição do eleitor em gbp_notificacoes_inscritos (push notifications)
   const [inscricaoEleitor, setInscricaoEleitor] = useState<{
@@ -276,6 +277,7 @@ export function AttendanceFormContent() {
               mensagem_texto: mensagemProcessada,
               empresa_uid: company.uid,
               data_programada_envio: dataProgramada,
+              permissao: enviarFeedback,
             });
             console.log('Mensagem de atendimento registrada para:', createdAttendance.uid, 'delay:', delayMinutos, 'min');
           }
@@ -598,6 +600,24 @@ export function AttendanceFormContent() {
             maxFiles={5}
             maxSize={50 * 1024 * 1024} // 50MB
           />
+        </div>
+
+        {/* Feedback */}
+        <div className="col-span-full">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enviarFeedback}
+              onChange={(e) => setEnviarFeedback(e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Enviar mensagem de feedback
+            </span>
+          </label>
+          <p className="mt-1 ml-6 text-xs text-gray-500 dark:text-gray-400">
+            Uma mensagem de feedback será enviada automaticamente para o atendido.
+          </p>
         </div>
 
         {/* Botões */}

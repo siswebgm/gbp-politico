@@ -545,6 +545,11 @@ export function BirthdaySettings() {
                 Salvar
               </button>
             </div>
+            {bloco.genero && (
+              <p className="w-full text-[10px] leading-tight bg-yellow-100 border border-yellow-300 text-yellow-800 rounded px-2 py-1">
+                Este bloco será enviado apenas para o gênero <strong>{bloco.genero}</strong>.
+              </p>
+            )}
           </div>
         </div>
       </div>
